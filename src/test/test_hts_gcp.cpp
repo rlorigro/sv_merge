@@ -90,12 +90,10 @@ void fetch_bam_region(){
     samFile* bam_file;
     bam_hdr_t* bam_header;
     hts_idx_t* bam_index;
-    hts_itr_t* bam_iterator;
     bam1_t* alignment;
 
     bam_file = nullptr;
     bam_index = nullptr;
-    bam_iterator = nullptr;
     alignment = bam_init1();
 
     if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
@@ -123,7 +121,6 @@ void fetch_bam_region(){
     bam_hdr_destroy(bam_header);
     bam_destroy1(alignment);
     hts_idx_destroy(bam_index);
-    hts_itr_destroy(bam_iterator);
 }
 
 
