@@ -83,6 +83,54 @@ void read_bam_as_system_command(path bam_path){
 }
 
 
+void read_bam_region(path bam_path, string region="chr20:10000000-10000001"){
+    samFile* bam_file;
+    bam_hdr_t* bam_header;
+    hts_idx_t* bam_index;
+    bam1_t* alignment;
+
+    bam_file = nullptr;
+    bam_index = nullptr;
+    alignment = bam_init1();
+
+
+    if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
+        throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
+    }
+
+    // bam index
+    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+    }
+
+    // bam header
+    if ((bam_header = sam_hdr_read(bam_file)) == nullptr){
+        throw runtime_error("ERROR: Cannot open header for bam file: " + bam_path.string() + "\n");
+    }
+
+    hts_itr_t *itr = sam_itr_querys(bam_index, bam_header, region.c_str());
+
+    while (sam_itr_next(bam_file, itr, alignment) >= 0) {
+        if (alignment->core.tid < 0) {
+            continue;
+        }
+
+        string read_name = bam_get_qname(alignment);
+        string ref_name = bam_header->target_name[alignment->core.tid];
+        auto pos = alignment->core.pos;
+        auto len = bam_cigar2rlen(int(alignment->core.n_cigar), bam_get_cigar(alignment));
+
+        cerr << ref_name << ' ' << pos << ' ' << pos + len << ' ' << read_name << '\n';
+    }
+
+    bam_destroy1(alignment);
+    hts_itr_destroy(itr);
+    bam_hdr_destroy(bam_header);
+    hts_close(bam_file);
+    hts_idx_destroy(bam_index);
+}
+
+
 void read_bam(path bam_path){
     samFile* bam_file;
     bam_hdr_t* bam_header;
@@ -107,7 +155,12 @@ void read_bam(path bam_path){
         throw runtime_error("ERROR: Cannot open header for bam file: " + bam_path.string() + "\n");
     }
 
+    int i = 0;
     while (sam_read1(bam_file, bam_header, alignment) >= 0){
+        if (++i == 10){
+            break;
+        }
+
         string read_name = bam_get_qname(alignment);
         string ref_name = bam_header->target_name[alignment->core.tid];
 
@@ -127,6 +180,7 @@ void fetch_bam_region(){
     GoogleAuthenticator auth;
     auth.update();
 
+    hts_set_log_level(HTS_LOG_TRACE);
     read_bam(bam_path);
 }
 

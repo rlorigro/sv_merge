@@ -19,9 +19,9 @@ if (dev)
     message(STATUS "---- Building with debug options ----")
 
     # Memory debug
-    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
-    set(ASAN_OPTIONS=check_initialization_order=1)
-    set(ASAN_OPTIONS=detect_leaks=1)
+#    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
+#    set(ASAN_OPTIONS=check_initialization_order=1)
+#    set(ASAN_OPTIONS=detect_leaks=1)
 
     add_definitions(-ggdb3 -Og -Wall)       # Debugging + No optimization
 
