@@ -38,7 +38,7 @@ class GoogleAuthenticator{
     system_clock::time_point expiration = get_current_time() - hours(128);
 
     // 60min duration by default
-    int64_t token_lifetime = 3600;
+    system_clock::duration token_lifetime = seconds(3600);
 
 public:
     /// Methods
@@ -54,7 +54,9 @@ void GoogleAuthenticator::update() {
         string token;
 
         // Will throw error if fails, otherwise returns token
+        auto t = get_current_time();
         run_command(command, token);
+        expiration = t + token_lifetime;
 
         cerr << "token: " << token << '\n';
 
