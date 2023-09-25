@@ -1,13 +1,9 @@
 #include <string>
 #include <iostream>
 #include <cstdlib>
-#include <cstdio>
-#include <string>
-#include <array>
 #include <stdexcept>
 #include <chrono>
 #include <iomanip>
-#include <cstdlib>
 
 using std::runtime_error;
 using std::chrono::system_clock;
@@ -58,35 +54,36 @@ void GoogleAuthenticator::update() {
         run_command(command, token);
         expiration = t + token_lifetime;
 
-        cerr << "token: " << token << '\n';
-
-        const char* name = "GCS_OAUTH_TOKEN";
-        auto env = getenv(name);
-
-        cerr << "env: " << env << '\n';
+        string name = "GCS_OAUTH_TOKEN";
+        string env;
 
         // Update the environment with the token
-        const char* value = token.data();
-        auto result = setenv("GCS_OAUTH_TOKEN", value, 1);
-        cerr << "result: " << result << '\n';
+        auto error_code = setenv("GCS_OAUTH_TOKEN", token.c_str(), 1);
+        cerr << "result: " << error_code << '\n';
 
-        env = getenv(name);
-        cerr << "env: " << env << '\n';
+        auto result = getenv(name.data());
+
+        if (result == nullptr or error_code != 0){
+            throw runtime_error("ERROR: environment variable not set");
+        }
+        else{
+            env = result;
+        }
     }
 }
 
 
-void fetch_bam_region(){
-    path bam_path = "gs://fc-b1dcc7b0-68be-46c4-b67e-5119c8c5de53/submissions/ea7e459a-5db9-4236-866a-f01f2c524357/minimap2/c867d241-8cc7-4fd9-a89d-f67fbba760f3/call-alignAndSortBAM/cacheCopy/HG002.bam";
+void read_bam_as_system_command(path bam_path){
+    string command = "samtools view " + bam_path.string() + " chr20:40000000-40001000";
+    string result;
 
-    // TODO: figure out why this doesn't work... environment variable appears to be set locally, and yet samtools fails
-    GoogleAuthenticator auth;
-    auth.update();
+    run_command(command, result);
 
-    const char* name = "GCS_OAUTH_TOKEN";
-    auto env = getenv(name);
-    cerr << "env: " << env << '\n';
+    cerr << result.size() << '\n';
+}
 
+
+void read_bam(path bam_path){
     samFile* bam_file;
     bam_hdr_t* bam_header;
     hts_idx_t* bam_index;
@@ -121,6 +118,16 @@ void fetch_bam_region(){
     bam_hdr_destroy(bam_header);
     bam_destroy1(alignment);
     hts_idx_destroy(bam_index);
+}
+
+
+void fetch_bam_region(){
+    path bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
+
+    GoogleAuthenticator auth;
+    auth.update();
+
+    read_bam(bam_path);
 }
 
 

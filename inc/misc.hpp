@@ -10,7 +10,14 @@ using std::array;
 
 namespace hapslap{
 
-void run_command(string& command, string& result);
+inline std::string& ltrim(std::string& s, const char* t = " \t\n\r\f\v");
+
+inline std::string& rtrim(std::string& s, const char* t = " \t\n\r\f\v");
+
+inline std::string& trim(std::string& s, const char* t = " \t\n\r\f\v");
+
+void run_command(string& command, string& result, bool trim_result=true);
+
 system_clock::time_point get_current_time();
 
 }
