@@ -132,14 +132,10 @@ void read_bam_region(path bam_path, string region="chr20:10000000-10000001"){
 
 
 void read_bam(path bam_path){
-    samFile* bam_file;
-    bam_hdr_t* bam_header;
-    hts_idx_t* bam_index;
-    bam1_t* alignment;
-
-    bam_file = nullptr;
-    bam_index = nullptr;
-    alignment = bam_init1();
+    samFile* bam_file = nullptr;
+    bam_hdr_t* bam_header = nullptr;
+    hts_idx_t* bam_index = nullptr;
+    bam1_t* alignment = bam_init1();
 
     if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
@@ -157,14 +153,16 @@ void read_bam(path bam_path){
 
     int i = 0;
     while (sam_read1(bam_file, bam_header, alignment) >= 0){
-        if (++i == 10){
-            break;
-        }
 
+        // Copy contents of C object into strings
         string read_name = bam_get_qname(alignment);
         string ref_name = bam_header->target_name[alignment->core.tid];
 
         cerr << read_name << ' ' << ref_name << '\n';
+
+        if (++i == 10){
+            break;
+        }
     }
 
     hts_close(bam_file);
@@ -175,6 +173,7 @@ void read_bam(path bam_path){
 
 
 void fetch_bam_region(){
+    path bam_path_requester_pays = "gs://fc-4310e737-a388-4a10-8c9e-babe06aaf0cf/working/HPRC_PLUS/HG002/assemblies/year1_f1_assembly_v2_genbank/alignment/assembly-to-reference/HG002.maternal.CHM13Y_EBV.bam";
     path bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
 
     GoogleAuthenticator auth;
