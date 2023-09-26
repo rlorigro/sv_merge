@@ -17,8 +17,8 @@ using std::cout;
 #include "Filesystem.hpp"
 #include "misc.hpp"
 
-using hapslap::run_command;
-using hapslap::get_current_time;
+using sv_merge::run_command;
+using sv_merge::get_current_time;
 using ghc::filesystem::path;
 
 #include "htslib/include/htslib/hts.h"
@@ -174,6 +174,7 @@ void read_bam(path bam_path){
 
 void fetch_bam_region(){
     path bam_path_requester_pays = "gs://fc-4310e737-a388-4a10-8c9e-babe06aaf0cf/working/HPRC_PLUS/HG002/assemblies/year1_f1_assembly_v2_genbank/alignment/assembly-to-reference/HG002.maternal.CHM13Y_EBV.bam";
+    path bam_path_local = "/home/ryan/data/test_hapslap/results/assorted_prc150_min_n_plus_d_x2_cov1/chr20_18689217-18689256/paths/all_paths_vs_ref.bam";
     path bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
 
     GoogleAuthenticator auth;

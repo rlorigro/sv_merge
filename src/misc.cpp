@@ -21,7 +21,7 @@ using ghc::filesystem::path;
 using std::runtime_error;
 
 
-namespace hapslap{
+namespace sv_merge{
 
 
 void run_command(string& command, string& result, bool trim_result){

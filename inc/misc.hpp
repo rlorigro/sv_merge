@@ -8,7 +8,7 @@ using std::chrono::system_clock;
 using std::string;
 using std::array;
 
-namespace hapslap{
+namespace sv_merge{
 
 inline std::string& ltrim(std::string& s, const char* t = " \t\n\r\f\v");
 

@@ -5,7 +5,7 @@
 ######################################
 
 cmake_minimum_required(VERSION 3.11)
-project(hapslap VERSION 0.0.0)
+project(sv_merge VERSION 0.0.0)
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
@@ -47,20 +47,21 @@ include_directories(
 
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
+        src/Bam.cpp
         src/b.cpp
         src/misc.cpp
 )
 
 
-project(hapslap)
-add_library(hapslap STATIC ${SOURCES})
+project(sv_merge)
+add_library(sv_merge STATIC ${SOURCES})
 
 # To make sure the library is named Name.so,
 # get rid of the "lib" prefix.
-set_target_properties(hapslap PROPERTIES PREFIX "")
+set_target_properties(sv_merge PROPERTIES PREFIX "")
 
 # Eliminate an extraneous -D during compilation.
-set_target_properties(hapslap PROPERTIES DEFINE_SYMBOL "")
+set_target_properties(sv_merge PROPERTIES DEFINE_SYMBOL "")
 
 
 # Need to explicitly enable ExternalProject functionality
@@ -138,7 +139,7 @@ set_property(TARGET htslib
 
 
 add_dependencies(htslib BUILD_HTS)
-add_dependencies(hapslap htslib)
+add_dependencies(sv_merge htslib)
 
 
 ##############################################
@@ -219,9 +220,69 @@ include_directories(
 
 add_library(minimap2 ${MINIMAP2_SOURCES})
 add_dependencies(minimap2 BUILD_MINIMAP2)
-add_dependencies(hapslap minimap2)
+add_dependencies(sv_merge minimap2)
 
 target_link_libraries(minimap2 pthread bz2 z curl)
+
+#
+###############################################
+## ------------------------------------------ #
+## -------- LINKING EXTERNAL LIBRARY -------- #
+## ------------- GraphAligner --------------- #
+## ------------------------------------------ #
+###############################################
+#
+#
+#message(STATUS "Fetching GraphAligner")
+#
+#
+## https://github.com/lh3/minimap2/archive/refs/tags/v2.24.tar.gz
+#
+#include(FetchContent)
+#
+#FetchContent_Declare(
+#        project_graphaligner
+#        GIT_REPOSITORY https://github.com/maickrau/GraphAligner.git
+#        GIT_TAG 124553fce2922c1b96f9d5dade3b4c5bcee95eb9
+#)
+#
+#FetchContent_MakeAvailable(project_graphaligner)
+#
+#set(GRAPHALIGNER_DIR _deps/project_graphaligner-src)
+#
+#file(GLOB GRAPHALIGNER_SOURCES
+#        "${project_graphaligner_SOURCE_DIR}/src/*.cpp"
+#        )
+#
+##set(GRAPHALIGNER_SOURCES
+###        ${project_graphaligner_SOURCE_DIR}/BBHash/
+###        ${project_graphaligner_SOURCE_DIR}/concurrentqueue/
+###        ${project_graphaligner_SOURCE_DIR}/MEMfinder/
+###        ${project_graphaligner_SOURCE_DIR}/parallel-hashmap/
+##        ${project_graphaligner_SOURCE_DIR}/src/
+##)
+#
+#message(STATUS "GraphAligner_SOURCE_DIR: ${project_graphaligner_SOURCE_DIR}")
+#
+#add_custom_target(
+#        BUILD_GRAPHALIGNER
+#        ALL
+#        WORKING_DIRECTORY ${GRAPHALIGNER_DIR}
+#        COMMAND ""
+#)
+#
+## Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+#include_directories(
+#        ${project_graphaligner_SOURCE_DIR}/src/
+#)
+#
+##add_custom_target(HTSLIB_CONFIGURED DEPENDS "${CMAKE_BINARY_DIR}/_deps/project_htslib-src/config.h")
+#
+#add_library(GraphAligner ${GRAPHALIGNER_SOURCES})
+#add_dependencies(GraphAligner BUILD_GRAPHALIGNER)
+#add_dependencies(sv_merge GraphAligner)
+#
+#target_link_libraries(GraphAligner pthread bz2 z curl)
 
 
 # ------- Misc -------
@@ -232,16 +293,18 @@ find_package(Threads REQUIRED)
 # -------- TESTS --------
 
 set(TESTS
+        test_bam
+#        test_graphaligner
         test_htslib
+        test_hts_gcp
         test_minimap2
         test_minimap2_no_io
-        test_hts_gcp
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
     add_executable(${FILENAME_PREFIX} src/test/${FILENAME_PREFIX}.cpp)
     target_link_libraries(${FILENAME_PREFIX}
-            hapslap
+            sv_merge
             Threads::Threads
             ZLIB::ZLIB
             htslib
@@ -260,7 +323,7 @@ set(EXECUTABLES
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
     target_link_libraries(${FILENAME_PREFIX}
-            hapslap
+            sv_merge
             Threads::Threads
             ZLIB::ZLIB
             htslib
@@ -269,7 +332,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
 
 endforeach()
 
-#set_target_properties(hapslap PROPERTIES LINK_FLAGS "-static" )
+#set_target_properties(sv_merge PROPERTIES LINK_FLAGS "-static" )
 #SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++ -static-libgcc")
 
 
@@ -280,8 +343,8 @@ set(BINARY_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 
 ## The shared library goes to the bin directory.
 #install(TARGETS
-#        hapslap
-#        hapslap
+#        sv_merge
+#        sv_merge
 #        DESTINATION ${BINARY_INSTALL_DIR})
 
 # Some potentially helpful messages
