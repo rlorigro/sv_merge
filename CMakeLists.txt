@@ -70,6 +70,60 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ----------------- curl ------------------- #
+# ------------------------------------------ #
+##############################################
+
+
+message(STATUS "Fetching curl")
+
+include(FetchContent)
+
+FetchContent_Declare(
+        project_curl
+        URL      https://github.com/curl/curl/releases/download/curl-8_3_0/curl-8.3.0.tar.gz
+)
+
+FetchContent_MakeAvailable(project_curl)
+
+# Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+include_directories(
+        ${CMAKE_BINARY_DIR}/_deps/project_curl-src
+        ${CMAKE_BINARY_DIR}/_deps/project_curl-src/curl/
+)
+
+message(STATUS "curl_SOURCE_DIR: ${project_curl_SOURCE_DIR}")
+message(STATUS "CMAKE_SOURCE_DIR/external/curl/: ${CMAKE_SOURCE_DIR}/external/curl/")
+
+
+#set(CURL_DIR _deps/project_curl-src)
+
+# Do not rebuild if -Ddev=1 is specified in cmake args
+if (NOT DEFINED dev OR NOT dev)
+    # curl configure
+    add_custom_target(
+            BUILD_CURL
+            ALL
+            WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
+            COMMAND pwd
+            COMMAND ./configure --with-openssl --disable-ldap --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+            COMMAND $(MAKE)
+            COMMAND $(MAKE) install
+    )
+
+endif()
+
+add_library(curl2 SHARED IMPORTED)
+set_property(TARGET curl2
+        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.so)
+
+add_dependencies(curl2 BUILD_CURL)
+add_dependencies(sv_merge curl2)
+
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ---------------- htslib ------------------ #
 # ------------------------------------------ #
 ##############################################
@@ -87,11 +141,6 @@ endif()
 find_library(BZ2LIB bz2)
 if(${BZ2LIB} STREQUAL "BZ2LIB-NOTFOUND")
     message(WARNING "Couldn't find the 'bz2' library")
-endif()
-
-find_library(CURLLIB curl)
-if(${CURLLIB} STREQUAL "CURLLIB-NOTFOUND")
-    message(WARNING "Couldn't find the 'curl' library")
 endif()
 
 include(FetchContent)
@@ -126,7 +175,8 @@ if (NOT DEFINED dev OR NOT dev)
             WORKING_DIRECTORY ${HTS_DIR}
             COMMAND pwd
             COMMAND autoreconf -i
-            COMMAND ./configure --disable-lzma --without-libdeflate
+#            COMMAND ./configure --disable-lzma --without-libdeflate
+            COMMAND ./configure --disable-lzma --without-libdeflate CPPFLAGS=-I${CMAKE_SOURCE_DIR}/external/curl/include/curl LDFLAGS='-L${CMAKE_SOURCE_DIR}/external/curl/lib'
             COMMAND $(MAKE) print-config
             COMMAND $(MAKE) prefix=${CMAKE_SOURCE_DIR}/external/htslib/ install
     )
@@ -138,7 +188,7 @@ set_property(TARGET htslib
         PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/htslib/lib/libhts.a)
 
 
-add_dependencies(htslib BUILD_HTS)
+add_dependencies(htslib BUILD_HTS BUILD_CURL)
 add_dependencies(sv_merge htslib)
 
 
@@ -169,7 +219,7 @@ set(MINIMAP2_SOURCES
         ${project_minimap2_SOURCE_DIR}/ksw2_dispatch.c
         ${project_minimap2_SOURCE_DIR}/lchain.c
         ${project_minimap2_SOURCE_DIR}/format.c
-        ${project_minimap2_SOURCE_DIR}/example.c
+#        ${project_minimap2_SOURCE_DIR}/example.c
         ${project_minimap2_SOURCE_DIR}/ksw2_extz2_sse.c
         ${project_minimap2_SOURCE_DIR}/ksw2_extd2_sse.c
         ${project_minimap2_SOURCE_DIR}/kalloc.c
@@ -222,67 +272,7 @@ add_library(minimap2 ${MINIMAP2_SOURCES})
 add_dependencies(minimap2 BUILD_MINIMAP2)
 add_dependencies(sv_merge minimap2)
 
-target_link_libraries(minimap2 pthread bz2 z curl)
-
-#
-###############################################
-## ------------------------------------------ #
-## -------- LINKING EXTERNAL LIBRARY -------- #
-## ------------- GraphAligner --------------- #
-## ------------------------------------------ #
-###############################################
-#
-#
-#message(STATUS "Fetching GraphAligner")
-#
-#
-## https://github.com/lh3/minimap2/archive/refs/tags/v2.24.tar.gz
-#
-#include(FetchContent)
-#
-#FetchContent_Declare(
-#        project_graphaligner
-#        GIT_REPOSITORY https://github.com/maickrau/GraphAligner.git
-#        GIT_TAG 124553fce2922c1b96f9d5dade3b4c5bcee95eb9
-#)
-#
-#FetchContent_MakeAvailable(project_graphaligner)
-#
-#set(GRAPHALIGNER_DIR _deps/project_graphaligner-src)
-#
-#file(GLOB GRAPHALIGNER_SOURCES
-#        "${project_graphaligner_SOURCE_DIR}/src/*.cpp"
-#        )
-#
-##set(GRAPHALIGNER_SOURCES
-###        ${project_graphaligner_SOURCE_DIR}/BBHash/
-###        ${project_graphaligner_SOURCE_DIR}/concurrentqueue/
-###        ${project_graphaligner_SOURCE_DIR}/MEMfinder/
-###        ${project_graphaligner_SOURCE_DIR}/parallel-hashmap/
-##        ${project_graphaligner_SOURCE_DIR}/src/
-##)
-#
-#message(STATUS "GraphAligner_SOURCE_DIR: ${project_graphaligner_SOURCE_DIR}")
-#
-#add_custom_target(
-#        BUILD_GRAPHALIGNER
-#        ALL
-#        WORKING_DIRECTORY ${GRAPHALIGNER_DIR}
-#        COMMAND ""
-#)
-#
-## Ensure that main library has access to primary dependencies' and secondary dependencies' headers
-#include_directories(
-#        ${project_graphaligner_SOURCE_DIR}/src/
-#)
-#
-##add_custom_target(HTSLIB_CONFIGURED DEPENDS "${CMAKE_BINARY_DIR}/_deps/project_htslib-src/config.h")
-#
-#add_library(GraphAligner ${GRAPHALIGNER_SOURCES})
-#add_dependencies(GraphAligner BUILD_GRAPHALIGNER)
-#add_dependencies(sv_merge GraphAligner)
-#
-#target_link_libraries(GraphAligner pthread bz2 z curl)
+target_link_libraries(minimap2 pthread bz2 z)
 
 
 # ------- Misc -------
@@ -290,12 +280,18 @@ target_link_libraries(minimap2 pthread bz2 z curl)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+
+message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
+
+
 # -------- TESTS --------
 
 set(TESTS
         test_bam
 #        test_graphaligner
-        test_htslib
+#        test_htslib
         test_hts_gcp
         test_minimap2
         test_minimap2_no_io
@@ -306,8 +302,10 @@ foreach(FILENAME_PREFIX ${TESTS})
     target_link_libraries(${FILENAME_PREFIX}
             sv_merge
             Threads::Threads
-            ZLIB::ZLIB
             htslib
+            ZLIB::ZLIB
+            curl2
+            ${OPENSSL_LIBRARIES}
             minimap2
             )
 
@@ -325,8 +323,10 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
     target_link_libraries(${FILENAME_PREFIX}
             sv_merge
             Threads::Threads
-            ZLIB::ZLIB
             htslib
+            ZLIB::ZLIB
+            curl2
+            ${OPENSSL_LIBRARIES}
             minimap2
             )
 
