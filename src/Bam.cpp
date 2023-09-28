@@ -55,7 +55,7 @@ Region::Region(string& region_string) {
 }
 
 
-void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, string& sequence){
+void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, bool is_reverse, string& sequence){
     ///
     /// Convert the compressed representation of an aligned sequence into a string.
     /// Does NOT reverse complement the sequence
@@ -67,18 +67,28 @@ void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, strin
     string base;
 
     // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
-    for (int64_t i=0; i<length; i++){
+    int64_t start = 0;
+    int64_t stop = length;
+    int64_t increment = 1;
+
+    if (is_reverse){
+        start = length - 1;
+        stop = -1;
+        increment = -1;
+    }
+
+    for (int64_t i=start; i!=stop; i+=increment){
         uint64_t index = i/2;
 
         if (i%2 == 0){
             // Perform bit SHIFT and decode using the standard or complemented base map
             base_code = compressed_sequence[index] >> bam_sequence_shift;
-            sequence += bases[base_code];
+            sequence += bases[is_reverse][base_code];
         }
         else {
             // Perform bit MASK and decode using the standard or complemented base map
             base_code = compressed_sequence[index] & bam_sequence_mask;
-            sequence += bases[base_code];
+            sequence += bases[is_reverse][base_code];
         }
     }
 }
@@ -115,12 +125,14 @@ void for_read_in_bam_region(path bam_path, string region, const function<void(Se
             continue;
         }
 
-        auto read_length = alignment->core.l_qseq;
+        auto length = alignment->core.l_qseq;
         auto compressed_sequence = bam_get_seq(alignment);
 
         Sequence s;
         s.name = bam_get_qname(alignment);
-        decompress_bam_sequence(bam_get_seq(alignment), read_length, s.sequence);
+        bool is_reverse = bam_is_rev(alignment);
+
+        decompress_bam_sequence(compressed_sequence, length, is_reverse, s.sequence);
 
         f(s);
     }

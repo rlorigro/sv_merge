@@ -31,24 +31,7 @@ public:
 };
 
 
-const array<char,16> bases = {
-        '=', // 0
-        'A', // 1
-        'C', // 2
-        'M', // 3
-        'G', // 4
-        'R', // 5
-        'S', // 6
-        'V', // 7
-        'T', // 8
-        'W', // 9
-        'Y', // 10
-        'H', // 11
-        'K', // 12
-        'D', // 13
-        'B', // 14
-        'N'  // 15
-};
+const array <string, 2> bases = {"=ACMGRSVTWYHKDBN", "=TGKCYSBAWRDKHVN"};
 
 
 // Each nt in the sequence is stored within a uint8 with 8 bits, XXXXYYYY, where XXXX is nt1 and YYYY is nt2
@@ -57,7 +40,7 @@ static const uint8_t bam_sequence_mask = 15;       // 0b1111
 static const uint8_t bam_cigar_shift = 4;
 static const uint8_t bam_cigar_mask = 15;          // 0b1111
 
-void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, string& sequence);
+void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, bool is_reverse, string& sequence);
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f);
 
