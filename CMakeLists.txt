@@ -51,7 +51,8 @@ set(SOURCES
         src/b.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-)
+        src/pair_hash.cpp
+        )
 
 
 project(sv_merge)
