@@ -49,6 +49,7 @@ include_directories(
 set(SOURCES
         src/Bam.cpp
         src/b.cpp
+        src/IntervalGraph.cpp
         src/misc.cpp
 )
 
@@ -106,7 +107,7 @@ if (NOT DEFINED dev OR NOT dev)
             ALL
             WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
             COMMAND pwd
-            COMMAND ./configure --with-openssl --disable-ldap --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+            COMMAND ./configure --with-openssl --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
             COMMAND $(MAKE)
             COMMAND $(MAKE) install
     )
@@ -175,7 +176,6 @@ if (NOT DEFINED dev OR NOT dev)
             WORKING_DIRECTORY ${HTS_DIR}
             COMMAND pwd
             COMMAND autoreconf -i
-#            COMMAND ./configure --disable-lzma --without-libdeflate
             COMMAND ./configure --disable-lzma --without-libdeflate CPPFLAGS=-I${CMAKE_SOURCE_DIR}/external/curl/include/curl LDFLAGS='-L${CMAKE_SOURCE_DIR}/external/curl/lib'
             COMMAND $(MAKE) print-config
             COMMAND $(MAKE) prefix=${CMAKE_SOURCE_DIR}/external/htslib/ install
@@ -188,7 +188,7 @@ set_property(TARGET htslib
         PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/htslib/lib/libhts.a)
 
 
-add_dependencies(htslib BUILD_HTS BUILD_CURL)
+add_dependencies(htslib BUILD_HTS curl2)
 add_dependencies(sv_merge htslib)
 
 
@@ -290,9 +290,9 @@ message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
 set(TESTS
         test_bam
-#        test_graphaligner
-#        test_htslib
+        test_htslib
         test_hts_gcp
+        test_interval_graph
         test_minimap2
         test_minimap2_no_io
         )
