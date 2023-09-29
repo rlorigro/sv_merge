@@ -8,7 +8,6 @@ C++ implementation of rlorigro/hapslap
 - gcc
 - zlib1g-dev
 - libbz2-dev
-- libcurl4-openssl-dev
 - autoconf
 - autoheader
 - libssl-dev
