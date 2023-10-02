@@ -124,7 +124,64 @@ void test_standard(){
         c++;
     }
 
+    if (not expected_result.empty()){
+        throw runtime_error("FAIL: not all expected results are found in output");
+    }
+
     cerr << "PASS: standard" << '\n';
+}
+
+
+void test_component_interval_iterator(){
+    vector <pair <interval_t,unordered_set<string> > > labeled_intervals = {
+        {{-1,9}, {"a"}},    // 0
+        {{0,10}, {"b"}},    // 0 collapse v
+        {{0,10}, {"c"}},    // 0 collapse ^
+        {{10,20}, {"d"}},   // 0
+        {{11,20}, {"e"}},   // 0
+        {{21,25}, {"f"}},   // 1
+        {{22,26}, {"g"}}    // 1
+    };
+
+    IntervalGraph<string> g(labeled_intervals);
+
+    unordered_map <interval_t, unordered_set<string> > expected_results = {
+        {{-1, 20},{"a","b","c","d","e"}},
+        {{21, 26},{"f","g"}}
+    };
+
+    unordered_map <interval_t, unordered_set<string> > results;
+
+    g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
+        cerr << interval.first << "," << interval.second;
+        for (const auto& v: values){
+            cerr << ' ' << v;
+        }
+        cerr << '\n';
+
+        results[interval] = values;
+    });
+
+    for (const auto& [interval, values]: results){
+        auto expected_result = expected_results.find(interval);
+
+        if (expected_result == expected_results.end()){
+            throw runtime_error("FAIL: not all results are found in expected results");
+        }
+        else{
+            if (expected_result->second != values){
+                throw runtime_error("FAIL: result for interval " + to_string(interval.first) + "," + to_string(interval.second) + " do not match expected results");
+            }
+        }
+
+        expected_results.erase(expected_result);
+    }
+
+    if (not expected_results.empty()){
+        throw runtime_error("FAIL: not all expected results are found in results");
+    }
+
+    cerr << "PASS: interval iterator" << '\n';
 }
 
 
@@ -160,6 +217,7 @@ void test_bad_interval(){
 int main(){
     test_standard();
     test_bad_interval();
+    test_component_interval_iterator();
 
     return 0;
 }
