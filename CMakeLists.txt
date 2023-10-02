@@ -4,7 +4,7 @@
 # ---------------------------------- #
 ######################################
 
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.22)
 project(sv_merge VERSION 0.0.0)
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
@@ -16,8 +16,10 @@ set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl/bin/openssl")
 set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-cmake_policy(SET CMP0135 NEW)
-set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
+
+# Commented until Ubuntu24/CMake3.24 becomes mainstream
+#cmake_policy(SET CMP0135 NEW)
+#set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(LIB_SUFFIX "dylib")
@@ -62,8 +64,6 @@ set(SOURCES
         src/IntervalGraph.cpp
         src/misc.cpp
         src/pair_hash.cpp
-        src/VcfReader.cpp
-        inc/VcfReader.hpp
 )
 
 
@@ -305,7 +305,6 @@ target_link_libraries(minimap2 pthread bz2 z)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 
