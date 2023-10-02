@@ -12,16 +12,26 @@ message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "CMAKE_SYSTEM: ${CMAKE_SYSTEM}")
 
 # Compiler options.
+set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl/bin/openssl")
+set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+cmake_policy(SET CMP0135 NEW)
+set(CMAKE_POLICY_DEFAULT_CMP0135 NEW)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(LIB_SUFFIX "dylib")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    set(LIB_SUFFIX "so")
+endif()
 
 if (dev)
     message(STATUS "---- Building with debug options ----")
 
     # Memory debug
-#    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
-#    set(ASAN_OPTIONS=check_initialization_order=1)
-#    set(ASAN_OPTIONS=detect_leaks=1)
+    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
+    set(ASAN_OPTIONS=check_initialization_order=1)
+    set(ASAN_OPTIONS=detect_leaks=1)
 
     add_definitions(-ggdb3 -Og -Wall)       # Debugging + No optimization
 
@@ -52,7 +62,9 @@ set(SOURCES
         src/IntervalGraph.cpp
         src/misc.cpp
         src/pair_hash.cpp
-        )
+        src/VcfReader.cpp
+        inc/VcfReader.hpp
+)
 
 
 project(sv_merge)
@@ -76,51 +88,52 @@ include(ExternalProject)
 # ------------------------------------------ #
 ##############################################
 
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    message(STATUS "Fetching curl")
 
-message(STATUS "Fetching curl")
+    include(FetchContent)
 
-include(FetchContent)
-
-FetchContent_Declare(
-        project_curl
-        URL      https://github.com/curl/curl/releases/download/curl-8_3_0/curl-8.3.0.tar.gz
-)
-
-FetchContent_MakeAvailable(project_curl)
-
-# Ensure that main library has access to primary dependencies' and secondary dependencies' headers
-include_directories(
-        ${CMAKE_BINARY_DIR}/_deps/project_curl-src
-        ${CMAKE_BINARY_DIR}/_deps/project_curl-src/curl/
-)
-
-message(STATUS "curl_SOURCE_DIR: ${project_curl_SOURCE_DIR}")
-message(STATUS "CMAKE_SOURCE_DIR/external/curl/: ${CMAKE_SOURCE_DIR}/external/curl/")
-
-
-#set(CURL_DIR _deps/project_curl-src)
-
-# Do not rebuild if -Ddev=1 is specified in cmake args
-if (NOT DEFINED dev OR NOT dev)
-    # curl configure
-    add_custom_target(
-            BUILD_CURL
-            ALL
-            WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
-            COMMAND pwd
-            COMMAND ./configure --with-openssl --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
-            COMMAND $(MAKE)
-            COMMAND $(MAKE) install
+    FetchContent_Declare(
+            project_curl
+            URL      https://github.com/curl/curl/releases/download/curl-8_3_0/curl-8.3.0.tar.gz
     )
 
+    FetchContent_MakeAvailable(project_curl)
+
+    # Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+    include_directories(
+            ${CMAKE_BINARY_DIR}/_deps/project_curl-src
+            ${CMAKE_BINARY_DIR}/_deps/project_curl-src/curl/
+    )
+
+    message(STATUS "curl_SOURCE_DIR: ${project_curl_SOURCE_DIR}")
+    message(STATUS "CMAKE_SOURCE_DIR/external/curl/: ${CMAKE_SOURCE_DIR}/external/curl/")
+
+
+    #set(CURL_DIR _deps/project_curl-src)
+
+    # Do not rebuild if -Ddev=1 is specified in cmake args
+    if (NOT DEFINED dev OR NOT dev)
+        # curl configure
+        add_custom_target(
+                BUILD_CURL
+                ALL
+                WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
+                COMMAND pwd
+                COMMAND ./configure --with-openssl --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+                COMMAND $(MAKE)
+                COMMAND $(MAKE) install
+        )
+
+    endif()
+
+    add_library(curl2 SHARED IMPORTED)
+    set_property(TARGET curl2
+            PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.${LIB_SUFFIX})
+
+    add_dependencies(curl2 BUILD_CURL)
+    add_dependencies(sv_merge curl2)
 endif()
-
-add_library(curl2 SHARED IMPORTED)
-set_property(TARGET curl2
-        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.so)
-
-add_dependencies(curl2 BUILD_CURL)
-add_dependencies(sv_merge curl2)
 
 
 ##############################################
@@ -171,13 +184,21 @@ set(HTS_DIR _deps/project_htslib-src)
 # Do not rebuild if -Ddev=1 is specified in cmake args
 if (NOT DEFINED dev OR NOT dev)
     # HTSLIB configure
+    if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        set(CURL_FLAGS_1 "CPPFLAGS=-I${CMAKE_SOURCE_DIR}/external/curl/include/curl")
+        set(CURL_FLAGS_2 "LDFLAGS='-L${CMAKE_SOURCE_DIR}/external/curl/lib'")
+    else()
+        set(CURL_FLAGS_1 "")
+        set(CURL_FLAGS_2 "")
+    endif()
+
     add_custom_target(
             BUILD_HTS
             ALL
             WORKING_DIRECTORY ${HTS_DIR}
             COMMAND pwd
             COMMAND autoreconf -i
-            COMMAND ./configure --disable-lzma --without-libdeflate CPPFLAGS=-I${CMAKE_SOURCE_DIR}/external/curl/include/curl LDFLAGS='-L${CMAKE_SOURCE_DIR}/external/curl/lib'
+            COMMAND ./configure --disable-lzma --without-libdeflate ${CURL_FLAGS_1} ${CURL_FLAGS_2}
             COMMAND $(MAKE) print-config
             COMMAND $(MAKE) prefix=${CMAKE_SOURCE_DIR}/external/htslib/ install
     )
@@ -189,7 +210,11 @@ set_property(TARGET htslib
         PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/htslib/lib/libhts.a)
 
 
-add_dependencies(htslib BUILD_HTS curl2)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    add_dependencies(htslib BUILD_HTS curl2)
+else()
+    add_dependencies(htslib BUILD_HTS)
+endif()
 add_dependencies(sv_merge htslib)
 
 
@@ -300,15 +325,28 @@ set(TESTS
 
 foreach(FILENAME_PREFIX ${TESTS})
     add_executable(${FILENAME_PREFIX} src/test/${FILENAME_PREFIX}.cpp)
-    target_link_libraries(${FILENAME_PREFIX}
-            sv_merge
-            Threads::Threads
-            htslib
-            ZLIB::ZLIB
-            curl2
-            ${OPENSSL_LIBRARIES}
-            minimap2
-            )
+
+    if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        target_link_libraries(${FILENAME_PREFIX}
+                sv_merge
+                Threads::Threads
+                htslib
+                ZLIB::ZLIB
+                curl2
+                ${OPENSSL_LIBRARIES}
+                minimap2
+                )
+    else()
+        target_link_libraries(${FILENAME_PREFIX}
+                sv_merge
+                Threads::Threads
+                htslib
+                ZLIB::ZLIB
+                curl
+                ${OPENSSL_LIBRARIES}
+                minimap2
+        )
+    endif()
 
 endforeach()
 
@@ -321,15 +359,27 @@ set(EXECUTABLES
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
-    target_link_libraries(${FILENAME_PREFIX}
-            sv_merge
-            Threads::Threads
-            htslib
-            ZLIB::ZLIB
-            curl2
-            ${OPENSSL_LIBRARIES}
-            minimap2
-            )
+    if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+        target_link_libraries(${FILENAME_PREFIX}
+                sv_merge
+                Threads::Threads
+                htslib
+                ZLIB::ZLIB
+                curl2
+                ${OPENSSL_LIBRARIES}
+                minimap2
+                )
+    else()
+        target_link_libraries(${FILENAME_PREFIX}
+                sv_merge
+                Threads::Threads
+                htslib
+                ZLIB::ZLIB
+                curl
+                ${OPENSSL_LIBRARIES}
+                minimap2
+        )
+    endif()
 
 endforeach()
 
