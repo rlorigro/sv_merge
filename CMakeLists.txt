@@ -59,11 +59,13 @@ include_directories(
 
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
-        src/Bam.cpp
         src/b.cpp
+        src/bam.cpp
+        src/bed.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
         src/pair_hash.cpp
+        src/Region.cpp
 )
 
 
@@ -315,6 +317,7 @@ message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
 set(TESTS
         test_bam
+        test_bed
         test_htslib
         test_hts_gcp
         test_interval_graph

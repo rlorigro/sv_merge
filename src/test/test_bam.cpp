@@ -1,6 +1,7 @@
-#include "Bam.hpp"
-#include "misc.hpp"
 #include "Filesystem.hpp"
+#include "Region.hpp"
+#include "misc.hpp"
+#include "bam.hpp"
 
 using ghc::filesystem::path;
 using sv_merge::Sequence;
