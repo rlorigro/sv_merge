@@ -23,6 +23,7 @@ public:
 
     Region(string &region_string);
     Region(string& name, int64_t start, int64_t stop);
+    Region(const string& name, int64_t start, int64_t stop);
     Region()=default;
 };
 

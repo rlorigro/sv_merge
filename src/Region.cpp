@@ -15,6 +15,13 @@ Region::Region(string& name, int64_t start, int64_t stop):
 {}
 
 
+Region::Region(const string& name, int64_t start, int64_t stop):
+    name(name),
+    start(start),
+    stop(stop)
+{}
+
+
 Region::Region(string& region_string) {
     bool found_colon = false;
     bool found_hyphen = false;

@@ -66,6 +66,9 @@ set(SOURCES
         src/misc.cpp
         src/pair_hash.cpp
         src/Region.cpp
+        src/fasta.cpp
+        src/Sequence.cpp
+        inc/Sequence.hpp
 )
 
 
@@ -318,6 +321,7 @@ message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 set(TESTS
         test_bam
         test_bed
+        test_fasta
         test_htslib
         test_hts_gcp
         test_interval_graph

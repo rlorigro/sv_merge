@@ -1,7 +1,9 @@
 #include "bed.hpp"
 
+#include <stdexcept>
 #include <iostream>
 
+using std::runtime_error;
 using std::ifstream;
 using std::cerr;
 
@@ -16,6 +18,10 @@ namespace sv_merge{
  * @param f lambda function to operate on each interval
  */
 void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>& f){
+    if (not (bed_path.extension() == ".bed")){
+        throw runtime_error("ERROR: file does not have compatible bed extension: " + bed_path.string());
+    }
+
     ifstream file(bed_path);
 
     char c;
