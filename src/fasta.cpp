@@ -11,10 +11,10 @@ using std::cerr;
 namespace sv_merge {
 
 /**
- * Iterate over the regions of a bed file, ignoring annotation fields. Must end in new line if last line is to be
- * considered. Must use actual tab characters (not spaces)
- * @param bed_path path to bed file on disk
- * @param f lambda function to operate on each interval
+ * Iterate over the sequences of a Fasta file, ignoring header annotation fields. Must end in new line if last line is
+ * to be considered.
+ * @param fasta_path path to fasta file on disk
+ * @param f lambda function to operate on each sequence
  */
 void for_sequence_in_fasta_file(path fasta_path, const function<void(const Sequence& s)>& f){
     if (not (fasta_path.extension() == ".fasta"
