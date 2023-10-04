@@ -21,15 +21,6 @@ public:
     string sequence;
 };
 
-class Region {
-public:
-    string name;
-    int64_t start;
-    int64_t stop;
-
-    Region(string& region_string);
-};
-
 
 const array <string, 2> bases = {"=ACMGRSVTWYHKDBN", "=TGKCYSBAWRDKHVN"};
 
