@@ -18,11 +18,11 @@ namespace sv_merge {
 class Region {
 public:
     string name;
-    int64_t start;
-    int64_t stop;
+    int64_t start{};
+    int64_t stop{};
 
     Region(string &region_string);
-    Region(string name, int64_t start, int64_t stop);
+    Region(string& name, int64_t start, int64_t stop);
     Region()=default;
 };
 
