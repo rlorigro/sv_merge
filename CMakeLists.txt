@@ -66,6 +66,9 @@ set(SOURCES
         src/misc.cpp
         src/pair_hash.cpp
         src/Region.cpp
+        src/fasta.cpp
+        src/Sequence.cpp
+        inc/Sequence.hpp
 )
 
 

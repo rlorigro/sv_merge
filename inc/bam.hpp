@@ -8,18 +8,12 @@ using std::string;
 using std::array;
 
 #include "Filesystem.hpp"
+#include "Sequence.hpp"
 
 using ghc::filesystem::path;
 
 
 namespace sv_merge {
-
-
-class Sequence{
-public:
-    string name;
-    string sequence;
-};
 
 
 const array <string, 2> bases = {"=ACMGRSVTWYHKDBN", "=TGKCYSBAWRDKHVN"};
