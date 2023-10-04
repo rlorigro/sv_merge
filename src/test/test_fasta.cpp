@@ -1,9 +1,11 @@
 #include "Filesystem.hpp"
+#include "Sequence.hpp"
 #include "Region.hpp"
-#include "bed.hpp"
+#include "fasta.hpp"
 
-using sv_merge::for_region_in_bed_file;
+using sv_merge::for_sequence_in_fasta_file;
 using ghc::filesystem::path;
+using sv_merge::Sequence;
 using sv_merge::Region;
 
 #include <stdexcept>
@@ -26,22 +28,21 @@ int main(){
 
     cerr << data_directory << '\n';
 
-    path bed_path = data_directory / "test.bed";
+    path fasta_path = data_directory / "test.fasta";
 
-    vector<Region> expected_results = {
-            Region("chr1",1,100),
-            Region("chr1",1,101),
-            Region("chr2",2,200),
-            Region("chr2",2,202)
+    vector<Sequence> expected_results = {
+            Sequence("a", "AAAA"),
+            Sequence("c", "CCCCCCCC"),
+            Sequence("g", "GGGGGGGGGGGG")
     };
 
     size_t i=0;
-    for_region_in_bed_file(bed_path,[&](const Region& r){
-        cerr << r.name << '\t' << r.start << '\t' << r.stop << '\n';
+    for_sequence_in_fasta_file(fasta_path,[&](const Sequence& r){
+        cerr << r.name << '\t' << r.sequence << '\n';
 
         const auto& e = expected_results[i];
 
-        if (r.name != e.name or r.start != e.start or r.stop != e.stop){
+        if (r.name != e.name or r.sequence != e.sequence){
             throw runtime_error("FAIL: result not expected on line: " + to_string(i));
         }
 

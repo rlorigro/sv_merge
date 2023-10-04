@@ -1,7 +1,9 @@
 #include "fasta.hpp"
 
+#include <stdexcept>
 #include <iostream>
 
+using std::runtime_error;
 using std::ifstream;
 using std::cerr;
 
@@ -15,6 +17,12 @@ namespace sv_merge {
  * @param f lambda function to operate on each interval
  */
 void for_sequence_in_fasta_file(path fasta_path, const function<void(const Sequence& s)>& f){
+    if (not (fasta_path.extension() == ".fasta"
+            or fasta_path.extension() != ".fa"
+            or fasta_path.extension() != ".fna")){
+        throw runtime_error("ERROR: file does not have compatible fasta extension: " + fasta_path.string());
+    }
+
     ifstream file(fasta_path);
 
     char c;
@@ -25,10 +33,10 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
 
 
     while (file.get(c)){
-//        cerr << c << ' ' << region_name << ' ' << start_token << ' ' << stop_token << '\n';
+//        cerr << c << " - " << s.name << ' ' << s.sequence << '\n';
 
         if (c == header_char){
-            if (not s.name.empty()){
+            if (is_sequence){
                 f(s);
                 s.name.clear();
                 s.sequence.clear();
@@ -37,6 +45,13 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
             continue;
         }
 
+        // Skip whatever tags come after the name in the fasta header
+        if (c != '\n' and isspace(c)){
+            while (file.peek() != '\n' or file.eof()){
+                file.get(c);
+            }
+            continue;
+        }
         if (c == '\n'){
             is_sequence = true;
             continue;
@@ -48,6 +63,10 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
         else{
             s.name += c;
         }
+    }
+
+    if (is_sequence){
+        f(s);
     }
 }
 
