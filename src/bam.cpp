@@ -10,10 +10,25 @@ using std::cout;
 
 
 #include "htslib/include/htslib/hts.h"
-#include "htslib/include/htslib/sam.h"
 
 
 namespace sv_merge {
+
+void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar_tuple){
+    cigar_tuple.code = int8_t(bytes & bam_cigar_mask);
+    cigar_tuple.length = int64_t(bytes >> bam_cigar_shift);
+}
+
+
+void iterate_cigar_tuples(bam1_t *alignment, function<void(CigarTuple& cigar_tuple)>& f){
+    auto cigar_bytes = bam_get_cigar(alignment);
+    for (int32_t i=0; i<alignment->core.n_cigar; i++){
+        CigarTuple c;
+        decompress_cigar_bytes(cigar_bytes[i], c);
+        f(c);
+    }
+}
+
 
 void decompress_bam_sequence(uint8_t* compressed_sequence, int64_t length, bool is_reverse, string& sequence){
     ///
