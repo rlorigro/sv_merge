@@ -16,50 +16,32 @@ using std::cout;
 namespace sv_merge {
 
 /**
- * Inefficient complementation, good luck to the optimizer
+ * Inefficient complementation, good luck to the optimizer TODO: switch to array based or char ordinal offset math
  * @param c - the character to be complemented, must be ACGTN or acgtn
  * @return The complement of c
  */
 char get_complement(char c){
     if (isupper(c)) {
-        if (c == 'A') {
-            return 'T';
-        }
-        else if (c == 'C') {
-            return 'G';
-        }
-        else if (c == 'G') {
-            return 'C';
-        }
-        else if (c == 'T') {
-            return 'A';
-        }
-        else if (c == 'N') {
-            return 'N';
-        }
-        else {
-            throw runtime_error("ERROR: cannot complement base: " + string(1,c));
+        switch (c){
+            case 'A': return 'T';
+            case 'C': return 'G';
+            case 'G': return 'C';
+            case 'T': return 'A';
+            case 'N': return 'N';
+            default:
+                throw runtime_error("ERROR: cannot complement base: " + string(1,c));
         }
     }
 
     else {
-        if (c == 'a') {
-            return 't';
-        }
-        else if (c == 'c') {
-            return 'g';
-        }
-        else if (c == 'g') {
-            return 'c';
-        }
-        else if (c == 't') {
-            return 'a';
-        }
-        else if (c == 'n') {
-            return 'n';
-        }
-        else {
-            throw runtime_error("ERROR: cannot complement base: " + string(1,c));
+        switch (c){
+            case 'a': return 't';
+            case 'c': return 'g';
+            case 'g': return 'c';
+            case 't': return 'a';
+            case 'n': return 'n';
+            default:
+                throw runtime_error("ERROR: cannot complement base: " + string(1,c));
         }
     }
 }
@@ -93,6 +75,21 @@ pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
     else {
         return {query_start,query_stop};
     }
+}
+
+
+bool CigarInterval::is_softclip() const{
+    return code == 4;
+}
+
+
+bool CigarInterval::is_hardclip() const{
+    return code == 5;
+}
+
+
+bool CigarInterval::is_clip() const{
+    return code == 4 or code == 5;
 }
 
 

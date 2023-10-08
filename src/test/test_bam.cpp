@@ -1,16 +1,21 @@
 #include "Filesystem.hpp"
 #include "Region.hpp"
+#include "fasta.hpp"
 #include "misc.hpp"
 #include "bam.hpp"
 
 using ghc::filesystem::path;
-using sv_merge::for_cigar_tuple_in_alignment;
 using sv_merge::for_cigar_interval_in_alignment;
+using sv_merge::for_cigar_tuple_in_alignment;
 using sv_merge::for_alignment_in_bam_region;
+using sv_merge::for_sequence_in_fasta_file;
 using sv_merge::decompress_bam_sequence;
 using sv_merge::for_read_in_bam_region;
 using sv_merge::reverse_complement;
+using sv_merge::cigar_code_to_format_char;
 using sv_merge::cigar_code_to_char;
+using sv_merge::is_query_move;
+using sv_merge::is_ref_move;
 using sv_merge::run_command;
 using sv_merge::files_equal;
 using sv_merge::CigarInterval;
@@ -18,11 +23,13 @@ using sv_merge::CigarTuple;
 using sv_merge::Sequence;
 using sv_merge::Region;
 
+#include <unordered_map>
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
 #include <map>
 
+using std::unordered_map;
 using std::runtime_error;
 using std::to_string;
 using std::ofstream;
@@ -76,9 +83,6 @@ void test_cigar_iterator(path data_directory){
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
     path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
-    path output_path = data_directory / "test_bam_region_extract.fasta";
-
-    ofstream file(output_path);
 
     for_alignment_in_bam_region(bam_path, region_string, [&](const bam1_t *alignment){
         cerr << bam_get_qname(alignment) << '\n';
@@ -99,16 +103,26 @@ void test_cigar_interval_iterator(path data_directory){
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
     path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
-    path output_path = data_directory / "test_bam_region_extract.fasta";
+    path ref_path = data_directory / "test_ref.fasta";
 
-    ofstream file(output_path);
+    Sequence ref_sequence;
+    for_sequence_in_fasta_file(ref_path, [&](const Sequence& s){
+        if (s.name == "a"){
+            ref_sequence = s;
+        }
+    });
 
     map<string,string> results;
     map<string,string> formatted_query;
     map<string,string> formatted_ref;
+    map<string,string> formatted_crossref;
+
+    unordered_map<string,int> counter;
 
     for_alignment_in_bam_region(bam_path, region_string, [&](const bam1_t* alignment){
         string name = bam_get_qname(alignment);
+        string alignment_name = name + "_" + to_string(counter[name]);
+        counter[name]++;
 
         string query_sequence;
         decompress_bam_sequence(alignment, query_sequence);
@@ -122,23 +136,50 @@ void test_cigar_interval_iterator(path data_directory){
             cerr << alignment->core.l_qseq << '\n';
             cerr << result;
 
-            auto [a,b] = cigar.get_forward_query_interval();
-            auto s = query_sequence.substr(a, b-a + 1);
-
-            if (cigar.is_reverse){
-                reverse_complement(s);
-            }
-
-            formatted_query[name] += s;
-
             results[name] += result;
+
+            if (not cigar.is_clip()){
+                const auto& [a_query,b_query] = cigar.get_forward_query_interval();
+                auto s_query = query_sequence.substr(a_query, b_query-a_query);
+
+                const auto& [a_ref,b_ref] = cigar.get_forward_ref_interval();
+                auto s_ref = ref_sequence.sequence.substr(a_ref, b_ref-a_ref);
+
+                if (cigar.is_reverse){
+                    reverse_complement(s_query);
+                }
+
+                if (not is_query_move[cigar.code]){
+                    s_query = string(cigar.length, '-');
+                }
+
+                if (not is_ref_move[cigar.code]){
+                    s_ref = string(cigar.length, '-');
+                }
+
+                string s_crossref = string(cigar.length, cigar_code_to_format_char[cigar.code]);
+
+                formatted_ref[alignment_name] += s_ref;
+                formatted_crossref[alignment_name] += s_crossref;
+                formatted_query[alignment_name] += s_query;
+
+            }
         });
     });
 
     for (const auto& [name,result]: results){
         cerr << name << '\n';
         cerr << result << '\n';
+        cerr << '\n';
+    }
+
+    for (const auto& [name,result]: formatted_query){
+        cerr << name << '\n';
+
+        cerr << formatted_ref[name] << '\n';
+        cerr << formatted_crossref[name] << '\n';
         cerr << formatted_query[name] << '\n';
+
         cerr << '\n';
     }
 

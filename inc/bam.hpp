@@ -54,6 +54,19 @@ static const array <char,9> cigar_code_to_char = {
 };
 
 
+static const array <char,9> cigar_code_to_format_char = {
+        '|', // M
+        ' ', // I
+        ' ', // D
+        ' ', // N
+        ' ', // S
+        ' ', // H
+        ' ', // P
+        '|', // =
+        '*', // X
+};
+
+
 static const array <bool,9> is_query_move = {
         1, // M
         1, // I
@@ -107,7 +120,11 @@ public:
 
     pair<int64_t,int64_t> get_forward_ref_interval() const;
     pair<int64_t,int64_t> get_forward_query_interval() const;
+    bool is_softclip() const;
+    bool is_hardclip() const;
+    bool is_clip() const;
 };
+
 
 char get_complement(char c);
 
