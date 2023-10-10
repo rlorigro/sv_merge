@@ -138,6 +138,14 @@ void for_cigar_tuple_in_alignment(const bam1_t *alignment, const function<void(C
 
 void for_cigar_interval_in_alignment(const bam1_t *alignment, const function<void(CigarInterval& cigar)>& f);
 
+void for_cigar_interval_in_alignment(
+        const bam1_t *alignment,
+        vector<interval_t>& ref_intervals,
+        vector<interval_t>& query_intervals,
+        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_ref,
+        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_query
+);
+
 void for_alignment_in_bam_region(path bam_path, string region, const function<void(const bam1_t *alignment)>& f);
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f);

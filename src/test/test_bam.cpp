@@ -1,3 +1,4 @@
+#include "IntervalGraph.hpp"
 #include "Filesystem.hpp"
 #include "Region.hpp"
 #include "fasta.hpp"
@@ -20,6 +21,7 @@ using sv_merge::run_command;
 using sv_merge::files_equal;
 using sv_merge::CigarInterval;
 using sv_merge::CigarTuple;
+using sv_merge::interval_t;
 using sv_merge::Sequence;
 using sv_merge::Region;
 
@@ -90,8 +92,6 @@ void test_cigar_iterator(path data_directory){
             cerr << cigar_code_to_char[cigar_tuple.code] << ' ' << cigar_tuple.length << '\n';
         });
     });
-
-
 }
 
 
@@ -186,6 +186,57 @@ void test_cigar_interval_iterator(path data_directory){
 }
 
 
+void test_windowed_cigar_interval_iterator(path data_directory){
+    string region_string = "a:0-5000";
+
+    Region r(region_string);
+
+    cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+    path ref_path = data_directory / "test_ref.fasta";
+
+    Sequence ref_sequence;
+    for_sequence_in_fasta_file(ref_path, [&](const Sequence& s){
+        if (s.name == "a"){
+            ref_sequence = s;
+        }
+    });
+
+    unordered_map<string,int> counter;
+
+    vector<interval_t> ref_intervals = {
+            {2000,2100}
+    };
+
+    vector<interval_t> query_intervals = {
+            {0,100}
+    };
+
+    for_alignment_in_bam_region(bam_path, region_string, [&](const bam1_t* alignment){
+        string name = bam_get_qname(alignment);
+        string alignment_name = name + "_" + to_string(counter[name]);
+        counter[name]++;
+
+        string query_sequence;
+        decompress_bam_sequence(alignment, query_sequence);
+
+        cerr << alignment_name << '\n';
+
+        for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+        [&](const CigarTuple& cigar, const interval_t& interval){
+            cerr << "r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length << '\n';
+        },
+        [&](const CigarTuple& cigar, const interval_t& interval){
+            cerr << "q:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length << '\n';
+        });
+
+        cerr << '\n';
+
+    });
+}
+
+
 int main(){
     path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
     path data_directory = project_directory / "data";
@@ -200,6 +251,9 @@ int main(){
 
     cerr << "TESTING: bam_sequence_extraction\n\n";
     test_cigar_interval_iterator(data_directory);
+
+    cerr << "TESTING: bam_sequence_extraction\n\n";
+    test_windowed_cigar_interval_iterator(data_directory);
 
 
     return 0;

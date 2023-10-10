@@ -135,7 +135,7 @@ template <class T> IntervalGraph<T>::IntervalGraph(vector <pair <interval_t,unor
             if (other_interval.second < interval.first){
                 to_be_removed.emplace_back(other_interval);
             }
-            // Add edges from all active intervals ot the current interval
+            // Add edges from all active intervals to the current interval
             else{
                 nodes.at(other_interval).neighbors.emplace(interval);
                 nodes.at(interval).neighbors.emplace(other_interval);
@@ -172,7 +172,7 @@ template <class T> void IntervalGraph<T>::for_value_in_interval(const interval_t
 
 /**
  * For each connected component in the interval graph, build a set containing its intervals, and append to the
- * components object which is passed by reference
+ * components object which is passed by reference. Uses BFS to find components.
  * @tparam T - whatever datatype the intervals are labeled with, usually 'string'
  * @param components - the object to be filled with results
  */
