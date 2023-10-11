@@ -120,6 +120,10 @@ public:
 
     pair<int64_t,int64_t> get_forward_ref_interval() const;
     pair<int64_t,int64_t> get_forward_query_interval() const;
+    void set_ref_interval_forward();
+    void set_query_interval_forward();
+    void set_ref_interval_reverse();
+    void set_query_interval_reverse();
     bool is_softclip() const;
     bool is_hardclip() const;
     bool is_clip() const;
@@ -142,8 +146,8 @@ void for_cigar_interval_in_alignment(
         const bam1_t *alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,
-        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_ref,
-        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_query
+        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_ref,
+        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_query
 );
 
 void for_alignment_in_bam_region(path bam_path, string region, const function<void(const bam1_t *alignment)>& f);

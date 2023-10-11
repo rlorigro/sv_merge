@@ -29,6 +29,7 @@ using sv_merge::Region;
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
+#include <cmath>
 #include <map>
 
 using std::unordered_map;
@@ -38,6 +39,7 @@ using std::ofstream;
 using std::string;
 using std::cerr;
 using std::map;
+using std::max;
 
 
 void test_bam_sequence_extraction(path data_directory){
@@ -95,6 +97,47 @@ void test_cigar_iterator(path data_directory){
 }
 
 
+void get_formatted_sequence_of_cigar_interval(
+        const CigarInterval& cigar,
+        const string& ref_sequence,
+        const string& query_sequence,
+        string& s_ref,
+        string& s_query,
+        string& s_crossref
+){
+    s_ref.clear();
+    s_query.clear();
+    s_crossref.clear();
+
+    if (not cigar.is_clip()){
+
+        const auto& [a_query,b_query] = cigar.get_forward_query_interval();
+        s_query = query_sequence.substr(a_query, b_query-a_query);
+
+        const auto& [a_ref,b_ref] = cigar.get_forward_ref_interval();
+        s_ref = ref_sequence.substr(a_ref, b_ref-a_ref);
+
+        if (cigar.is_reverse){
+          reverse_complement(s_query);
+        }
+
+        auto l_query = b_query - a_query;
+        auto l_ref = b_ref - a_ref;
+        auto l = max(l_ref,l_query);
+
+        if (not is_query_move[cigar.code]){
+          s_query = string(l, '-');
+        }
+
+        if (not is_ref_move[cigar.code]){
+          s_ref = string(l, '-');
+        }
+
+        s_crossref = string(l, cigar_code_to_format_char[cigar.code]);
+    }
+}
+
+
 void test_cigar_interval_iterator(path data_directory){
     string region_string = "a:0-5000";
 
@@ -111,6 +154,10 @@ void test_cigar_interval_iterator(path data_directory){
             ref_sequence = s;
         }
     });
+
+    string s_ref;
+    string s_query;
+    string s_crossref;
 
     map<string,string> results;
     map<string,string> formatted_query;
@@ -139,25 +186,13 @@ void test_cigar_interval_iterator(path data_directory){
             results[name] += result;
 
             if (not cigar.is_clip()){
-                const auto& [a_query,b_query] = cigar.get_forward_query_interval();
-                auto s_query = query_sequence.substr(a_query, b_query-a_query);
-
-                const auto& [a_ref,b_ref] = cigar.get_forward_ref_interval();
-                auto s_ref = ref_sequence.sequence.substr(a_ref, b_ref-a_ref);
-
-                if (cigar.is_reverse){
-                    reverse_complement(s_query);
-                }
-
-                if (not is_query_move[cigar.code]){
-                    s_query = string(cigar.length, '-');
-                }
-
-                if (not is_ref_move[cigar.code]){
-                    s_ref = string(cigar.length, '-');
-                }
-
-                string s_crossref = string(cigar.length, cigar_code_to_format_char[cigar.code]);
+                get_formatted_sequence_of_cigar_interval(
+                        cigar,
+                        ref_sequence.sequence,
+                        query_sequence,
+                        s_ref,
+                        s_query,
+                        s_crossref);
 
                 formatted_ref[alignment_name] += s_ref;
                 formatted_crossref[alignment_name] += s_crossref;
@@ -206,12 +241,26 @@ void test_windowed_cigar_interval_iterator(path data_directory){
     unordered_map<string,int> counter;
 
     vector<interval_t> ref_intervals = {
-            {2000,2100}
+            {2000,2036},
+            {2036,2100}
     };
 
     vector<interval_t> query_intervals = {
-            {0,100}
+            {0,46},
+            {46,100}
     };
+
+    string s_ref;
+    string s_query;
+    string s_crossref;
+
+    map<string,string> r_formatted_query;
+    map<string,string> r_formatted_ref;
+    map<string,string> r_formatted_crossref;
+
+    map<string,string> q_formatted_query;
+    map<string,string> q_formatted_ref;
+    map<string,string> q_formatted_crossref;
 
     for_alignment_in_bam_region(bam_path, region_string, [&](const bam1_t* alignment){
         string name = bam_get_qname(alignment);
@@ -223,17 +272,60 @@ void test_windowed_cigar_interval_iterator(path data_directory){
 
         cerr << alignment_name << '\n';
 
+        int64_t length;
+
         for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
-        [&](const CigarTuple& cigar, const interval_t& interval){
-            cerr << "r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length << '\n';
+        [&](const CigarInterval& intersection, const CigarInterval& cigar, const interval_t& interval){
+            if (is_ref_move[cigar.code]){
+                length = intersection.ref_stop - intersection.ref_start;
+            }
+            else{
+                length = cigar.length;
+            }
+            cerr << "r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length  << ',' << length << " r:" << intersection.ref_start << ',' << intersection.ref_stop << " q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
+
+            if (not cigar.is_clip()){
+                get_formatted_sequence_of_cigar_interval(
+                        intersection,
+                        ref_sequence.sequence,
+                        query_sequence,
+                        s_ref,
+                        s_query,
+                        s_crossref);
+
+                r_formatted_ref[alignment_name] += s_ref;
+                r_formatted_ref[alignment_name] += "|";
+                r_formatted_crossref[alignment_name] += s_crossref;
+                r_formatted_crossref[alignment_name] += "|";
+                r_formatted_query[alignment_name] += s_query;
+                r_formatted_query[alignment_name] += "|";
+            }
         },
-        [&](const CigarTuple& cigar, const interval_t& interval){
-            cerr << "q:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length << '\n';
+        [&](const CigarInterval& intersection, const CigarInterval& cigar, const interval_t& interval){
+            if (is_query_move[cigar.code]){
+                length = intersection.query_stop - intersection.query_start;
+            }
+            else{
+                length = cigar.length;
+            }
+            cerr << "q:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length  << ',' << length << " r:" << intersection.ref_start << ',' << intersection.ref_stop << " q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
         });
 
         cerr << '\n';
 
     });
+
+
+    for (const auto& [name,result]: r_formatted_query){
+        cerr << name << '\n';
+
+        cerr << r_formatted_ref[name] << '\n';
+        cerr << r_formatted_crossref[name] << '\n';
+        cerr << r_formatted_query[name] << '\n';
+
+        cerr << '\n';
+    }
+
 }
 
 

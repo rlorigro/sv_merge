@@ -2,6 +2,7 @@
 #include "bam.hpp"
 
 #include <stdexcept>
+#include <algorithm>
 #include <iostream>
 #include <ranges>
 #include <deque>
@@ -10,6 +11,7 @@
 using std::runtime_error;
 using std::to_string;
 using std::deque;
+using std::swap;
 using std::cerr;
 using std::cout;
 using std::min;
@@ -74,12 +76,40 @@ pair<int64_t,int64_t> CigarInterval::get_forward_ref_interval() const{
 }
 
 
+void CigarInterval::set_ref_interval_forward(){
+    if (ref_start > ref_stop){
+        swap(ref_stop,ref_start);
+    }
+}
+
+
+void CigarInterval::set_ref_interval_reverse(){
+    if (ref_start < ref_stop){
+        swap(ref_stop,ref_start);
+    }
+}
+
+
 pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
     if (query_start > query_stop){
         return {query_stop,query_start};
     }
     else {
         return {query_start,query_stop};
+    }
+}
+
+
+void CigarInterval::set_query_interval_forward(){
+    if (query_start > query_stop){
+        swap(query_stop,query_start);
+    }
+}
+
+
+void CigarInterval::set_query_interval_reverse(){
+    if (query_start < query_stop){
+        swap(query_stop,query_start);
     }
 }
 
@@ -198,11 +228,9 @@ void for_cigar_interval_in_alignment(const bam1_t *alignment, const function<voi
  * the user as a vector of interval_t. Useful for parsing cigars over a region of interest.
  * @param alignment - pointer to htslib alignment struct
  * @param ref_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
- * must be half-open, e.g.: [[0,2),[2,3)] are two adjacent intervals of length 2. Intervals must be in the forward
- * orientation of the REF
+ * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
  * @param query_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
- * must be half-open, e.g.: [[0,2),[2,3)] are two adjacent intervals of length 2. Intervals must be in the forward
- * orientation of the QUERY
+ * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
  * @param f_ref lambda function to operate on ref intervals
  * @param f_query lambda function to operate on query intervals
  */
@@ -210,8 +238,8 @@ void for_cigar_interval_in_alignment(
         const bam1_t *alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,
-        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_ref,
-        const function<void(const CigarTuple& cigar, const interval_t& interval)>& f_query
+        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_ref,
+        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_query
         ){
 
     // Comparator to sort intervals [(a,b),...,(a,b)] by start, 'a'
@@ -220,25 +248,23 @@ void for_cigar_interval_in_alignment(
         return a.first < b.first;
     };
 
-    auto left_comparator_reverse = [](const interval_t& a, const interval_t& b){
-        return a.first > b.first;
-    };
+//    auto left_comparator_reverse = [](const interval_t& a, const interval_t& b){
+//        return a.first > b.first;
+//    };
 
     auto cigar_bytes = bam_get_cigar(alignment);
 
+    CigarInterval intersection;
     CigarInterval c;
     c.query_start = 0;
     c.ref_start = alignment->core.pos;
     c.is_reverse = bam_is_rev(alignment);
 
-    CigarTuple c_ref;
-    CigarTuple c_query;
-
-    // Sort the Query intervals
+    // Sort the query intervals
     sort(query_intervals.begin(), query_intervals.end(), left_comparator);
 
-    // Sort the ref intervals corresponding to whether the alignment is F/R
-    sort(ref_intervals.begin(), ref_intervals.end(), c.is_reverse ? left_comparator_reverse : left_comparator);
+    // Sort the ref intervals
+    sort(ref_intervals.begin(), ref_intervals.end(), left_comparator);
 
     // Setup iterators which walk along the ref/query intervals (if they exist)
     auto ref_iter = ref_intervals.begin();
@@ -254,6 +280,7 @@ void for_cigar_interval_in_alignment(
         // Update interval bounds for this cigar interval
         if (c.is_reverse) {
             c.query_stop = c.query_start - is_query_move[c.code]*c.length;
+            c.set_query_interval_forward();
         }
         else{
             c.query_stop = c.query_start + is_query_move[c.code]*c.length;
@@ -261,13 +288,37 @@ void for_cigar_interval_in_alignment(
 
         c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
 
+        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
+
         while (ref_iter != ref_intervals.end()){
-            c_ref.code = c.code;
-            c_ref.length = min(ref_iter->second, c.ref_stop) - max(ref_iter->first, c.ref_start);
+            intersection.code = c.code;
+            intersection.length = c.length;
+
+            intersection.ref_start = max(ref_iter->first, c.ref_start);
+            intersection.ref_stop = min(ref_iter->second, c.ref_stop);
+
+            auto l = intersection.ref_stop - intersection.ref_start;
+
+            // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
+            if (is_ref_move[c.code] and is_query_move[c.code]){
+                if (c.is_reverse) {
+                    intersection.query_start = c.query_stop - l;
+                    intersection.query_stop = c.query_stop;
+                }
+                else{
+                    intersection.query_stop = c.query_start + l;
+                    intersection.query_start = c.query_start;
+                }
+            }
+            // Otherwise the ref/query advance independently
+            else{
+                intersection.query_start = c.query_start;
+                intersection.query_stop = c.query_stop;
+            }
 
             // In some cases, the window could be completely non overlapping
-            if (c_ref.length >= 0){
-                f_ref(c_ref, *ref_iter);
+            if (l >= 0){
+                f_ref(intersection, c, *ref_iter);
             }
 
             // Cases A and B indicate that more windows need to be consumed before advancing the cigar interval.
@@ -286,12 +337,28 @@ void for_cigar_interval_in_alignment(
         }
 
         while (query_iter != query_intervals.end()){
-            c_query.code = c.code;
-            c_query.length = min(query_iter->second, c.query_stop) - max(query_iter->first, c.query_start);
+            intersection.code = c.code;
+            intersection.length = c.length;
+
+            intersection.query_start = max(query_iter->first, c.query_start);
+            intersection.query_stop = min(query_iter->second, c.query_stop);
+
+            auto l = intersection.query_stop - intersection.query_start;
+
+            // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
+            if (is_ref_move[c.code] and is_query_move[c.code]){
+                intersection.ref_stop = c.ref_start + l;
+                intersection.ref_start = c.ref_start;
+            }
+            // Otherwise the ref/query advance independently
+            else{
+                intersection.ref_stop = c.ref_stop;
+                intersection.ref_start = c.ref_start;
+            }
 
             // In some cases, the window could be completely non overlapping
-            if (c_query.length >= 0){
-                f_query(c_query, *query_iter);
+            if (l >= 0){
+                f_query(intersection, c, *query_iter);
             }
 
             // Cases A and B indicate that more windows need to be consumed before advancing the cigar interval.
@@ -308,6 +375,10 @@ void for_cigar_interval_in_alignment(
             }
 
             query_iter++;
+        }
+
+        if (c.is_reverse){
+            c.set_query_interval_reverse();
         }
 
         c.ref_start = c.ref_stop;
