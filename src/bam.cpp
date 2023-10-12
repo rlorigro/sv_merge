@@ -256,6 +256,8 @@ void for_cigar_interval_in_alignment(
 
     CigarInterval intersection;
     CigarInterval c;
+
+    // Initialize the cigar interval
     c.query_start = 0;
     c.ref_start = alignment->core.pos;
     c.is_reverse = bam_is_rev(alignment);
@@ -274,23 +276,32 @@ void for_cigar_interval_in_alignment(
         c.query_start = alignment->core.l_qseq;
     }
 
+    // Make sure to transfer the reversal status
+    intersection.is_reverse = c.is_reverse;
+
     for (uint32_t i=0; i<alignment->core.n_cigar; i++){
         decompress_cigar_bytes(cigar_bytes[i], c);
 
         // Update interval bounds for this cigar interval
         if (c.is_reverse) {
             c.query_stop = c.query_start - is_query_move[c.code]*c.length;
-            c.set_query_interval_forward();
         }
         else{
             c.query_stop = c.query_start + is_query_move[c.code]*c.length;
         }
 
         c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
+        c.set_query_interval_forward();
 
         cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
-        while (ref_iter != ref_intervals.end()){
+        bool cigar_exceeds_window = false;
+
+        if (query_iter != query_intervals.end()) {
+            cigar_exceeds_window = c.ref_stop > ref_iter->first;
+        }
+
+        while (ref_iter != ref_intervals.end() and cigar_exceeds_window){
             intersection.code = c.code;
             intersection.length = c.length;
 
@@ -302,12 +313,12 @@ void for_cigar_interval_in_alignment(
             // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
             if (is_ref_move[c.code] and is_query_move[c.code]){
                 if (c.is_reverse) {
-                    intersection.query_start = c.query_stop - l;
-                    intersection.query_stop = c.query_stop;
+                    intersection.query_start = c.query_stop - (intersection.ref_start - c.ref_start);
+                    intersection.query_stop= c.query_stop - (intersection.ref_stop - c.ref_start);
                 }
                 else{
-                    intersection.query_stop = c.query_start + l;
-                    intersection.query_start = c.query_start;
+                    intersection.query_start = c.query_start + (intersection.ref_start - c.ref_start);
+                    intersection.query_stop = c.query_start + (intersection.ref_stop - c.ref_start);
                 }
             }
             // Otherwise the ref/query advance independently
@@ -336,24 +347,59 @@ void for_cigar_interval_in_alignment(
             ref_iter++;
         }
 
-        while (query_iter != query_intervals.end()){
+
+        // del_5_at_34_reverse
+        // Cigars in ref coords:
+        //        =34       [----)
+        //        D5             [--)
+        //        =1951             [----------------------)
+
+        // window [0,46)                                (--]
+        // cigar  [46,100)                          (---]
+        // cigar  [120,140)                   (--]
+
+        // del_5_at_34
+        // Cigars in ref coords:
+        //        =34       [----)
+        //        D5             [--)
+        //        =1951             [----------------------)
+
+        // window [0,46)    [---------)
+        // cigar  [46,100)            [-----)
+        // cigar  [120,140)                    [--)
+
+        cigar_exceeds_window = false;
+
+        if (query_iter != query_intervals.end()) {
+            cigar_exceeds_window = c.query_stop > query_iter->first;
+        }
+
+        while (query_iter != query_intervals.end() and cigar_exceeds_window){
             intersection.code = c.code;
             intersection.length = c.length;
 
             intersection.query_start = max(query_iter->first, c.query_start);
             intersection.query_stop = min(query_iter->second, c.query_stop);
 
+//            cerr << "q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
+
             auto l = intersection.query_stop - intersection.query_start;
 
             // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
             if (is_ref_move[c.code] and is_query_move[c.code]){
-                intersection.ref_stop = c.ref_start + l;
-                intersection.ref_start = c.ref_start;
+                if (c.is_reverse) {
+                    intersection.ref_start = c.ref_stop - (intersection.query_start - c.query_start);
+                    intersection.ref_stop = c.ref_stop - (intersection.query_stop - c.query_start);
+                }
+                else{
+                    intersection.ref_start = c.ref_start + (intersection.query_start - c.query_start);
+                    intersection.ref_stop = c.ref_start + (intersection.query_stop - c.query_start);
+                }
             }
             // Otherwise the ref/query advance independently
             else{
-                intersection.ref_stop = c.ref_stop;
                 intersection.ref_start = c.ref_start;
+                intersection.ref_stop = c.ref_stop;
             }
 
             // In some cases, the window could be completely non overlapping
