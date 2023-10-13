@@ -248,9 +248,9 @@ void for_cigar_interval_in_alignment(
         return a.first < b.first;
     };
 
-//    auto left_comparator_reverse = [](const interval_t& a, const interval_t& b){
-//        return a.first > b.first;
-//    };
+    auto left_comparator_reverse = [](const interval_t& a, const interval_t& b){
+        return a.first > b.first;
+    };
 
     auto cigar_bytes = bam_get_cigar(alignment);
 
@@ -263,7 +263,7 @@ void for_cigar_interval_in_alignment(
     c.is_reverse = bam_is_rev(alignment);
 
     // Sort the query intervals
-    sort(query_intervals.begin(), query_intervals.end(), left_comparator);
+    sort(query_intervals.begin(), query_intervals.end(), c.is_reverse ? left_comparator_reverse : left_comparator);
 
     // Sort the ref intervals
     sort(ref_intervals.begin(), ref_intervals.end(), left_comparator);
@@ -293,15 +293,9 @@ void for_cigar_interval_in_alignment(
         c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
         c.set_query_interval_forward();
 
-        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
+//        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
-        bool cigar_exceeds_window = false;
-
-        if (query_iter != query_intervals.end()) {
-            cigar_exceeds_window = c.ref_stop > ref_iter->first;
-        }
-
-        while (ref_iter != ref_intervals.end() and cigar_exceeds_window){
+        while (ref_iter != ref_intervals.end()){
             intersection.code = c.code;
             intersection.length = c.length;
 
@@ -309,6 +303,8 @@ void for_cigar_interval_in_alignment(
             intersection.ref_stop = min(ref_iter->second, c.ref_stop);
 
             auto l = intersection.ref_stop - intersection.ref_start;
+
+//            cerr << "++ r:" << ref_iter->first << ',' << ref_iter->second << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
             // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
             if (is_ref_move[c.code] and is_query_move[c.code]){
@@ -368,22 +364,16 @@ void for_cigar_interval_in_alignment(
         // cigar  [46,100)            [-----)
         // cigar  [120,140)                    [--)
 
-        cigar_exceeds_window = false;
-
-        if (query_iter != query_intervals.end()) {
-            cigar_exceeds_window = c.query_stop > query_iter->first;
-        }
-
-        while (query_iter != query_intervals.end() and cigar_exceeds_window){
+        while (query_iter != query_intervals.end()){
             intersection.code = c.code;
             intersection.length = c.length;
 
             intersection.query_start = max(query_iter->first, c.query_start);
             intersection.query_stop = min(query_iter->second, c.query_stop);
 
-//            cerr << "q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
-
             auto l = intersection.query_stop - intersection.query_start;
+
+//            cerr << "++ r:" << c.ref_start << ',' << c.ref_stop << " q:" << query_iter->first << ',' << query_iter->second << '\n';
 
             // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
             if (is_ref_move[c.code] and is_query_move[c.code]){
@@ -407,13 +397,28 @@ void for_cigar_interval_in_alignment(
                 f_query(intersection, c, *query_iter);
             }
 
+            bool window_exceeds_cigar;
+            if (c.is_reverse){
+                window_exceeds_cigar = query_iter->first <= c.query_start;
+            }
+            else{
+                window_exceeds_cigar = c.query_stop <= query_iter->second;
+            }
+
             // Cases A and B indicate that more windows need to be consumed before advancing the cigar interval.
             // Otherwise, stop iterating
-            if (c.query_stop <= query_iter->second){
+            if (window_exceeds_cigar){
 
                 // If the window is exactly caught up with the cigar interval, then advance to the next window
-                if (c.query_stop == query_iter->second){
-                    query_iter++;
+                if (c.is_reverse) {
+                    if (query_iter->first == c.query_start) {
+                        query_iter++;
+                    }
+                }
+                else{
+                    if (c.query_stop == query_iter->second) {
+                        query_iter++;
+                    }
                 }
 
                 // Otherwise, need to keep this window open for the next cigar

@@ -117,6 +117,8 @@ void get_formatted_sequence_of_cigar_interval(
         auto l_ref = b_ref - a_ref;
         auto l = max(l_ref,l_query);
 
+//        cerr << l_query << ',' << l_ref << '\n';
+
         s_query = query_sequence.substr(a_query, l_query);
         s_ref = ref_sequence.substr(a_ref, l_ref);
 
@@ -242,13 +244,23 @@ void test_windowed_cigar_interval_iterator(path data_directory){
     unordered_map<string,int> counter;
 
     vector<interval_t> ref_intervals = {
+            {1,50},                 // out of range
             {2000,2036},
-            {2036,2100}
+            {2036,2100},
+            {4000-100,4000-46},     // 3900,3956
+            {4000-46,4000},         // 3956,4000
+            {7000-40,7000}          // out of range
     };
 
     vector<interval_t> query_intervals = {
-            {0,46},
-            {46,100}
+            {-10,-5},               // out of range
+            {0,42},
+            {42,46},
+            {46,100},
+            {200,210},
+            {2000-100,2000-46},     // 1900,1956
+            {2000-46,2000},         // 1956,2000
+            {7000-40,7000}          // out of range
     };
 
     string s_ref;
@@ -317,8 +329,7 @@ void test_windowed_cigar_interval_iterator(path data_directory){
             else{
                 length = cigar.length;
             }
-//            cerr << "q:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length  << ',' << length << " r:" << intersection.ref_start << ',' << intersection.ref_stop << " q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
-
+            cerr << "q:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[cigar.code] << ',' << cigar.length  << ',' << length << " r:" << intersection.ref_start << ',' << intersection.ref_stop << " q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
 
             if (not cigar.is_clip()){
                 get_formatted_sequence_of_cigar_interval(
@@ -341,7 +352,6 @@ void test_windowed_cigar_interval_iterator(path data_directory){
             }
 
             prev_query_interval = interval;
-
         });
 
         cerr << '\n';
@@ -384,13 +394,13 @@ int main(){
     cerr << "TESTING: bam_sequence_extraction\n\n";
     test_bam_sequence_extraction(data_directory);
 
-    cerr << "TESTING: bam_sequence_extraction\n\n";
+    cerr << "TESTING: cigar iterator\n\n";
     test_cigar_iterator(data_directory);
 
-    cerr << "TESTING: bam_sequence_extraction\n\n";
+    cerr << "TESTING: cigar interval iterator\n\n";
     test_cigar_interval_iterator(data_directory);
 
-    cerr << "TESTING: bam_sequence_extraction\n\n";
+    cerr << "TESTING: windowed cigar interval iterator\n\n";
     test_windowed_cigar_interval_iterator(data_directory);
 
 
