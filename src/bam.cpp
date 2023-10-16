@@ -66,68 +66,6 @@ void reverse_complement(string& seq){
 }
 
 
-pair<int64_t,int64_t> CigarInterval::get_forward_ref_interval() const{
-    if (ref_start > ref_stop){
-        return {ref_stop,ref_start};
-    }
-    else {
-        return {ref_start,ref_stop};
-    }
-}
-
-
-void CigarInterval::set_ref_interval_forward(){
-    if (ref_start > ref_stop){
-        swap(ref_stop,ref_start);
-    }
-}
-
-
-void CigarInterval::set_ref_interval_reverse(){
-    if (ref_start < ref_stop){
-        swap(ref_stop,ref_start);
-    }
-}
-
-
-pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
-    if (query_start > query_stop){
-        return {query_stop,query_start};
-    }
-    else {
-        return {query_start,query_stop};
-    }
-}
-
-
-void CigarInterval::set_query_interval_forward(){
-    if (query_start > query_stop){
-        swap(query_stop,query_start);
-    }
-}
-
-
-void CigarInterval::set_query_interval_reverse(){
-    if (query_start < query_stop){
-        swap(query_stop,query_start);
-    }
-}
-
-
-bool CigarInterval::is_softclip() const{
-    return code == 4;
-}
-
-
-bool CigarInterval::is_hardclip() const{
-    return code == 5;
-}
-
-
-bool CigarInterval::is_clip() const{
-    return code == 4 or code == 5;
-}
-
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar){
     cigar.code = int8_t(bytes & bam_cigar_mask);
@@ -151,135 +89,63 @@ void for_cigar_tuple_in_alignment(const bam1_t *alignment, const function<void(C
 }
 
 
-void for_cigar_interval_in_alignment(const bam1_t *alignment, const function<void(CigarInterval& cigar)>& f){
-    auto cigar_bytes = bam_get_cigar(alignment);
 
-    CigarInterval c;
-    c.query_start = 0;
-    c.ref_start = alignment->core.pos;
-    c.is_reverse = bam_is_rev(alignment);
+HtsAlignment::HtsAlignment(bam1_t* a):
+    query_sequence(""),
+    hts_alignment(a),
+    is_decompressed(false),
+    reverse(bam_is_rev(a))
+{}
 
-    if (c.is_reverse){
-        c.query_start = alignment->core.l_qseq;
+
+int64_t HtsAlignment::get_query_length() const {
+    return int64_t(hts_alignment->core.l_qseq);
+}
+
+
+int64_t HtsAlignment::get_ref_start() const {
+    return int64_t(hts_alignment->core.pos);
+}
+
+
+int64_t HtsAlignment::get_query_start() const {
+    if (is_reverse()){
+        return int64_t(get_query_length());
     }
-
-    for (uint32_t i=0; i<alignment->core.n_cigar; i++){
-        decompress_cigar_bytes(cigar_bytes[i], c);
-
-        if (c.is_reverse) {
-            c.query_stop = c.query_start - is_query_move[c.code]*c.length;
-        }
-        else{
-            c.query_stop = c.query_start + is_query_move[c.code]*c.length;
-        }
-
-        c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
-
-        f(c);
-
-        c.ref_start = c.ref_stop;
-        c.query_start = c.query_stop;
+    else{
+        return 0;
     }
 }
 
 
-// Cases A and B indicate that more windows need to be consumed before advancing the cigar interval
-// FORWARD REF ALIGNMENT
-// CASE A:
-//         0123456789
-// Cigar      [--+--)
-// Window  [--+--)
-//
-// CASE B:
-//         0123456
-// Cigar   [--+--)
-// Window   [-+-)
-//
-// CASE B2:
-//         0123456
-// Cigar   [--+--)
-// Window  [--+-)
-// CASE C:
-// Cigar    [-+-)
-// Window  [--+--)
-//
-// CASE C2:
-// Cigar   [--+--)
-// Window     [--+--)
-//
-// CASE C3:
-// Cigar      [--)
-// Window     [--+--)
-//
-// CASE D:
-// Cigar    [-+--)
-// Window  [--+--)
-//
-// CASE D2:
-// Cigar   [--+-----)
-// Window     [-----)
-//
-// CASE D3:
-// Cigar      [-----)
-// Window     [-----)
+void HtsAlignment::get_query_name(string& result) const {
+    result = bam_get_qname(hts_alignment);
+}
 
-/**
- * Iterate cigar intervals and return cigar intervals that are clipped to match the bounds of each window provided by
- * the user as a vector of interval_t. Useful for parsing cigars over a region of interest.
- * @param alignment - pointer to htslib alignment struct
- * @param ref_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
- * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
- * @param query_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
- * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
- * @param f_ref lambda function to operate on ref intervals
- * @param f_query lambda function to operate on query intervals
- */
-void for_cigar_interval_in_alignment(
-        const bam1_t *alignment,
-        vector<interval_t>& ref_intervals,
-        vector<interval_t>& query_intervals,
-        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_ref,
-        const function<void(const CigarInterval& intersection, const CigarInterval& original, const interval_t& interval)>& f_query
-        ){
 
-    // Comparator to sort intervals [(a,b),...,(a,b)] by start, 'a'
-    // Since intervals are expected to be non overlapping, choosing left/right start/end doesn't matter
-    auto left_comparator = [](const interval_t& a, const interval_t& b){
-        return a.first < b.first;
-    };
+void HtsAlignment::get_query_sequence(string& result){
+    if (not is_decompressed){
+        decompress_bam_sequence(hts_alignment, query_sequence);
+        is_decompressed = true;
+    }
+    result = query_sequence;
+}
 
-    auto left_comparator_reverse = [](const interval_t& a, const interval_t& b){
-        return a.first > b.first;
-    };
 
-    auto cigar_bytes = bam_get_cigar(alignment);
-
-    CigarInterval intersection;
+void HtsAlignment::for_each_cigar_interval(const function<void(const CigarInterval&)>& f) {
+    auto cigar_bytes = bam_get_cigar(hts_alignment);
     CigarInterval c;
 
     // Initialize the cigar interval
     c.query_start = 0;
-    c.ref_start = alignment->core.pos;
-    c.is_reverse = bam_is_rev(alignment);
-
-    // Sort the query intervals
-    sort(query_intervals.begin(), query_intervals.end(), c.is_reverse ? left_comparator_reverse : left_comparator);
-
-    // Sort the ref intervals
-    sort(ref_intervals.begin(), ref_intervals.end(), left_comparator);
-
-    // Setup iterators which walk along the ref/query intervals (if they exist)
-    auto ref_iter = ref_intervals.begin();
-    auto query_iter = query_intervals.begin();
+    c.ref_start = get_ref_start();
+    c.is_reverse = is_reverse();
 
     if (c.is_reverse){
-        c.query_start = alignment->core.l_qseq;
+        c.query_start = get_query_length();
     }
 
-    // Make sure to transfer the reversal status
-    intersection.is_reverse = c.is_reverse;
-
-    for (uint32_t i=0; i<alignment->core.n_cigar; i++){
+    for (uint32_t i=0; i < hts_alignment->core.n_cigar; i++) {
         decompress_cigar_bytes(cigar_bytes[i], c);
 
         // Update interval bounds for this cigar interval
@@ -291,143 +157,13 @@ void for_cigar_interval_in_alignment(
         }
 
         c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
+
+        // Temporarily flip the start/stop so that it is conventionally interpretable
         c.set_query_interval_forward();
 
-//        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
+        f(c);
 
-        while (ref_iter != ref_intervals.end()){
-            intersection.code = c.code;
-            intersection.length = c.length;
-
-            intersection.ref_start = max(ref_iter->first, c.ref_start);
-            intersection.ref_stop = min(ref_iter->second, c.ref_stop);
-
-            auto l = intersection.ref_stop - intersection.ref_start;
-
-//            cerr << "++ r:" << ref_iter->first << ',' << ref_iter->second << " q:" << c.query_start << ',' << c.query_stop << '\n';
-
-            // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
-            if (is_ref_move[c.code] and is_query_move[c.code]){
-                if (c.is_reverse) {
-                    intersection.query_start = c.query_stop - (intersection.ref_start - c.ref_start);
-                    intersection.query_stop= c.query_stop - (intersection.ref_stop - c.ref_start);
-                }
-                else{
-                    intersection.query_start = c.query_start + (intersection.ref_start - c.ref_start);
-                    intersection.query_stop = c.query_start + (intersection.ref_stop - c.ref_start);
-                }
-            }
-            // Otherwise the ref/query advance independently
-            else{
-                intersection.query_start = c.query_start;
-                intersection.query_stop = c.query_stop;
-            }
-
-            // In some cases, the window could be completely non overlapping
-            if (l >= 0){
-                f_ref(intersection, c, *ref_iter);
-            }
-
-            // Cases A and B indicate that more windows need to be consumed before advancing the cigar interval.
-            // Otherwise, stop iterating
-            if (c.ref_stop <= ref_iter->second){
-                // If the window is exactly caught up with the cigar interval, then advance to the next window
-                if (c.ref_stop == ref_iter->second){
-                    ref_iter++;
-                }
-
-                // Otherwise, need to keep this window open for the next cigar
-                break;
-            }
-
-            ref_iter++;
-        }
-
-
-        // del_5_at_34_reverse
-        // Cigars in ref coords:
-        //        =34       [----)
-        //        D5             [--)
-        //        =1951             [----------------------)
-
-        // window [0,46)                                (--]
-        // cigar  [46,100)                          (---]
-        // cigar  [120,140)                   (--]
-
-        // del_5_at_34
-        // Cigars in ref coords:
-        //        =34       [----)
-        //        D5             [--)
-        //        =1951             [----------------------)
-
-        // window [0,46)    [---------)
-        // cigar  [46,100)            [-----)
-        // cigar  [120,140)                    [--)
-
-        while (query_iter != query_intervals.end()){
-            intersection.code = c.code;
-            intersection.length = c.length;
-
-            intersection.query_start = max(query_iter->first, c.query_start);
-            intersection.query_stop = min(query_iter->second, c.query_stop);
-
-            auto l = intersection.query_stop - intersection.query_start;
-
-//            cerr << "++ r:" << c.ref_start << ',' << c.ref_stop << " q:" << query_iter->first << ',' << query_iter->second << '\n';
-
-            // If this is an M/=/X operation, then the fates of the ref/query intervals are tied
-            if (is_ref_move[c.code] and is_query_move[c.code]){
-                if (c.is_reverse) {
-                    intersection.ref_start = c.ref_stop - (intersection.query_start - c.query_start);
-                    intersection.ref_stop = c.ref_stop - (intersection.query_stop - c.query_start);
-                }
-                else{
-                    intersection.ref_start = c.ref_start + (intersection.query_start - c.query_start);
-                    intersection.ref_stop = c.ref_start + (intersection.query_stop - c.query_start);
-                }
-            }
-            // Otherwise the ref/query advance independently
-            else{
-                intersection.ref_start = c.ref_start;
-                intersection.ref_stop = c.ref_stop;
-            }
-
-            // In some cases, the window could be completely non overlapping
-            if (l >= 0){
-                f_query(intersection, c, *query_iter);
-            }
-
-            bool window_exceeds_cigar;
-            if (c.is_reverse){
-                window_exceeds_cigar = query_iter->first <= c.query_start;
-            }
-            else{
-                window_exceeds_cigar = c.query_stop <= query_iter->second;
-            }
-
-            // Cases A and B indicate that more windows need to be consumed before advancing the cigar interval.
-            // Otherwise, stop iterating
-            if (window_exceeds_cigar){
-
-                // If the window is exactly caught up with the cigar interval, then advance to the next window
-                if (c.is_reverse) {
-                    if (query_iter->first == c.query_start) {
-                        query_iter++;
-                    }
-                }
-                else{
-                    if (c.query_stop == query_iter->second) {
-                        query_iter++;
-                    }
-                }
-
-                // Otherwise, need to keep this window open for the next cigar
-                break;
-            }
-
-            query_iter++;
-        }
-
+        // Revert to backwards intervals for iteration/update
         if (c.is_reverse){
             c.set_query_interval_reverse();
         }
@@ -435,6 +171,28 @@ void for_cigar_interval_in_alignment(
         c.ref_start = c.ref_stop;
         c.query_start = c.query_stop;
     }
+}
+
+
+void HtsAlignment::for_each_cigar_tuple(const function<void(const CigarTuple&)>& f) {
+    auto cigar_bytes = bam_get_cigar(hts_alignment);
+    CigarTuple c;
+
+    for (uint32_t i=0; i < hts_alignment->core.n_cigar; i++) {
+        decompress_cigar_bytes(cigar_bytes[i], c);
+
+        f(c);
+    }
+}
+
+
+bool HtsAlignment::is_reverse() const {
+    return reverse;
+}
+
+
+bool HtsAlignment::is_unmapped() const {
+    return (hts_alignment->core.tid < 0);
 }
 
 
@@ -481,22 +239,22 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence){
 
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f) {
-    for_alignment_in_bam_region(bam_path, region, [&](const bam1_t *alignment){
-        if (alignment->core.tid < 0) {
+    for_alignment_in_bam_region(bam_path, region, [&](Alignment& alignment){
+        if (alignment.is_unmapped()) {
             return;
         }
 
         Sequence s;
-        s.name = bam_get_qname(alignment);
 
-        decompress_bam_sequence(alignment, s.sequence);
+        alignment.get_query_name(s.name);
+        alignment.get_query_sequence(s.sequence);
 
         f(s);
     });
 }
 
 
-void for_alignment_in_bam_region(path bam_path, string region, const function<void(const bam1_t *alignment)>& f) {
+void for_alignment_in_bam_region(path bam_path, string region, const function<void(Alignment& alignment)>& f) {
     samFile *bam_file;
     bam_hdr_t *bam_header;
     hts_idx_t *bam_index;
@@ -522,12 +280,16 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
 
     hts_itr_t *itr = sam_itr_querys(bam_index, bam_header, region.c_str());
 
+    HtsAlignment a(alignment);
+
     while (sam_itr_next(bam_file, itr, alignment) >= 0) {
         if (alignment->core.tid < 0) {
             continue;
         }
 
-        f(alignment);
+        a = HtsAlignment(alignment);
+
+        f(a);
     }
 
     bam_destroy1(alignment);

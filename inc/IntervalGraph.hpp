@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pair_hash.hpp"
+#include "misc.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -11,12 +12,10 @@
 #include <utility>
 #include <string>
 #include <vector>
-#include <limits>
 #include <memory>
 #include <queue>
 #include <set>
 
-using std::numeric_limits;
 using std::unordered_map;
 using std::unordered_set;
 using std::runtime_error;
@@ -33,11 +32,6 @@ using std::set;
 
 
 namespace sv_merge {
-
-using interval_t = pair<int64_t,int64_t>;
-using labeled_interval_t = pair <interval_t, unordered_set<string> >;
-static const interval_t max_placeholder = {numeric_limits<int64_t>::max(),numeric_limits<int64_t>::min()};
-
 
 /**
  * Simple node object which represents the connections in an IntervalGraph.
