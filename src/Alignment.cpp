@@ -14,6 +14,13 @@ using std::max;
 
 namespace sv_merge{
 
+
+
+/**
+ * Regardles of the F/R orientation of the alignment, return an interval in which the second item is greater than the
+ * first
+ * @return a pair of integers representing the interval
+ */
 pair<int64_t,int64_t> CigarInterval::get_forward_ref_interval() const{
     if (ref_start > ref_stop){
         return {ref_stop,ref_start};
@@ -34,6 +41,10 @@ int64_t CigarInterval::get_query_length() const{
 }
 
 
+
+/**
+ * Similar to the get_forward_..._interval method but this updates the Cigar object as [a,b] where a < b
+ */
 void CigarInterval::set_ref_interval_forward(){
     if (ref_start > ref_stop){
         swap(ref_stop,ref_start);
@@ -41,6 +52,10 @@ void CigarInterval::set_ref_interval_forward(){
 }
 
 
+
+/**
+ * Similar to the get_reverse_..._interval method but this updates the Cigar object as [b,a] where a < b
+ */
 void CigarInterval::set_ref_interval_reverse(){
     if (ref_start < ref_stop){
         swap(ref_stop,ref_start);
@@ -48,6 +63,11 @@ void CigarInterval::set_ref_interval_reverse(){
 }
 
 
+/**
+ * Regardles of the F/R orientation of the alignment, return an interval in which the second item is greater than the
+ * first
+ * @return a pair of integers representing the interval
+ */
 pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
     if (query_start > query_stop){
         return {query_stop,query_start};
@@ -58,6 +78,9 @@ pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
 }
 
 
+/**
+ * Similar to the get_forward_..._interval method but this updates the Cigar object as [a,b] where a < b
+ */
 void CigarInterval::set_query_interval_forward(){
     if (query_start > query_stop){
         swap(query_stop,query_start);
@@ -65,6 +88,9 @@ void CigarInterval::set_query_interval_forward(){
 }
 
 
+/**
+ * Similar to the get_reverse_..._interval method but this updates the Cigar object as [b,a] where a < b
+ */
 void CigarInterval::set_query_interval_reverse(){
     if (query_start < query_stop){
         swap(query_stop,query_start);

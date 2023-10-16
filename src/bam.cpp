@@ -23,11 +23,6 @@ using std::max;
 
 namespace sv_merge {
 
-/**
- * Inefficient complementation, good luck to the optimizer TODO: switch to array based or char ordinal offset math
- * @param c - the character to be complemented, must be ACGTN or acgtn
- * @return The complement of c
- */
 char get_complement(char c){
     if (isupper(c)) {
         switch (c){
@@ -77,17 +72,6 @@ void decompress_cigar_bytes(uint32_t bytes, CigarInterval& cigar){
     cigar.code = int8_t(bytes & bam_cigar_mask);
     cigar.length = int64_t(bytes >> bam_cigar_shift);
 }
-
-
-void for_cigar_tuple_in_alignment(const bam1_t *alignment, const function<void(CigarTuple& cigar)>& f){
-    auto cigar_bytes = bam_get_cigar(alignment);
-    for (uint32_t i=0; i<alignment->core.n_cigar; i++){
-        CigarTuple c;
-        decompress_cigar_bytes(cigar_bytes[i], c);
-        f(c);
-    }
-}
-
 
 
 HtsAlignment::HtsAlignment(bam1_t* a):
@@ -197,10 +181,6 @@ bool HtsAlignment::is_unmapped() const {
 
 
 void decompress_bam_sequence(const bam1_t* alignment, string& sequence){
-    ///
-    /// Convert the compressed representation of an aligned sequence into a string.
-    /// Does NOT reverse complement the sequence
-    ///
     auto length = alignment->core.l_qseq;
     auto compressed_sequence = bam_get_seq(alignment);
     bool is_reverse = bam_is_rev(alignment);

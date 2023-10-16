@@ -35,6 +35,9 @@ namespace sv_merge {
 **/
 
 
+/**
+ * Lookup table to fetch the char representation of a cigar code
+ */
 static const array <char,9> cigar_code_to_char = {
         'M', // 0
         'I', // 1
@@ -48,6 +51,9 @@ static const array <char,9> cigar_code_to_char = {
 };
 
 
+/**
+ * Lookup table to fetch a formatted alignment character which indicates match/mismatch/gap
+ */
 static const array <char,9> cigar_code_to_format_char = {
         '|', // M
         ' ', // I
@@ -61,6 +67,9 @@ static const array <char,9> cigar_code_to_format_char = {
 };
 
 
+/**
+ * Lookup table to check if a cigar code consumes query sequence
+ */
 static const array <bool,9> is_query_move = {
         1, // M
         1, // I
@@ -74,6 +83,9 @@ static const array <bool,9> is_query_move = {
 };
 
 
+/**
+ * Lookup table to check if a cigar code consumes reference sequence
+ */
 static const array <bool,9> is_ref_move = {
         1, // M
         0, // I
@@ -87,6 +99,9 @@ static const array <bool,9> is_ref_move = {
 };
 
 
+/**
+ * Data class which represents a cigar tuple
+ */
 class CigarTuple{
 public:
     int64_t length = -1;
@@ -94,6 +109,9 @@ public:
 };
 
 
+/**
+ * Data class which stores all the necessary cigar data and coordinates to map from a query interval to a ref interval
+ */
 class CigarInterval{
 public:
     int64_t length = -1;
@@ -125,8 +143,21 @@ public:
  */
 class Alignment {
 public:
+
+    /**
+     * This method allows the user to iterate a cigar string and fetch absolute intervals instead of a delta
+     * The purpose is to factor out the boilerplate code associated with unrolling cigars.
+     * @param f - lambda function to operate on each cigar interval
+     */
     virtual void for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f) = 0;
+
+
+    /**
+     * Very simple method to iterate the cigar tuples in a C++/OOP friendly way
+     * @param f - lambda function to operate on each cigar tuple
+     */
     virtual void for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f) = 0;
+
     virtual int64_t get_query_length() const = 0;
     virtual void get_query_sequence(string& result) = 0;
     virtual void get_query_name(string& result) const = 0;
