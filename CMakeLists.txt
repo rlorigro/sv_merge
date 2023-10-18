@@ -62,13 +62,15 @@ set(SOURCES
         src/Alignment.cpp
         src/bam.cpp
         src/bed.cpp
+        src/fasta.cpp
+        src/Graph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
         src/pair_hash.cpp
         src/Region.cpp
-        src/fasta.cpp
         src/Sequence.cpp
         inc/Sequence.hpp
+        inc/TransitiveMap.hpp
 )
 
 
@@ -322,6 +324,7 @@ set(TESTS
         test_bam
         test_bed
         test_fasta
+        test_graph
         test_htslib
         test_hts_gcp
         test_interval_graph
