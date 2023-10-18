@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pair_hash.hpp"
+#include "misc.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -11,12 +12,10 @@
 #include <utility>
 #include <string>
 #include <vector>
-#include <limits>
 #include <memory>
 #include <queue>
 #include <set>
 
-using std::numeric_limits;
 using std::unordered_map;
 using std::unordered_set;
 using std::runtime_error;
@@ -33,11 +32,6 @@ using std::set;
 
 
 namespace sv_merge {
-
-using interval_t = pair<int64_t,int64_t>;
-using labeled_interval_t = pair <interval_t, unordered_set<string> >;
-static const interval_t max_placeholder = {numeric_limits<int64_t>::max(),numeric_limits<int64_t>::min()};
-
 
 /**
  * Simple node object which represents the connections in an IntervalGraph.
@@ -135,7 +129,7 @@ template <class T> IntervalGraph<T>::IntervalGraph(vector <pair <interval_t,unor
             if (other_interval.second < interval.first){
                 to_be_removed.emplace_back(other_interval);
             }
-            // Add edges from all active intervals ot the current interval
+            // Add edges from all active intervals to the current interval
             else{
                 nodes.at(other_interval).neighbors.emplace(interval);
                 nodes.at(interval).neighbors.emplace(other_interval);
@@ -172,7 +166,7 @@ template <class T> void IntervalGraph<T>::for_value_in_interval(const interval_t
 
 /**
  * For each connected component in the interval graph, build a set containing its intervals, and append to the
- * components object which is passed by reference
+ * components object which is passed by reference. Uses BFS to find components.
  * @tparam T - whatever datatype the intervals are labeled with, usually 'string'
  * @param components - the object to be filled with results
  */

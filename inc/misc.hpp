@@ -1,17 +1,29 @@
 #pragma once
 
 #include "Filesystem.hpp"
+#include <unordered_set>
+#include <utility>
 #include <chrono>
 #include <string>
 #include <array>
+#include <limits>
 
 using std::chrono::system_clock;
 using ghc::filesystem::path;
+using std::numeric_limits;
+using std::unordered_set;
 using std::string;
 using std::array;
+using std::pair;
 
 
 namespace sv_merge{
+
+using interval_t = pair<int64_t,int64_t>;
+
+using labeled_interval_t = pair <interval_t, unordered_set<string> >;
+
+static const interval_t max_placeholder = {numeric_limits<int64_t>::max(),numeric_limits<int64_t>::min()};
 
 inline std::string& ltrim(std::string& s, const char* t = " \t\n\r\f\v");
 

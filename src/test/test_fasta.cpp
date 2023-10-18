@@ -21,7 +21,6 @@ using std::vector;
 using std::cerr;
 
 
-
 int main(){
     path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
     path data_directory = project_directory / "data";
