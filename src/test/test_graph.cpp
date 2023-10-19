@@ -13,7 +13,7 @@ using sv_merge::Node;
 
 
 int main(){
-    Graph<string> g;
+    Graph<Node> g;
 
     string name_a = "a";
     auto node_a = g.add_node(name_a);
@@ -139,7 +139,7 @@ int main(){
     g.add_edge("d", "e",6);
     g.add_edge("e", "b",7);
 
-    g.for_node_in_bfs("a", [&](const Node<string>& node){
+    g.for_node_in_bfs("a", [&](const Node& node){
         cerr << node.name << '\n';
     });
 }

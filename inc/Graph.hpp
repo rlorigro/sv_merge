@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include <stdexcept>
 #include <iostream>
 #include <utility>
 #include <string>
@@ -11,6 +12,7 @@
 
 using std::unordered_map;
 using std::unordered_set;
+using std::runtime_error;
 using std::function;
 using std::vector;
 using std::string;
@@ -21,49 +23,53 @@ using std::cerr;
 
 namespace sv_merge {
 
-template<class T> class Node {
+
+/**
+ * The only requirement for the abstract Node class is that it has a string name, everything else is up to the user
+ */
+class Node {
 public:
-    T name;
+    string name;
 
     explicit Node(const string& name);
     explicit Node(string& name);
 };
 
 
-template <class T> Node<T>::Node(const string& name):
+Node::Node(const string& name):
     name(name)
 {}
 
 
-template <class T> Node<T>::Node(string& name):
+Node::Node(string& name):
     name(name)
 {}
 
 
 template<class T> class Graph {
     unordered_map<int64_t, unordered_map <int64_t, float> > edges;
-    unordered_map<int64_t, Node<T> > nodes;
-    unordered_map<T, uint64_t> id_map;
+    unordered_map<int64_t, T > nodes;
+    unordered_map<string, int64_t> id_map;
     int64_t id_counter = 0;
 
 public:
-    int64_t name_to_id(const T& name) const;
+    int64_t name_to_id(const string& name) const;
 
-    Node<T>& add_node(const T& name);
+    T& add_node(const string& name);
 
-    const Node<T>& get_node(const T& name) const;
-    Node<T>& get_node(const T& name);
-    Node<T>& get_node(int64_t id);
+    const T& get_node(const string& name) const;
+    T& get_node(const string& name);
+    T& get_node(int64_t id);
 
-    void add_edge(const T& name_a, const T& name_b, float weight);
-    void remove_edge(const T& name_a, const T& name_b);
+    void add_edge(const string& name_a, const string& name_b, float weight);
+    void remove_edge(const string& name_a, const string& name_b);
 
-    void for_each_edge(const function<void(const T& a,const T& b, float weight)>& f) const;
-    void for_node_in_bfs(const string& start_name, const function<void(const Node<T>& node)>& f) const;
+    void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
+    void for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const;
 };
 
 
-template<class T> Node<T>& Graph<T>::add_node(const T& name) {
+template<class T> T& Graph<T>::add_node(const string& name) {
     if (id_map.find(name) != id_map.end()){
         throw runtime_error("ERROR: cannot add node with existing name: " + name);
     }
@@ -77,31 +83,31 @@ template<class T> Node<T>& Graph<T>::add_node(const T& name) {
     id_map.emplace(name,id);
 
     // Place a new node in the graph
-    auto result = nodes.emplace(id, Node<T>(name));
+    auto result = nodes.emplace(id, T(name));
 
     // Return a reference to the node
     return result.first->second;
 }
 
 
-template<class T> Node<T>& Graph<T>::get_node(const T& name) {
+template<class T> T& Graph<T>::get_node(const string& name) {
     auto id = name_to_id(name);
     return nodes.at(id);
 }
 
 
-template<class T> const Node<T>& Graph<T>::get_node(const T& name) const {
+template<class T> const T& Graph<T>::get_node(const string& name) const {
     auto id = name_to_id(name);
     return nodes.at(id);
 }
 
 
-template<class T> Node<T>& Graph<T>::get_node(int64_t id) {
+template<class T> T& Graph<T>::get_node(int64_t id) {
     return nodes.at(id);
 }
 
 
-template<class T> int64_t Graph<T>::name_to_id(const T& name) const{
+template<class T> int64_t Graph<T>::name_to_id(const string& name) const{
     auto result = id_map.find(name);
 
     if (result == id_map.end()) {
@@ -112,7 +118,7 @@ template<class T> int64_t Graph<T>::name_to_id(const T& name) const{
 }
 
 
-template<class T> void Graph<T>::add_edge(const T& name_a, const T& name_b, float weight) {
+template<class T> void Graph<T>::add_edge(const string& name_a, const string& name_b, float weight) {
     auto id_a = name_to_id(name_a);
     auto id_b = name_to_id(name_b);
 
@@ -122,7 +128,7 @@ template<class T> void Graph<T>::add_edge(const T& name_a, const T& name_b, floa
 }
 
 
-template<class T> void Graph<T>::remove_edge(const T& name_a, const T& name_b) {
+template<class T> void Graph<T>::remove_edge(const string& name_a, const string& name_b) {
     auto id_a = name_to_id(name_a);
     auto id_b = name_to_id(name_b);
 
@@ -133,7 +139,7 @@ template<class T> void Graph<T>::remove_edge(const T& name_a, const T& name_b) {
     auto& result_b = edges.at(id_b);
     result_b.erase(id_a);
 
-    // If there are no more IDs corresponding to a given ID, then don't leave an empty set in the data structure
+    // If there are no more IDs corresponding to a given ID, then don't leave an empty container dangling
     if (result_a.empty()){
         edges.erase(id_a);
     }
@@ -143,7 +149,7 @@ template<class T> void Graph<T>::remove_edge(const T& name_a, const T& name_b) {
 }
 
 
-template<class T> void Graph<T>::for_each_edge(const function<void(const T& a, const T& b, float weight)>& f) const{
+template<class T> void Graph<T>::for_each_edge(const function<void(const string& a, const string& b, float weight)>& f) const{
     for (const auto& [id_a,item]: edges){
         for (const auto& [id_b, w]: item){
             auto a = nodes.at(id_a);
@@ -154,7 +160,7 @@ template<class T> void Graph<T>::for_each_edge(const function<void(const T& a, c
 }
 
 
-template<class T> void Graph<T>::for_node_in_bfs(const string& start_name, const function<void(const Node<T>& node)>& f) const{
+template<class T> void Graph<T>::for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const{
     auto start_id = name_to_id(start_name);
 
     unordered_set<int64_t> visited;
