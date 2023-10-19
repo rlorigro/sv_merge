@@ -128,18 +128,20 @@ void TransMap::for_each_sample_of_read(const string& read_name, const function<v
 
 
 void TransMap::for_each_sample_of_path(const string& path_name, const function<void(const HeteroNode& node)>& f){
-    graph.for_each_neighbor_of_type(path_name, 'R', [&](const HeteroNode& r){
-        graph.for_each_neighbor_of_type(r.name, 'S', [&](const HeteroNode& s){
-            f(s);
+    auto id = graph.name_to_id(path_name);
+    graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
+        graph.for_each_neighbor_of_type(r, 'S', [&](int64_t s){
+            f(graph.get_node(s));
         });
     });
 }
 
 
 void TransMap::for_each_path_of_sample(const string& sample_name, const function<void(const HeteroNode& node)>& f){
-    graph.for_each_neighbor_of_type(sample_name, 'R', [&](const HeteroNode& r){
-        graph.for_each_neighbor_of_type(r.name, 'P', [&](const HeteroNode& p){
-            f(p);
+    auto id = graph.name_to_id(sample_name);
+    graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
+        graph.for_each_neighbor_of_type(r, 'P', [&](int64_t p){
+            f(graph.get_node(p));
         });
     });
 }

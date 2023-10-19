@@ -99,6 +99,7 @@ public:
     /// Local iterators
     void for_each_neighbor(const string& name, const function<void(const T& neighbor)>& f) const;
     void for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor)>& f) const;
+    void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const;
 };
 
 
@@ -252,6 +253,14 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
     // Iterate only the type of neighbor specified
     for (const auto& [id_b,w]: edges.at(id).at(type)) {
         f(nodes.at(id_b));
+    }
+}
+
+
+template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const{
+    // Iterate only the type of neighbor specified
+    for (const auto& [id_b,w]: edges.at(id).at(type)) {
+        f(id_b);
     }
 }
 
