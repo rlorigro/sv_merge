@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Graph.hpp"
+#include "HeteroGraph.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -17,31 +17,10 @@ using std::pair;
 
 namespace sv_merge {
 
-class TransMapNode: public Node {
-public:
-    string name;
-    char type;
-
-    explicit TransMapNode(const string& name);
-    explicit TransMapNode(string& name);
-};
-
-
-TransMapNode::TransMapNode(const string& name):
-        Node(name),
-        type('*')
-{}
-
-
-TransMapNode::TransMapNode(string& name):
-        Node(name),
-        type('*')
-{}
-
 
 class TransMap {
     /// Attributes
-    Graph<TransMapNode> graph;
+    HeteroGraph<HeteroNode> graph;
     const string sample_node_name;
     const string read_node_name;
     const string path_node_name;
@@ -54,10 +33,11 @@ public:
     void add_edge(const string& a, const string& b);
     void add_edge(const string& a, const string& b, float weight);
 
-    const TransMapNode& get_read_sample(const string& read_id);
-    void for_each_read_of_sample(const string& sample_name, const function<void(const TransMapNode& node)>& f);
-    void for_each_sample_of_read(const string& read_name, const function<void(const TransMapNode& node)>& f);
-    void for_each_sample_of_path(const string& path_name, const function<void(const TransMapNode& node)>& f);
+    void get_read_sample(const string& read_name, string& result);
+    void for_each_read_of_sample(const string& sample_name, const function<void(const HeteroNode& node)>& f);
+    void for_each_sample_of_read(const string& read_name, const function<void(const HeteroNode& node)>& f);
+    void for_each_sample_of_path(const string& path_name, const function<void(const HeteroNode& node)>& f);
+    void for_each_path_of_sample(const string& sample_name, const function<void(const HeteroNode& node)>& f);
 };
 
 
@@ -82,7 +62,7 @@ void TransMap::add_read(const string& name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     auto& node = graph.add_node(name);
-    node.type;
+    node.type = 'R';
 }
 
 
@@ -91,7 +71,7 @@ void TransMap::add_sample(const string& name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     auto& node = graph.add_node(name);
-    node.type;
+    node.type = 'S';
 }
 
 
@@ -100,7 +80,7 @@ void TransMap::add_path(const string& name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     auto& node = graph.add_node(name);
-    node.type;
+    node.type = 'P';
 }
 
 
@@ -112,6 +92,58 @@ void TransMap::add_edge(const string& a, const string& b){
 void TransMap::add_edge(const string& a, const string& b, float weight){
     graph.add_edge(a,b,weight);
 }
+
+
+void TransMap::get_read_sample(const string& read_name, string& result){
+    result.clear();
+
+    // Using the HeteroGraph back end means that we iterate, even for a 1:1 mapping.
+    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor){
+        // Check for cases that should be impossible
+        if (not result.empty()){
+            throw runtime_error("ERROR: multiple samples found for read: " + read_name);
+        }
+
+        result = neighbor.name;
+    });
+
+    if (result.empty()){
+        throw runtime_error("ERROR: no sample found for read: " + read_name);
+    }
+}
+
+
+void TransMap::for_each_read_of_sample(const string& sample_name, const function<void(const HeteroNode& node)>& f){
+    graph.for_each_neighbor_of_type(sample_name, 'R', [&](const HeteroNode& neighbor){
+        f(neighbor);
+    });
+}
+
+
+void TransMap::for_each_sample_of_read(const string& read_name, const function<void(const HeteroNode& node)>& f){
+    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor){
+        f(neighbor);
+    });
+}
+
+
+void TransMap::for_each_sample_of_path(const string& path_name, const function<void(const HeteroNode& node)>& f){
+    graph.for_each_neighbor_of_type(path_name, 'R', [&](const HeteroNode& r){
+        graph.for_each_neighbor_of_type(r.name, 'S', [&](const HeteroNode& s){
+            f(s);
+        });
+    });
+}
+
+
+void TransMap::for_each_path_of_sample(const string& sample_name, const function<void(const HeteroNode& node)>& f){
+    graph.for_each_neighbor_of_type(sample_name, 'R', [&](const HeteroNode& r){
+        graph.for_each_neighbor_of_type(r.name, 'P', [&](const HeteroNode& p){
+            f(p);
+        });
+    });
+}
+
 
 
 }

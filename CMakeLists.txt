@@ -64,6 +64,7 @@ set(SOURCES
         src/bed.cpp
         src/fasta.cpp
         src/Graph.cpp
+        src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
         src/pair_hash.cpp
@@ -325,11 +326,13 @@ set(TESTS
         test_bed
         test_fasta
         test_graph
+        test_heterograph
         test_htslib
         test_hts_gcp
         test_interval_graph
         test_minimap2
         test_minimap2_no_io
+        test_transmap
         )
 
 foreach(FILENAME_PREFIX ${TESTS})

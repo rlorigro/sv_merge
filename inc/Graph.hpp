@@ -64,8 +64,16 @@ public:
     void add_edge(const string& name_a, const string& name_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
 
+    /// Global iterators
     void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
     void for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const;
+    void for_node_in_bfs(
+            const string& start_name,
+            const function<bool(const T& node)>& criteria,
+            const function<void(const T& node)>& f) const;
+
+    /// Local iterators
+    void for_each_neighbor(const string& name, const function<void(const T& neighbor)>& f) const;
 };
 
 
@@ -160,6 +168,15 @@ template<class T> void Graph<T>::for_each_edge(const function<void(const string&
 }
 
 
+template<class T> void Graph<T>::for_each_neighbor(const string& name, const function<void(const T& neighbor)>& f) const{
+    auto id = name_to_id(name);
+    for (const auto& [id_b, w]: edges.at(id)){
+        auto b = nodes.at(id_b);
+        f(b);
+    }
+}
+
+
 template<class T> void Graph<T>::for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const{
     auto start_id = name_to_id(start_name);
 
@@ -177,6 +194,34 @@ template<class T> void Graph<T>::for_node_in_bfs(const string& start_name, const
 
         for (auto& [n_other,weight]: edges.at(n)){
             if (visited.find(n_other) == visited.end()){
+                q.emplace(n_other);
+                visited.emplace(n_other);
+            }
+        }
+    }
+}
+
+
+template<class T> void Graph<T>::for_node_in_bfs(
+        const string& start_name,
+        const function<bool(const T& node)>& criteria,
+        const function<void(const T& node)>& f) const{
+    auto start_id = name_to_id(start_name);
+
+    unordered_set<int64_t> visited;
+    queue<int64_t> q;
+
+    visited.emplace(start_id);
+    q.emplace(start_id);
+
+    while (not q.empty()){
+        auto n = q.front();
+        q.pop();
+
+        f(nodes.at(n));
+
+        for (auto& [n_other,weight]: edges.at(n)){
+            if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true){
                 q.emplace(n_other);
                 visited.emplace(n_other);
             }
