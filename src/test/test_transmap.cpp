@@ -35,60 +35,85 @@ int main(){
     transmap.add_edge("read_02", "c");
 
     cerr << '\n' << "TESTING: sample --> read" << '\n';
-    transmap.for_each_read_of_sample("HG001", [&](const HeteroNode& r){
-        cerr << r.name << '\n';
-        if (r.name != "read_01" and r.type != 'R'){
+    transmap.for_each_read_of_sample("HG001", [&](const string& r, int64_t id){
+        cerr << r << '\n';
+        if (r != "read_01"){
             throw runtime_error("FAIL: unexpected neighbor");
         }
     });
     cerr << '\n';
 
-    transmap.for_each_read_of_sample("HG002", [&](const HeteroNode& r){
-        cerr << r.name << '\n';
-        if (r.name != "read_02" and r.type != 'R'){
-            throw runtime_error("FAIL: unexpected neighbor");
-        }
-    });
-    cerr << '\n';
-
-    cerr << '\n' << "TESTING: sample --> path" << '\n';
-    transmap.for_each_sample_of_path("a", [&](const HeteroNode& s){
-        cerr << s.name << '\n';
-        if (s.name != "read_01" and s.type != 'S'){
-            throw runtime_error("FAIL: unexpected neighbor");
-        }
-    });
-    cerr << '\n';
-
-    transmap.for_each_sample_of_path("b", [&](const HeteroNode& s){
-        cerr << s.name << '\n';
-        if ((s.name != "read_01" or s.name != "read_02") and s.type != 'S'){
-            throw runtime_error("FAIL: unexpected neighbor");
-        }
-    });
-    cerr << '\n';
-
-    transmap.for_each_sample_of_path("c", [&](const HeteroNode& s){
-        cerr << s.name << '\n';
-        if (s.name != "read_02" and s.type != 'S'){
+    transmap.for_each_read_of_sample("HG002", [&](const string& r, int64_t id){
+        cerr << r << '\n';
+        if (r != "read_02"){
             throw runtime_error("FAIL: unexpected neighbor");
         }
     });
     cerr << '\n';
 
     cerr << '\n' << "TESTING: path --> sample" << '\n';
-    transmap.for_each_path_of_sample("HG001", [&](const HeteroNode& p){
-        cerr << p.name << '\n';
-        if ((p.name != "a" or p.name != "b") and p.type != 'P'){
+    transmap.for_each_sample_of_path("a", [&](const string& s, int64_t id){
+        cerr << "a" << ' ' << s << '\n';
+        if (s != "HG001"){
             throw runtime_error("FAIL: unexpected neighbor");
         }
     });
     cerr << '\n';
 
-    transmap.for_each_path_of_sample("HG002", [&](const HeteroNode& p){
-        cerr << p.name << '\n';
-        if ((p.name != "c" or p.name != "b") and p.type != 'P'){
+    transmap.for_each_sample_of_path("b", [&](const string& s, int64_t id){
+        cerr << "b" << ' ' << s << '\n';
+        if (not (s == "HG001" or s == "HG002")){
             throw runtime_error("FAIL: unexpected neighbor");
+        }
+    });
+    cerr << '\n';
+
+    transmap.for_each_sample_of_path("c", [&](const string& s, int64_t id){
+        cerr << "c" << ' ' << s << '\n';
+        if (s != "HG002"){
+            throw runtime_error("FAIL: unexpected neighbor");
+        }
+    });
+    cerr << '\n';
+
+    cerr << '\n' << "TESTING: sample --> path" << '\n';
+    transmap.for_each_path_of_sample("HG001", [&](const string& p, int64_t id){
+        cerr << p << '\n';
+        if (not (p == "a" or p == "b")){
+            throw runtime_error("FAIL: unexpected neighbor");
+        }
+    });
+    cerr << '\n';
+
+    transmap.for_each_path_of_sample("HG002", [&](const string& p, int64_t id){
+        cerr << p << '\n';
+        if (not (p == "c" or p == "b")){
+            throw runtime_error("FAIL: unexpected neighbor");
+        }
+    });
+    cerr << '\n';
+
+    cerr << '\n' << "TESTING: global iteration" << '\n';
+    transmap.for_each_path([&](const string& p, int64_t id){
+        cerr << p << '\n';
+        if (not (p == "a" or p == "b" or p == "c")){
+            throw runtime_error("FAIL: unexpected path");
+        }
+    });
+    cerr << '\n';
+
+    transmap.for_each_read([&](const string& r, int64_t id){
+        cerr << r << '\n';
+        if (not (r == "read_01" or r == "read_02")){
+            throw runtime_error("FAIL: unexpected read");
+        }
+    });
+    cerr << '\n';
+
+    transmap.for_each_sample([&](const string& s, int64_t id){
+        cerr << s << '\n';
+        if (not (s == "HG001" or s == "HG002")){
+            throw runtime_error("FAIL: unexpected sample");
         }
     });
     cerr << '\n';

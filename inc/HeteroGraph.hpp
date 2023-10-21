@@ -67,7 +67,7 @@ HeteroNode::HeteroNode(string& name, char type):
 template<class T> class HeteroGraph {
     // node_id --> type_of_neighbor --> neighbor_id --> weight
     unordered_map<int64_t, unordered_map<char, unordered_map <int64_t, float> > > edges;
-    unordered_map<int64_t, T > nodes;
+    unordered_map<int64_t, T> nodes;
     unordered_map<string, int64_t> id_map;
     int64_t id_counter = 0;
 
@@ -75,7 +75,6 @@ public:
     int64_t name_to_id(const string& name) const;
 
     /// Building
-    T& add_node(const string& name);
     T& add_node(const string& name, char type);
 
     void add_edge(const string& name_a, const string& name_b, float weight);
@@ -84,45 +83,24 @@ public:
     /// Accessing
     const T& get_node(const string& name) const;
     T& get_node(const string& name);
+    const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
 
     /// Global iterators
     void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
-    void for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const;
+    void for_node_in_bfs(const string& start_name, const function<void(const T& node, int64_t id)>& f) const;
 
     // This iterator allows the user to filter nodes out within the inner loop of BFS before returning them
     void for_node_in_bfs(
             const string& start_name,
             const function<bool(const T& node)>& criteria,
-            const function<void(const T& node)>& f) const;
+            const function<void(const T& node, int64_t id)>& f) const;
 
     /// Local iterators
-    void for_each_neighbor(const string& name, const function<void(const T& neighbor)>& f) const;
-    void for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor)>& f) const;
+    void for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const;
+    void for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor, int64_t id)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const;
 };
-
-
-template<class T> T& HeteroGraph<T>::add_node(const string& name) {
-    if (id_map.find(name) != id_map.end()){
-        throw runtime_error("ERROR: cannot add node with existing name: " + name);
-    }
-
-    // The id can be anything as long as it doesn't exist yet, because a map is used instead of a vector here.
-    // The simplest way not to reuse an old ID is just incrementing from zero.
-    auto id = id_counter;
-    id_counter++;
-
-    // Track the reverse mapping from name -> id;
-    id_map.emplace(name,id);
-
-    // Place a new node in the graph
-    auto result = nodes.emplace(id, T(name));
-
-    // Return a reference to the node
-    return result.first->second;
-}
-
 
 template<class T> T& HeteroGraph<T>::add_node(const string& name, char type) {
     if (id_map.find(name) != id_map.end()){
@@ -162,6 +140,11 @@ template<class T> T& HeteroGraph<T>::get_node(int64_t id) {
 }
 
 
+template<class T> const T& HeteroGraph<T>::get_node(int64_t id) const{
+    return nodes.at(id);
+}
+
+
 template<class T> int64_t HeteroGraph<T>::name_to_id(const string& name) const{
     auto result = id_map.find(name);
 
@@ -180,7 +163,7 @@ template<class T> void HeteroGraph<T>::add_edge(const string& name_a, const stri
     auto type_a = nodes.at(id_a).type;
     auto type_b = nodes.at(id_b).type;
 
-    // Undirected by default, add both directions. Also, don't care if it existed already.
+    // Undirected by default, add both directions. Also, overwrite if it existed already.
     // Because this is a heterogeneous graph we also want to sort the edges by type of neighbor
     edges[id_a][type_b][id_b] = weight;
     edges[id_b][type_a][id_a] = weight;
@@ -235,24 +218,24 @@ template<class T> void HeteroGraph<T>::for_each_edge(const function<void(const s
 }
 
 
-template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, const function<void(const T& neighbor)>& f) const{
+template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const{
     auto id = name_to_id(name);
 
     // Iterate all types indiscriminately
     for (const auto& [type_b,item]: edges.at(id)) {
         for (const auto &[id_b,w]: item) {
-            f(nodes.at(id_b));
+            f(nodes.at(id_b), id_b);
         }
     }
 }
 
 
-template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor)>& f) const{
+template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor, int64_t id)>& f) const{
     auto id = name_to_id(name);
 
     // Iterate only the type of neighbor specified
     for (const auto& [id_b,w]: edges.at(id).at(type)) {
-        f(nodes.at(id_b));
+        f(nodes.at(id_b), id_b);
     }
 }
 
@@ -265,7 +248,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 }
 
 
-template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name, const function<void(const T& node)>& f) const{
+template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name, const function<void(const T& node, int64_t id)>& f) const{
     auto start_id = name_to_id(start_name);
 
     unordered_set<int64_t> visited;
@@ -278,7 +261,7 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name,
         auto n = q.front();
         q.pop();
 
-        f(nodes.at(n));
+        f(nodes.at(n), n);
 
         // Iterate all types indiscriminately
         for (const auto& [type_b,item]: edges.at(n)) {
@@ -296,7 +279,7 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name,
 template<class T> void HeteroGraph<T>::for_node_in_bfs(
         const string& start_name,
         const function<bool(const T& node)>& criteria,
-        const function<void(const T& node)>& f) const{
+        const function<void(const T& node, int64_t id)>& f) const{
     auto start_id = name_to_id(start_name);
 
     unordered_set<int64_t> visited;
@@ -309,7 +292,7 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(
         auto n = q.front();
         q.pop();
 
-        f(nodes.at(n));
+        f(nodes.at(n), n);
 
         // Iterate all types indiscriminately
         for (const auto& [type_b,item]: edges.at(n)) {

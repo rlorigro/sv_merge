@@ -16,7 +16,7 @@ int main(){
     HeteroGraph<HeteroNode> g;
 
     string name_a = "a";
-    auto node_a = g.add_node(name_a);
+    auto node_a = g.add_node(name_a, '*');
     auto node_a2 = g.get_node(name_a);
 
     cerr << name_a << ' ' <<  node_a.name << ' ' <<  node_a2.name << '\n';
@@ -24,7 +24,7 @@ int main(){
     cerr << '\n' << "TESTING: add node b" << '\n';
 
     string name_b = "b";
-    auto node_b = g.add_node(name_b);
+    auto node_b = g.add_node(name_b, '*');
     auto node_b2 = g.get_node(name_b);
 
     cerr << name_b << ' ' <<  node_b.name << ' ' <<  node_b2.name << '\n';
@@ -36,7 +36,7 @@ int main(){
     cerr << '\n' << "TESTING: add node a again" << '\n';
 
     try {
-        node_a = g.add_node(name_a);
+        node_a = g.add_node(name_a, '*');
     }
     catch (exception& e){
         auto expected_error = "ERROR: cannot add node with existing name: a";
@@ -129,9 +129,9 @@ int main(){
 
     cerr << '\n' << "TESTING: BFS" << '\n';
 
-    g.add_node("c");
-    g.add_node("d");
-    g.add_node("e");
+    g.add_node("c", '*');
+    g.add_node("d", '*');
+    g.add_node("e", '*');
 
     g.add_edge("a", "a",3);
     g.add_edge("a", "c",4);
@@ -139,7 +139,7 @@ int main(){
     g.add_edge("d", "e",6);
     g.add_edge("e", "b",7);
 
-    g.for_node_in_bfs("a", [&](const HeteroNode& node){
+    g.for_node_in_bfs("a", [&](const HeteroNode& node, int64_t id){
         cerr << node.name << '\n';
     });
 
@@ -155,12 +155,12 @@ int main(){
     g.add_edge("c", "a", 0);
 
     cerr << "all 'a' neighbors" << '\n';
-    g.for_each_neighbor("a", [&](const HeteroNode& n){
+    g.for_each_neighbor("a", [&](const HeteroNode& n, int64_t id){
         cerr << n.name << ' ' << n.type << '\n';
     });
     cerr << '\n';
 
-    g.for_each_neighbor_of_type("a", 'B', [&](const HeteroNode& n){
+    g.for_each_neighbor_of_type("a", 'B', [&](const HeteroNode& n, int64_t id){
         cerr << n.name << ' ' << n.type << '\n';
         if (n.name != "b" and n.type != 'B'){
             throw runtime_error("FAIL: unexpected neighbor");
@@ -168,7 +168,7 @@ int main(){
     });
     cerr << '\n';
 
-    g.for_each_neighbor_of_type("b", 'A', [&](const HeteroNode& n){
+    g.for_each_neighbor_of_type("b", 'A', [&](const HeteroNode& n, int64_t id){
         cerr << n.name << ' ' << n.type << '\n';
         if (n.name != "a" and n.type != 'A'){
             throw runtime_error("FAIL: unexpected neighbor");
