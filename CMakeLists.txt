@@ -92,6 +92,33 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- ortools ----------------- #
+# ------------------------------------------ #
+##############################################
+
+include(FetchContent)
+FetchContent_Declare(
+        ortools
+        GIT_REPOSITORY https://github.com/google/or-tools.git
+        GIT_TAG        main
+)
+set(BUILD_DEPS ON)
+set(BUILD_DOC OFF)
+set(BUILD_SAMPLES OFF)
+set(BUILD_EXAMPLES OFF)
+FetchContent_MakeAvailable(ortools)
+
+include_directories(
+        ${ortools_SOURCE_DIR}
+        ${ortools_BINARY_DIR}
+        ${absl_SOURCE_DIR}
+        ${protobuf_SOURCE_DIR}/../src
+)
+
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ----------------- curl ------------------- #
 # ------------------------------------------ #
 ##############################################
@@ -332,6 +359,7 @@ set(TESTS
         test_interval_graph
         test_minimap2
         test_minimap2_no_io
+        test_ortools
         test_transmap
         )
 
@@ -347,6 +375,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -357,6 +386,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
         )
     endif()
 
@@ -381,6 +411,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -391,6 +422,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
         )
     endif()
 
