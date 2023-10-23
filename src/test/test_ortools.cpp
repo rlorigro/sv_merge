@@ -20,7 +20,8 @@ using std::cerr;
 using operations_research::sat::CpModelBuilder;
 using operations_research::Domain;
 using operations_research::sat::IntVar;
-using operations_research::sat::;
+using operations_research::sat::CpSolverResponse;
+using operations_research::sat::CpSolverStatus;
 
 void CpSatExample() {
     // [START model]
@@ -72,6 +73,6 @@ void CpSatExample() {
 }
 
 int main() {
-    operations_research::sat::CpSatExample();
+    CpSatExample();
     return EXIT_SUCCESS;
 }

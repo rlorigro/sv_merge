@@ -115,6 +115,10 @@ include_directories(
         ${protobuf_SOURCE_DIR}/../src
 )
 
+message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+message(STATUS "protobuf_SOURCE_DIR: /../src: " ${protobuf_SOURCE_DIR}/../src)
 
 ##############################################
 # ------------------------------------------ #
@@ -397,8 +401,7 @@ endforeach()
 
 set(EXECUTABLES
         a
-        get_regions_from_vcf_and_bed
-        )
+)
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
