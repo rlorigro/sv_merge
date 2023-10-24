@@ -67,6 +67,7 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
+        src/optimizer.cpp
         src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
@@ -112,13 +113,13 @@ include_directories(
         ${ortools_SOURCE_DIR}
         ${ortools_BINARY_DIR}
         ${absl_SOURCE_DIR}
-        ${protobuf_SOURCE_DIR}/../src
+        ${protobuf_SOURCE_DIR}/src
 )
 
 message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
 message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
 message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
-message(STATUS "protobuf_SOURCE_DIR: /../src: " ${protobuf_SOURCE_DIR}/../src)
+message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 
 ##############################################
 # ------------------------------------------ #
@@ -380,7 +381,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
-                )
+        )
     else()
         target_link_libraries(${FILENAME_PREFIX}
                 sv_merge

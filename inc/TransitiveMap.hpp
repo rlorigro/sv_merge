@@ -56,6 +56,8 @@ public:
     void construct_optimizer();
 
     /// Accessing
+    const HeteroNode& get_node(int64_t id) const;
+
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path(const function<void(const string& name, int64_t id)>& f) const;
@@ -75,8 +77,6 @@ public:
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
 
     void for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const;
-    void construct_optimizer() const;
-
 };
 
 
@@ -88,6 +88,11 @@ TransMap::TransMap():
     graph.add_node(sample_node_name, 'S');
     graph.add_node(read_node_name, 'R');
     graph.add_node(path_node_name, 'P');
+}
+
+
+const HeteroNode& TransMap::get_node(int64_t id) const{
+    return graph.get_node(id);
 }
 
 
@@ -264,115 +269,99 @@ void TransMap::for_each_read_to_path_edge(const function<void(int64_t read_id, i
 }
 
 
-void TransMap::construct_optimizer(){
-    CpModelBuilder model;
-
-    // TODO: reserve these data structures based on how many edges there are known to be?
-    unordered_map <pair<int64_t,int64_t>, BoolVar> path_to_read_variables;
-    unordered_map <int64_t, BoolVar> path_indicators;
-//    unordered_map <int64_t, BoolVar> ploidy_indicators;
-//    unordered_map <int64_t, BoolVar> read_assignment_indicators;
-
-    LinearExpr cost_d;
-    LinearExpr cost_n;
-
-    // Read->path boolean indicators
-    for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
-        pair<int64_t,int64_t> p = {path_id, read_id};
-
-        // Update the boolean var map, and keep a reference to the inserted BoolVar
-        const auto result = path_to_read_variables.emplace(p,model.NewBoolVar());
-        const auto& v = result.first->second;
-
-        auto w = int64_t(weight);
-        cost_d += v*w;
-    });
-
-    for_each_sample([&](const string& name, int64_t sample_id){
-        LinearExpr samplewise_vars;
-
-        // Sample->read boolean indicators
-        for_each_read_of_sample(sample_id, [&](int64_t read_id){
-            LinearExpr readwise_vars;
-
-            // Read->path boolean indicators
-            for_each_path_of_read(read_id, [&](int64_t path_id){
-                const BoolVar& var = path_to_read_variables.at({path_id, read_id});
-                samplewise_vars += var;
-                readwise_vars += var;
-            });
-
-//            // Update the boolean var map, and keep a reference to the inserted BoolVar
-//            const auto result = read_assignment_indicators.emplace(read_id,model.NewBoolVar());
-//            const auto& r = result.first->second;
+//void TransMap::construct_optimizer(){
+//    CpModelBuilder model;
 //
-//            // Implement r == (x == 1).
-//            model.AddEquality(readwise_vars, 1).OnlyEnforceIf(r);
-
-            model.AddEquality(readwise_vars, 1);
-        });
-
+//    // TODO: reserve these data structures based on how many edges there are known to be?
+//    unordered_map <pair<int64_t,int64_t>, BoolVar> path_to_read_variables;
+//    unordered_map <int64_t, BoolVar> path_indicators;
+//
+//    LinearExpr cost_d;
+//    LinearExpr cost_n;
+//
+//    // Read->path boolean indicators
+//    for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
+//        pair<int64_t,int64_t> p = {path_id, read_id};
+//
 //        // Update the boolean var map, and keep a reference to the inserted BoolVar
-//        const auto result = ploidy_indicators.emplace(sample_id,model.NewBoolVar());
-//        const auto& s = result.first->second;
+//        const auto result = path_to_read_variables.emplace(p,model.NewBoolVar());
+//        const auto& v = result.first->second;
 //
-//        // Implement s == (x <= 2).
-//        model.AddGreaterThan(samplewise_vars, 2).OnlyEnforceIf(Not(s));
-//        model.AddLessOrEqual(samplewise_vars, 2).OnlyEnforceIf(s);
-
-        model.AddLessOrEqual(samplewise_vars, 2);
-    });
-
-    // Keep track of whether each path is used
-    for_each_path([&](const string& name, int64_t path_id){
-        LinearExpr pathwise_reads;
-        for_each_read_of_path(path_id, [&](int64_t read_id){
-            pathwise_reads += path_to_read_variables.at({path_id,read_id});
-        });
-
-        const auto result = path_indicators.emplace(path_id,model.NewBoolVar());
-        const auto& p = result.first->second;
-
-        // Implement p == (sum(r) > 0).
-        model.AddGreaterThan(pathwise_reads, 0).OnlyEnforceIf(p);
-        model.AddLessOrEqual(pathwise_reads, 0).OnlyEnforceIf(Not(p));
-    });
-
-    for (const auto& [path_id,p]: path_indicators){
-        cost_n += p;
-    }
-
-    model.Minimize(cost_d);
-
-    // TODO: Move elsewhere
-    const CpSolverResponse response = Solve(model.Build());
-
-    if (response.status() == CpSolverStatus::OPTIMAL ||
-        response.status() == CpSolverStatus::FEASIBLE) {
-
-        cerr << "Maximum of objective function: " << response.objective_value() << '\n';
-
-        for (auto& [item, var]: path_to_read_variables){
-            int64_t path_id = item.first;
-            int64_t read_id = item.second;
-
-            auto path_name = graph.get_node(path_id).name;
-            auto read_name = graph.get_node(read_id).name;
-            string sample_name;
-            get_read_sample(read_id, sample_name);
-
-            cerr << sample_name << ',' << path_name << ',' << read_name << " = " << SolutionIntegerValue(response, var) << '\n';
-        }
-//        LOG(INFO) << "x = " << SolutionIntegerValue(response, x);
-//        LOG(INFO) << "y = " << SolutionIntegerValue(response, y);
-//        LOG(INFO) << "z = " << SolutionIntegerValue(response, z);
-    } else {
-        cerr << "No solution found." << '\n';
-    }
-
-    cerr << "Statistics" << '\n';
-    cerr << CpSolverResponseStats(response) << '\n';
-}
+//        auto w = int64_t(weight);
+//        cost_d += v*w;
+//    });
+//
+//    for_each_sample([&](const string& name, int64_t sample_id){
+//        LinearExpr samplewise_vars;
+//
+//        // Sample->read boolean indicators
+//        for_each_read_of_sample(sample_id, [&](int64_t read_id){
+//            LinearExpr readwise_vars;
+//
+//            // Read->path boolean indicators
+//            for_each_path_of_read(read_id, [&](int64_t path_id){
+//                const BoolVar& var = path_to_read_variables.at({path_id, read_id});
+//                samplewise_vars += var;
+//                readwise_vars += var;
+//            });
+//
+//            // Enforce (r == 1).
+//            model.AddEquality(readwise_vars, 1);
+//        });
+//
+//        // Enforce (s <= 2).
+//        model.AddLessOrEqual(samplewise_vars, 2);
+//    });
+//
+//    // Keep track of whether each path is used
+//    for_each_path([&](const string& name, int64_t path_id){
+//        LinearExpr pathwise_reads;
+//        for_each_read_of_path(path_id, [&](int64_t read_id){
+//            pathwise_reads += path_to_read_variables.at({path_id,read_id});
+//        });
+//
+//        const auto result = path_indicators.emplace(path_id,model.NewBoolVar());
+//        const auto& p = result.first->second;
+//
+//        // Implement p == (sum(r) > 0).
+//        model.AddGreaterThan(pathwise_reads, 0).OnlyEnforceIf(p);
+//        model.AddLessOrEqual(pathwise_reads, 0).OnlyEnforceIf(Not(p));
+//    });
+//
+//    for (const auto& [path_id,p]: path_indicators){
+//        cost_n += p;
+//    }
+//
+//    model.Minimize(cost_d);
+//
+//    // TODO: Move elsewhere
+//    const CpSolverResponse response = Solve(model.Build());
+//
+//    if (response.status() == CpSolverStatus::OPTIMAL ||
+//        response.status() == CpSolverStatus::FEASIBLE) {
+//
+//        cerr << "Maximum of objective function: " << response.objective_value() << '\n';
+//
+//        // Iterate the read assignment variables and print them
+//        for (auto& [item, var]: path_to_read_variables){
+//            int64_t path_id = item.first;
+//            int64_t read_id = item.second;
+//
+//            auto path_name = graph.get_node(path_id).name;
+//            auto read_name = graph.get_node(read_id).name;
+//            string sample_name;
+//            get_read_sample(read_id, sample_name);
+//
+//            cerr << sample_name << ',' << path_name << ',' << read_name << " = " << SolutionIntegerValue(response, var) << '\n';
+//        }
+//    }
+//    else {
+//        cerr << "No solution found." << '\n';
+//    }
+//
+//    cerr << "Statistics" << '\n';
+//    cerr << CpSolverResponseStats(response) << '\n';
+//}
 
 
 }

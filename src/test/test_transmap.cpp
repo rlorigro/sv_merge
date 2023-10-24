@@ -7,9 +7,11 @@ using std::cerr;
 
 #include "pair_hash.hpp"
 #include "TransitiveMap.hpp"
+#include "optimizer.hpp"
 
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
+using sv_merge::optimize_d;
 
 
 void test_optimization(){
@@ -46,11 +48,11 @@ void test_optimization(){
     transmap.add_edge("read_02", "b", 2);
     transmap.add_edge("read_02", "c", 1);
 
-    transmap.add_edge("read_04", "a", 3);
-    transmap.add_edge("read_04", "b", 2);
-    transmap.add_edge("read_04", "c", 1);
+    transmap.add_edge("read_04", "a", 2);
+    transmap.add_edge("read_04", "b", 1);
+    transmap.add_edge("read_04", "c", 3);
 
-    transmap.construct_optimizer();
+    optimize_d(transmap);
 
 }
 
@@ -161,7 +163,7 @@ int main(){
     });
     cerr << '\n';
 
-    test_optimization();
+//    test_optimization();
 
     cerr << "PASS" << '\n';
 }

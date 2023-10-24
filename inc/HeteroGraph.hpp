@@ -234,24 +234,66 @@ template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, con
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor, int64_t id)>& f) const{
     auto id = name_to_id(name);
 
+    // Check if there are any edges from this node
+    const auto result_edge = edges.find(id);
+
+    if (result_edge == edges.end()){
+        return;
+    }
+
+    // Check if any entries exist for this type of edge
+    const auto result_type = result_edge->second.find(type);
+
+    if (result_type == result_edge->second.end()){
+        return;
+    }
+
     // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: edges.at(id).at(type)) {
+    for (const auto& [id_b,w]: result_type->second) {
         f(nodes.at(id_b), id_b);
     }
 }
 
 
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const{
+    // Check if there are any edges from this node
+    const auto result_edge = edges.find(id);
+
+    if (result_edge == edges.end()){
+        return;
+    }
+
+    // Check if any entries exist for this type of edge
+    const auto result_type = result_edge->second.find(type);
+
+    if (result_type == result_edge->second.end()){
+        return;
+    }
+
     // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: edges.at(id).at(type)) {
+    for (const auto& [id_b,w]: result_type->second) {
         f(id_b);
     }
 }
 
 
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const{
+    // Check if there are any edges from this node
+    const auto result_edge = edges.find(id);
+
+    if (result_edge == edges.end()){
+        return;
+    }
+
+    // Check if any entries exist for this type of edge
+    const auto result_type = result_edge->second.find(type);
+
+    if (result_type == result_edge->second.end()){
+        return;
+    }
+
     // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: edges.at(id).at(type)) {
+    for (const auto& [id_b,w]: result_type->second) {
         f(id_b, w);
     }
 }
