@@ -12,6 +12,49 @@ using sv_merge::TransMap;
 using sv_merge::HeteroNode;
 
 
+void test_optimization(){
+    TransMap transmap;
+
+    transmap.add_read("read_01");
+    transmap.add_read("read_03");
+    transmap.add_sample("HG001");
+
+    transmap.add_read("read_02");
+    transmap.add_read("read_04");
+    transmap.add_sample("HG002");
+
+    transmap.add_path("a");
+    transmap.add_path("b");
+    transmap.add_path("c");
+
+    transmap.add_edge("read_01", "HG001");
+    transmap.add_edge("read_03", "HG001");
+    transmap.add_edge("read_02", "HG002");
+    transmap.add_edge("read_04", "HG002");
+
+    // HG001 (odd)
+    transmap.add_edge("read_01", "a", 1);
+    transmap.add_edge("read_01", "b", 2);
+    transmap.add_edge("read_01", "c", 3);
+
+    transmap.add_edge("read_03", "a", 1);
+    transmap.add_edge("read_03", "b", 2);
+    transmap.add_edge("read_03", "c", 3);
+
+    // HG002 (even)
+    transmap.add_edge("read_02", "a", 3);
+    transmap.add_edge("read_02", "b", 2);
+    transmap.add_edge("read_02", "c", 1);
+
+    transmap.add_edge("read_04", "a", 3);
+    transmap.add_edge("read_04", "b", 2);
+    transmap.add_edge("read_04", "c", 1);
+
+    transmap.construct_optimizer();
+
+}
+
+
 int main(){
     TransMap transmap;
 
@@ -28,11 +71,11 @@ int main(){
     transmap.add_edge("read_01", "HG001");
     transmap.add_edge("read_02", "HG002");
 
-    transmap.add_edge("read_01", "a");
-    transmap.add_edge("read_01", "b");
+    transmap.add_edge("read_01", "a", 2);
+    transmap.add_edge("read_01", "b", 1);
 
-    transmap.add_edge("read_02", "b");
-    transmap.add_edge("read_02", "c");
+    transmap.add_edge("read_02", "b", 1);
+    transmap.add_edge("read_02", "c", 2);
 
     cerr << '\n' << "TESTING: sample --> read" << '\n';
     transmap.for_each_read_of_sample("HG001", [&](const string& r, int64_t id){
@@ -117,6 +160,8 @@ int main(){
         }
     });
     cerr << '\n';
+
+    test_optimization();
 
     cerr << "PASS" << '\n';
 }

@@ -23,6 +23,8 @@ using operations_research::sat::IntVar;
 using operations_research::sat::CpSolverResponse;
 using operations_research::sat::CpSolverStatus;
 
+
+/// Taken from: https://github.com/google/or-tools/blob/stable/ortools/sat/samples/cp_sat_example.cc
 void CpSatExample() {
     // [START model]
     CpModelBuilder cp_model;
