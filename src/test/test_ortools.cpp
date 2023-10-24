@@ -1,14 +1,5 @@
-#include <iostream>
-#include <stdexcept>
-
-using std::runtime_error;
-using std::cerr;
-
-
 #include <stdint.h>
 #include <stdlib.h>
-
-#include <algorithm>
 
 #include "ortools/base/logging.h"
 #include "ortools/sat/cp_model.h"
