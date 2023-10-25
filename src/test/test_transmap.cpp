@@ -66,6 +66,9 @@ void test_optimization(){
     transmap.add_edge("read_06", "c", 3);
 
     optimize_d(transmap);
+    optimize_d_plus_n(transmap, 1, 10);
+    optimize_d_plus_n(transmap, 1, 0);
+    optimize_d_plus_n(transmap, 10, 1);
 }
 
 

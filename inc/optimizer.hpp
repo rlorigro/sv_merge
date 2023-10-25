@@ -7,12 +7,14 @@
 #include <utility>
 #include <string>
 #include <vector>
+#include <set>
 
 using std::unordered_map;
 using std::unordered_set;
 using std::vector;
 using std::string;
 using std::pair;
+using std::set;
 
 #include "ortools/base/logging.h"
 #include "ortools/sat/cp_model.h"
@@ -143,7 +145,7 @@ void construct_joint_n_d_model(const TransMap& transmap, CpModelBuilder& model, 
 }
 
 
-void optimize_d(TransMap& transmap){
+void optimize_d(const TransMap& transmap){
     CpModelBuilder model;
     Variables vars;
 
@@ -156,18 +158,65 @@ void optimize_d(TransMap& transmap){
     if (response.status() == CpSolverStatus::OPTIMAL || response.status() == CpSolverStatus::FEASIBLE) {
         cerr << "Maximum of objective function: " << response.objective_value() << '\n';
 
-        // Iterate the read assignment variables and print them
-        transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
-            const auto& path_name = transmap.get_node(path_id).name;
-            const auto& read_name = transmap.get_node(read_id).name;
+        set<string> results;
 
-            string sample_name;
-            transmap.get_read_sample(read_id, sample_name);
+        // Iterate the path->sample assignment variables and print them
+        for (const auto& [p,var]: vars.path_to_sample){
+            auto [path_id, sample_id] = p;
+            auto path_name = transmap.get_node(path_id).name;
+            auto sample_name = transmap.get_node(sample_id).name;
 
-            const auto& var = vars.path_to_read.at({path_id, read_id});
+            bool is_assigned = (SolutionIntegerValue(response, var) == 1);
+            if (is_assigned){
+                results.insert(sample_name + ": " + path_name);
+            }
+        }
 
-            cerr << sample_name << ',' << path_name << ',' << read_name << " = " << SolutionIntegerValue(response, var) << '\n';
-        });
+        for (auto& item: results){
+            cerr << item << '\n';
+        }
+
+    }
+    else {
+        cerr << "No solution found." << '\n';
+    }
+
+    cerr << "Statistics" << '\n';
+    cerr << CpSolverResponseStats(response) << '\n';
+}
+
+
+void optimize_d_plus_n(const TransMap& transmap, int64_t d_coeff, int64_t n_coeff){
+    CpModelBuilder model;
+    Variables vars;
+
+    construct_joint_n_d_model(transmap, model, vars);
+
+    model.Minimize(d_coeff*vars.cost_d + n_coeff*vars.cost_n);
+
+    const CpSolverResponse response = Solve(model.Build());
+
+    if (response.status() == CpSolverStatus::OPTIMAL || response.status() == CpSolverStatus::FEASIBLE) {
+        cerr << "Maximum of objective function: " << response.objective_value() << '\n';
+
+        set<string> results;
+
+        // Iterate the path->sample assignment variables and print them
+        for (const auto& [p,var]: vars.path_to_sample){
+            auto [path_id, sample_id] = p;
+            auto path_name = transmap.get_node(path_id).name;
+            auto sample_name = transmap.get_node(sample_id).name;
+
+            bool is_assigned = (SolutionIntegerValue(response, var) == 1);
+            if (is_assigned){
+                results.insert(sample_name + ": " + path_name);
+            }
+        }
+
+        for (auto& item: results){
+            cerr << item << '\n';
+        }
+
     }
     else {
         cerr << "No solution found." << '\n';
