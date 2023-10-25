@@ -36,6 +36,7 @@ namespace sv_merge {
 class Variables{
 public:
     unordered_map <pair<int64_t,int64_t>, BoolVar> path_to_read;
+    unordered_map <pair<int64_t,int64_t>, BoolVar> path_to_sample;
 
     // Will be left empty in the unary objective d_model
     unordered_map <int64_t, BoolVar> path_indicators;
@@ -58,7 +59,7 @@ public:
 void construct_d_model(const TransMap& transmap, CpModelBuilder& model, Variables& vars){
     // TODO: reserve Variables map data structures based on how many edges there are known to be in the transmap?
 
-    // Read->path boolean indicators
+    // Read->path boolean assignment indicators (the basis for the rest of the indicators)
     transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
         pair<int64_t,int64_t> p = {path_id, read_id};
 
@@ -71,7 +72,7 @@ void construct_d_model(const TransMap& transmap, CpModelBuilder& model, Variable
     });
 
     transmap.for_each_sample([&](const string& name, int64_t sample_id){
-        LinearExpr samplewise_vars;
+        unordered_map<int64_t,LinearExpr> path_to_sample_sums;
 
         // Sample->read boolean indicators
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
@@ -80,7 +81,7 @@ void construct_d_model(const TransMap& transmap, CpModelBuilder& model, Variable
             // Read->path boolean indicators
             transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
                 const BoolVar& var = vars.path_to_read.at({path_id, read_id});
-                samplewise_vars += var;
+                path_to_sample_sums[path_id] += var;
                 readwise_vars += var;
             });
 
@@ -88,8 +89,23 @@ void construct_d_model(const TransMap& transmap, CpModelBuilder& model, Variable
             model.AddEquality(readwise_vars, 1);
         });
 
-        // Enforce (sum(s) <= 2). i.e. sample must be assigned at most 2 paths
-        model.AddLessOrEqual(samplewise_vars, 2);
+        LinearExpr s;
+
+        for (const auto& [path_id, sum]: path_to_sample_sums){
+            pair<int64_t,int64_t> p = {path_id, sample_id};
+            const auto result = vars.path_to_sample.emplace(p, model.NewBoolVar());
+            const auto& b = result.first->second;
+
+            // Add boolean indicator to represent sample->path edge is active
+            model.AddGreaterThan(sum, 0).OnlyEnforceIf(b);
+            model.AddLessOrEqual(sum, 0).OnlyEnforceIf(Not(b));
+
+            // Increment a sum which indicates the total number of paths used in this sample
+            s += b;
+        }
+
+        // Enforce (s <= 2). i.e. "ploidy constraint": sample must be assigned at most 2 paths
+        model.AddLessOrEqual(s, 2);
     });
 }
 
@@ -138,25 +154,17 @@ void optimize_d(TransMap& transmap){
     const CpSolverResponse response = Solve(model.Build());
 
     if (response.status() == CpSolverStatus::OPTIMAL || response.status() == CpSolverStatus::FEASIBLE) {
-
         cerr << "Maximum of objective function: " << response.objective_value() << '\n';
 
         // Iterate the read assignment variables and print them
-        transmap.for_each_read_to_path_edge([&](int64_t path_id, int64_t read_id, float weight){
-            cerr << path_id << ',' << read_id << '\n';
-
+        transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
             const auto& path_name = transmap.get_node(path_id).name;
-            cerr << path_name << '\n' << std::flush;
-
             const auto& read_name = transmap.get_node(read_id).name;
-            cerr << read_name << '\n' << std::flush;
 
             string sample_name;
             transmap.get_read_sample(read_id, sample_name);
-            cerr << sample_name << '\n' << std::flush;
 
             const auto& var = vars.path_to_read.at({path_id, read_id});
-            cerr << var << '\n' << std::flush;
 
             cerr << sample_name << ',' << path_name << ',' << read_name << " = " << SolutionIntegerValue(response, var) << '\n';
         });

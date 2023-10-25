@@ -10,6 +10,7 @@
 
 using std::unordered_map;
 using std::unordered_set;
+using std::to_string;
 using std::vector;
 using std::string;
 using std::pair;
@@ -166,18 +167,23 @@ void TransMap::get_read_sample(const string& read_name, string& result) const{
 void TransMap::get_read_sample(int64_t read_id, string& result) const{
     result.clear();
 
+    if (graph.get_node(read_id).type != 'R'){
+        throw runtime_error("ERROR: non-read ID provided for get_read_sample: " + to_string(read_id) + " " + graph.get_node(read_id).name);
+    }
+
     // Using the HeteroGraph back end means that we iterate, even for a 1:1 mapping.
     graph.for_each_neighbor_of_type(read_id, 'S', [&](int64_t id){
         // Check for cases that should be impossible
         if (not result.empty()){
-            throw runtime_error("ERROR: multiple samples found for read id: " + read_id);
+            throw runtime_error("ERROR: multiple samples found for id: " + to_string(read_id));
         }
 
         result = graph.get_node(id).name;
     });
 
+    // For this project, every read must have exactly one sample.
     if (result.empty()){
-        throw runtime_error("ERROR: no sample found for read id: " + read_id);
+        throw runtime_error("ERROR: no sample found for id: " + to_string(read_id));
     }
 }
 
@@ -259,109 +265,16 @@ void TransMap::for_each_path_of_sample(const string& sample_name, const function
 
 
 void TransMap::for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const{
+    auto id = graph.name_to_id(read_node_name);
+
     // Starting from the source node which connects to all reads, find all neighbors (read nodes)
-    graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& n, int64_t read_id){
+    graph.for_each_neighbor_of_type(id, 'R', [&](int64_t read_id){
         // Find all path-type neighbors
         graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t path_id, float w){
             f(read_id, path_id, w);
         });
     });
 }
-
-
-//void TransMap::construct_optimizer(){
-//    CpModelBuilder model;
-//
-//    // TODO: reserve these data structures based on how many edges there are known to be?
-//    unordered_map <pair<int64_t,int64_t>, BoolVar> path_to_read_variables;
-//    unordered_map <int64_t, BoolVar> path_indicators;
-//
-//    LinearExpr cost_d;
-//    LinearExpr cost_n;
-//
-//    // Read->path boolean indicators
-//    for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
-//        pair<int64_t,int64_t> p = {path_id, read_id};
-//
-//        // Update the boolean var map, and keep a reference to the inserted BoolVar
-//        const auto result = path_to_read_variables.emplace(p,model.NewBoolVar());
-//        const auto& v = result.first->second;
-//
-//        auto w = int64_t(weight);
-//        cost_d += v*w;
-//    });
-//
-//    for_each_sample([&](const string& name, int64_t sample_id){
-//        LinearExpr samplewise_vars;
-//
-//        // Sample->read boolean indicators
-//        for_each_read_of_sample(sample_id, [&](int64_t read_id){
-//            LinearExpr readwise_vars;
-//
-//            // Read->path boolean indicators
-//            for_each_path_of_read(read_id, [&](int64_t path_id){
-//                const BoolVar& var = path_to_read_variables.at({path_id, read_id});
-//                samplewise_vars += var;
-//                readwise_vars += var;
-//            });
-//
-//            // Enforce (r == 1).
-//            model.AddEquality(readwise_vars, 1);
-//        });
-//
-//        // Enforce (s <= 2).
-//        model.AddLessOrEqual(samplewise_vars, 2);
-//    });
-//
-//    // Keep track of whether each path is used
-//    for_each_path([&](const string& name, int64_t path_id){
-//        LinearExpr pathwise_reads;
-//        for_each_read_of_path(path_id, [&](int64_t read_id){
-//            pathwise_reads += path_to_read_variables.at({path_id,read_id});
-//        });
-//
-//        const auto result = path_indicators.emplace(path_id,model.NewBoolVar());
-//        const auto& p = result.first->second;
-//
-//        // Implement p == (sum(r) > 0).
-//        model.AddGreaterThan(pathwise_reads, 0).OnlyEnforceIf(p);
-//        model.AddLessOrEqual(pathwise_reads, 0).OnlyEnforceIf(Not(p));
-//    });
-//
-//    for (const auto& [path_id,p]: path_indicators){
-//        cost_n += p;
-//    }
-//
-//    model.Minimize(cost_d);
-//
-//    // TODO: Move elsewhere
-//    const CpSolverResponse response = Solve(model.Build());
-//
-//    if (response.status() == CpSolverStatus::OPTIMAL ||
-//        response.status() == CpSolverStatus::FEASIBLE) {
-//
-//        cerr << "Maximum of objective function: " << response.objective_value() << '\n';
-//
-//        // Iterate the read assignment variables and print them
-//        for (auto& [item, var]: path_to_read_variables){
-//            int64_t path_id = item.first;
-//            int64_t read_id = item.second;
-//
-//            auto path_name = graph.get_node(path_id).name;
-//            auto read_name = graph.get_node(read_id).name;
-//            string sample_name;
-//            get_read_sample(read_id, sample_name);
-//
-//            cerr << sample_name << ',' << path_name << ',' << read_name << " = " << SolutionIntegerValue(response, var) << '\n';
-//        }
-//    }
-//    else {
-//        cerr << "No solution found." << '\n';
-//    }
-//
-//    cerr << "Statistics" << '\n';
-//    cerr << CpSolverResponseStats(response) << '\n';
-//}
 
 
 }

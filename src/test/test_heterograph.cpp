@@ -160,6 +160,7 @@ int main(){
     });
     cerr << '\n';
 
+    cerr << "all 'a' neighbors of type B" << '\n';
     g.for_each_neighbor_of_type("a", 'B', [&](const HeteroNode& n, int64_t id){
         cerr << n.name << ' ' << n.type << '\n';
         if (n.name != "b" and n.type != 'B'){
@@ -168,6 +169,7 @@ int main(){
     });
     cerr << '\n';
 
+    cerr << "all 'b' neighbors of type A" << '\n';
     g.for_each_neighbor_of_type("b", 'A', [&](const HeteroNode& n, int64_t id){
         cerr << n.name << ' ' << n.type << '\n';
         if (n.name != "a" and n.type != 'A'){

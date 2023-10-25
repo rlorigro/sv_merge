@@ -222,8 +222,15 @@ template<class T> void HeteroGraph<T>::for_each_edge(const function<void(const s
 template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const{
     auto id = name_to_id(name);
 
+    auto result = edges.find(id);
+
+    // No neighbors
+    if (result == edges.end()){
+        return;
+    }
+
     // Iterate all types indiscriminately
-    for (const auto& [type_b,item]: edges.at(id)) {
+    for (const auto& [type_b,item]: result->second) {
         for (const auto &[id_b,w]: item) {
             f(nodes.at(id_b), id_b);
         }
