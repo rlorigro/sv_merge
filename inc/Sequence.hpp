@@ -12,7 +12,10 @@ class Sequence{
 public:
     string name;
     string sequence;
+
+    Sequence(const string& name, const string& sequence);
+    Sequence()=default;
 };
 
 
-} // sv_merge
+}

@@ -53,8 +53,8 @@ char get_complement(char c){
 void reverse_complement(string& seq){
     string s;
 
-    for (char & iter : std::ranges::reverse_view(seq)){
-        s += get_complement(iter);
+    for (auto iter = seq.rbegin(); iter != seq.rend(); iter++){
+        s += get_complement(*iter);
     }
 
     seq = s;

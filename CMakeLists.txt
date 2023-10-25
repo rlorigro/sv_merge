@@ -62,13 +62,17 @@ set(SOURCES
         src/Alignment.cpp
         src/bam.cpp
         src/bed.cpp
+        src/fasta.cpp
+        src/Graph.cpp
+        src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
+        src/optimizer.cpp
         src/pair_hash.cpp
         src/Region.cpp
-        src/fasta.cpp
         src/Sequence.cpp
         inc/Sequence.hpp
+        inc/TransitiveMap.hpp
 )
 
 
@@ -85,6 +89,37 @@ set_target_properties(sv_merge PROPERTIES DEFINE_SYMBOL "")
 
 # Need to explicitly enable ExternalProject functionality
 include(ExternalProject)
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- ortools ----------------- #
+# ------------------------------------------ #
+##############################################
+
+include(FetchContent)
+FetchContent_Declare(
+        ortools
+        GIT_REPOSITORY https://github.com/google/or-tools.git
+        GIT_TAG        main
+)
+set(BUILD_DEPS ON)
+set(BUILD_DOC OFF)
+set(BUILD_SAMPLES OFF)
+set(BUILD_EXAMPLES OFF)
+FetchContent_MakeAvailable(ortools)
+
+include_directories(
+        ${ortools_SOURCE_DIR}
+        ${ortools_BINARY_DIR}
+        ${absl_SOURCE_DIR}
+        ${protobuf_SOURCE_DIR}/src
+)
+
+message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 
 ##############################################
 # ------------------------------------------ #
@@ -322,11 +357,15 @@ set(TESTS
         test_bam
         test_bed
         test_fasta
+        test_graph
+        test_heterograph
         test_htslib
         test_hts_gcp
         test_interval_graph
         test_minimap2
         test_minimap2_no_io
+        test_ortools
+        test_transmap
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
@@ -341,7 +380,8 @@ foreach(FILENAME_PREFIX ${TESTS})
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
-                )
+                ortools::ortools
+        )
     else()
         target_link_libraries(${FILENAME_PREFIX}
                 sv_merge
@@ -351,6 +391,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
         )
     endif()
 
@@ -361,8 +402,7 @@ endforeach()
 
 set(EXECUTABLES
         a
-        get_regions_from_vcf_and_bed
-        )
+)
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
@@ -375,6 +415,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -385,6 +426,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
+                ortools::ortools
         )
     endif()
 
