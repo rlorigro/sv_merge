@@ -1,8 +1,75 @@
 #include "gaf.hpp"
 
+
+#include <iostream>
+
+using std::cerr;
+
+
 namespace sv_merge {
 
+
+void GafAlignment::for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f){
+    for (auto& c: cigar){
+        f(c);
+    }
+}
+
+
+void GafAlignment::load_cigar(const string& cigar_string){
+    string length_token;
+
+    for (auto c: cigar_string){
+        if (isalpha(c) or c == '='){
+            cigar.emplace_back(stoll(length_token),cigar_char_to_code[c]);
+            length_token.clear();
+        }
+        else{
+            length_token += c;
+        }
+    }
+}
+
+
+void GafAlignment::add_tag(const string& token){
+    auto i = token.find_last_of(':');
+
+    if (i == string::npos){
+        throw runtime_error("ERROR: no colon found in non-mandatory GAF column (tag)");
+    }
+
+    auto tag_type = token.substr(0,i);
+    auto tag_value = token.substr(i+1,token.size() - (i+1));
+
+    cerr << tag_type << ',' << tag_value << '\n';
+
+    if (tag_type == "tp:A"){
+        if (tag_value == "P"){
+            primary = true;
+        }
+        else if (tag_value == "S"){
+            primary = false;
+        }
+        else if (tag_value == "I"){
+            throw runtime_error("ERROR: inversion not supported in GAF reader: " + token);
+        }
+        else {
+            throw runtime_error("ERROR: unrecognized value in alignment tag " + token);
+        }
+    }
+
+    if (tag_type == "cg:Z"){
+        cigar.clear();
+        load_cigar(tag_value);
+    }
+}
+
+
 void GafAlignment::set_path(const string& p){
+    if (p[0] != '>' and p[0] != '<'){
+        throw runtime_error("ERROR: path does not start with > or <, GAF stable path format not supported");
+    }
+
     path.clear();
 
     for (auto c: p){
@@ -129,7 +196,7 @@ int64_t GafAlignment::get_path_stop() const{
 }
 
 
-bool GafAlignment::get_reversal() const{
+bool GafAlignment::is_reverse() const{
     return reversal;
 }
 
@@ -149,8 +216,7 @@ int64_t GafAlignment::get_map_quality() const{
 }
 
 
-
-bool GafAlignment::parse_path_reversal_token(char c){
+bool GafAlignment::parse_path_reversal_token(char c) const{
     bool r;
 
     if (c == '>'){
@@ -169,11 +235,6 @@ bool GafAlignment::parse_path_reversal_token(char c){
 
 void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f){
     throw runtime_error("ERROR: for_each_cigar_interval not implemented yet");
-}
-
-
-void GafAlignment::for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f){
-    throw runtime_error("ERROR: for_each_cigar_tuple not implemented yet");
 }
 
 
@@ -197,11 +258,6 @@ bool GafAlignment::is_unmapped() const{
 }
 
 
-bool GafAlignment::is_reverse() const{
-    throw runtime_error("ERROR: is_reverse not implemented yet");
-}
-
-
 bool parse_reversal_token(const string& token){
     bool reversal;
 
@@ -219,20 +275,20 @@ bool parse_reversal_token(const string& token){
 }
 
 
-/** Col 	Type 	Description
- ** 1 	string 	Query sequence name
- ** 2 	int 	Query sequence length
- ** 3 	int 	Query start (0-based; closed)
- ** 4 	int 	Query end (0-based; open)
- ** 5 	char 	Strand relative to the path: "+" or "-"
- ** 6 	string 	Path matching /([><][^\s><]+(:\d+-\d+)?)+|([^\s><]+)/
- ** 7 	int 	Path length
- ** 8 	int 	Start position on the path (0-based)
- ** 9 	int 	End position on the path (0-based)
- ** 10 	int 	Number of residue matches
- ** 11 	int 	Alignment block length
- ** 12 	int 	Mapping quality (0-255; 255 for missing)
- */
+// Col 	Type 	Description
+// 1 	string 	Query sequence name
+// 2 	int 	Query sequence length
+// 3 	int 	Query start (0-based; closed)
+// 4 	int 	Query end (0-based; open)
+// 5 	char 	Strand relative to the path: "+" or "-"
+// 6 	string 	Path matching /([><][^\s><]+(:\d+-\d+)?)+|([^\s><]+)/
+// 7 	int 	Path length
+// 8 	int 	Start position on the path (0-based)
+// 9 	int 	End position on the path (0-based)
+// 10 	int 	Number of residue matches
+// 11 	int 	Alignment block length
+// 12 	int 	Mapping quality (0-255; 255 for missing)
+//
 void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment& alignment)>& f){
     ifstream file(gaf_path);
 
@@ -247,7 +303,6 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
     while (file.get(c)){
         if (c == delimiter){
             switch (n_delimiters){
-                // TODO: consider using an array to map index to fn ?
                 case 0:
                     a.set_query_name(token);
                     break;
@@ -285,6 +340,7 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
                     a.set_map_quality(stoll(token));
                     break;
                 default:
+                    a.add_tag(token);
                     break;
             }
 
@@ -294,12 +350,26 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
         }
 
         else if (c == '\n'){
+            if (n_delimiters == 11){
+                // Handle case where there is no delimiter after the last mandatory column
+                a.set_map_quality(stoll(token));
+            }
+            if (n_delimiters > 11){
+                // Handle case where there is no delimiter after the last tag
+                a.add_tag(token);
+            }
+
             f(a);
             n_delimiters = 0;
             token.clear();
             continue;
         }
         else{
+            if (n_delimiters == 5){
+                if (c == ':') {
+                    throw runtime_error("ERROR: found ':' in path, GAF stable path coordinates not supported");
+                }
+            }
             token += c;
         }
     }

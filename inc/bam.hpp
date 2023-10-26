@@ -61,6 +61,7 @@ public:
     bool is_reverse() const override;
 };
 
+
 /**
  * Inefficient complementation, good luck to the optimizer TODO: switch to array based or char ordinal offset math
  * @param c - the character to be complemented, must be ACGTN or acgtn

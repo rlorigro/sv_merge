@@ -3,7 +3,9 @@
 
 using ghc::filesystem::path;
 using sv_merge::for_alignment_in_gaf;
+using sv_merge::cigar_code_to_char;
 using sv_merge::GafAlignment;
+using sv_merge::CigarTuple;
 
 #include <iostream>
 #include <stdexcept>
@@ -29,11 +31,16 @@ int main(){
             alignment.get_path_length() << '\t' <<
             alignment.get_path_start() << '\t' <<
             alignment.get_path_stop() << '\t' <<
-            alignment.get_reversal() << '\t' <<
+            alignment.is_reverse() << '\t' <<
             alignment.get_n_match() << '\t' <<
             alignment.get_alignment_length() << '\t' <<
-            alignment.get_map_quality() << '\t' <<
-            '\n';
+            alignment.get_map_quality() << '\t';
+
+            alignment.for_each_cigar_tuple([&](const CigarTuple& cigar){
+                cerr << cigar.length << cigar_code_to_char[cigar.code] << ' ';
+            });
+            cerr << '\n';
+
     });
 
     return 0;
