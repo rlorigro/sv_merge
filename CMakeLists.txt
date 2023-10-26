@@ -63,6 +63,7 @@ set(SOURCES
         src/bam.cpp
         src/bed.cpp
         src/fasta.cpp
+        src/gaf.cpp
         src/Graph.cpp
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
@@ -357,7 +358,9 @@ set(TESTS
         test_bam
         test_bed
         test_fasta
+        test_gaf
         test_graph
+        test_graphaligner
         test_heterograph
         test_htslib
         test_hts_gcp
