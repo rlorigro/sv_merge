@@ -15,6 +15,11 @@ using std::max;
 namespace sv_merge{
 
 
+CigarTuple::CigarTuple(int64_t length, int8_t code):
+    length(length),
+    code(code)
+{}
+
 
 /**
  * Regardles of the F/R orientation of the alignment, return an interval in which the second item is greater than the

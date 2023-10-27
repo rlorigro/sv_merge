@@ -51,6 +51,22 @@ static const array <char,9> cigar_code_to_char = {
 };
 
 
+//                                                     0   1   2   3   4   5   6   7   8   9
+static const array<uint8_t, 128> cigar_char_to_code = {10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 0
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 10
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 20
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 30
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 40
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 50
+                                                       10, 7,  10, 10, 10, 10, 10, 10, 2,  10,  // 60    =61, D68
+                                                       10, 10, 5,  1,  10, 10, 10, 0,  3,  10,  // 70    H72, I73, M77, N78
+                                                       6,  10, 10, 4,  10, 10, 10, 10, 8,  10,  // 80    P80, S83, X88
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 90
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 100
+                                                       10, 10, 10, 10, 10, 10, 10, 10, 10, 10,  // 110
+                                                       10, 10, 10, 10, 10, 10, 10, 10};         // 120
+
+
 /**
  * Lookup table to fetch a formatted alignment character which indicates match/mismatch/gap
  */
@@ -106,6 +122,9 @@ class CigarTuple{
 public:
     int64_t length = -1;
     int8_t code = -1;
+
+    CigarTuple(int64_t length, int8_t code);
+    CigarTuple()=default;
 };
 
 
@@ -186,8 +205,6 @@ void for_cigar_interval_in_alignment(
         const function<void(const CigarInterval& intersection, const interval_t& interval)>& f_ref,
         const function<void(const CigarInterval& intersection, const interval_t& interval)>& f_query
 );
-
-
 
 
 }
