@@ -41,6 +41,7 @@ class GafAlignment: public Alignment{
 
 public:
     /// Modifying
+    void set_path(const vector<pair<string,bool> >& p);
     void set_path(const string& path);
     void set_query_name(const string& query_name);
     void set_ref_name(const string& ref_name);
@@ -54,6 +55,7 @@ public:
     void set_n_match(int64_t n);
     void set_alignment_length(int64_t length);
     void set_map_quality(int64_t q);
+    void set_is_primary(bool p);
     void add_tag(const string& tag);
 
     /// Accessing

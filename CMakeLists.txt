@@ -405,6 +405,7 @@ endforeach()
 
 set(EXECUTABLES
         a
+        hapestry
 )
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})

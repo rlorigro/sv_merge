@@ -1,6 +1,5 @@
 #include "gaf.hpp"
 
-
 #include <iostream>
 
 using std::cerr;
@@ -65,6 +64,11 @@ void GafAlignment::add_tag(const string& token){
 }
 
 
+void GafAlignment::set_path(const vector<pair<string,bool> >& p){
+    path = p;
+}
+
+
 void GafAlignment::set_path(const string& p){
     if (p[0] != '>' and p[0] != '<'){
         throw runtime_error("ERROR: path does not start with > or <, GAF stable path format not supported");
@@ -80,6 +84,16 @@ void GafAlignment::set_path(const string& p){
         else{
             path.back().first += c;
         }
+    }
+
+    // Hopefully this never happen but is technically possible according to the GAF spec
+    if (reversal){
+        vector<pair<string,bool> > reverse_path;
+        for (auto iter=path.rbegin(); iter!=path.rend(); iter++){
+            reverse_path.emplace_back(*iter);
+            reverse_path.back().second = !reverse_path.back().second;
+        }
+        path = std::move(reverse_path);
     }
 }
 
@@ -126,6 +140,11 @@ void GafAlignment::set_path_stop(int64_t stop){
 
 void GafAlignment::set_reversal(bool r){
     reversal = r;
+}
+
+
+void GafAlignment::set_is_primary(bool p) {
+    primary = p;
 }
 
 
@@ -198,6 +217,11 @@ int64_t GafAlignment::get_path_stop() const{
 
 bool GafAlignment::is_reverse() const{
     return reversal;
+}
+
+
+bool GafAlignment::is_primary() const{
+    return primary;
 }
 
 
