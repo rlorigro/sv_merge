@@ -30,6 +30,11 @@ void GafAlignment::load_cigar(const string& cigar_string){
 }
 
 
+void GafAlignment::clear_cigar(){
+    cigar.clear();
+}
+
+
 void GafAlignment::add_tag(const string& token){
     auto i = token.find_last_of(':');
 
@@ -215,6 +220,11 @@ int64_t GafAlignment::get_path_stop() const{
 }
 
 
+const pair<string,bool>& GafAlignment::get_path_step(int64_t index) const{
+    return path[index];
+}
+
+
 bool GafAlignment::is_reverse() const{
     return reversal;
 }
@@ -258,27 +268,66 @@ bool GafAlignment::parse_path_reversal_token(char c) const{
 
 
 void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f){
-    throw runtime_error("ERROR: for_each_cigar_interval not implemented yet");
+    CigarInterval c;
+
+    // Initialize the cigar interval
+    c.query_start = get_query_start();
+    c.ref_start = get_ref_start();
+    c.is_reverse = is_reverse();
+
+    if (c.is_reverse){
+        c.query_start = get_query_length();
+    }
+
+    for_each_cigar_tuple([&](const CigarTuple& tuple){
+        c.code = tuple.code;
+        c.length = tuple.length;
+
+        // Update interval bounds for this cigar interval
+        if (c.is_reverse) {
+            c.query_stop = c.query_start - is_query_move[c.code]*c.length;
+        }
+        else{
+            c.query_stop = c.query_start + is_query_move[c.code]*c.length;
+        }
+
+        c.ref_stop = c.ref_start + is_ref_move[c.code]*c.length;
+
+        // Temporarily flip the start/stop so that it is conventionally interpretable
+        c.set_query_interval_forward();
+
+        f(c);
+
+        // Revert to backwards intervals for iteration/update
+        if (c.is_reverse){
+            c.set_query_interval_reverse();
+        }
+
+        c.ref_start = c.ref_stop;
+        c.query_start = c.query_stop;
+    });
 }
 
 
 void GafAlignment::get_query_sequence(string& result){
-    throw runtime_error("ERROR: get_query_sequence not implemented yet");
+    throw runtime_error("ERROR: get_query_sequence not implemented");
 }
 
 
 void GafAlignment::get_query_name(string& result) const{
-    throw runtime_error("ERROR: get_query_name not implemented yet");
+    result.clear();
+    result = query_name;
 }
 
 
 int64_t GafAlignment::get_ref_start() const{
-    throw runtime_error("ERROR: get_ref_start not implemented yet");
+    return path_start;
 }
 
 
 bool GafAlignment::is_unmapped() const{
-    throw runtime_error("ERROR: is_unmapped not implemented yet");
+    // It is not possible for a PAF/GAF alignment to represent an unmapped query, so is_unmapped always returns false
+    return false;
 }
 
 
@@ -384,6 +433,7 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
             }
 
             f(a);
+            a.clear_cigar();
             n_delimiters = 0;
             token.clear();
             continue;

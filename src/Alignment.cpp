@@ -215,7 +215,7 @@ void for_cigar_interval_in_alignment(
                     intersection.query_stop = c.query_start + (intersection.ref_stop - c.ref_start);
                 }
             }
-                // Otherwise the ref/query advance independently
+            // Otherwise the ref/query advance independently
             else {
                 intersection.query_start = c.query_start;
                 intersection.query_stop = c.query_stop;
@@ -327,6 +327,50 @@ void for_cigar_interval_in_alignment(
         }
 
     });
+}
+
+
+void get_formatted_sequence_of_cigar_interval(
+        const CigarInterval& cigar,
+        const string& ref_sequence,
+        const string& query_sequence,
+        string& s_ref,
+        string& s_query,
+        string& s_crossref
+){
+    s_ref.clear();
+    s_query.clear();
+    s_crossref.clear();
+
+    if (not cigar.is_clip()){
+        const auto& [a_query,b_query] = cigar.get_forward_query_interval();
+        const auto& [a_ref,b_ref] = cigar.get_forward_ref_interval();
+
+        auto l_query = b_query - a_query;
+        auto l_ref = b_ref - a_ref;
+        auto l = max(l_ref,l_query);
+
+//        cerr << l_query << ',' << l_ref << '\n';
+
+        s_query = query_sequence.substr(a_query, l_query);
+        s_ref = ref_sequence.substr(a_ref, l_ref);
+
+        if (cigar.is_reverse){
+            reverse_complement(s_query);
+        }
+
+        // Append filler characters to keep lengths equal, if needed
+        if (not is_query_move[cigar.code]){
+            s_query = string(l, '-');
+        }
+
+        if (not is_ref_move[cigar.code]){
+            s_ref = string(l, '-');
+        }
+
+        // Show whether there is a match, mismatch, or indel
+        s_crossref = string(l, cigar_code_to_format_char[cigar.code]);
+    }
 }
 
 

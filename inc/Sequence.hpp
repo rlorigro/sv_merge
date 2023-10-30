@@ -7,7 +7,6 @@ using std::string;
 
 namespace sv_merge {
 
-
 class Sequence{
 public:
     string name;
@@ -17,5 +16,8 @@ public:
     Sequence()=default;
 };
 
+char get_complement(char c);
+
+void reverse_complement(string& seq);
 
 }
