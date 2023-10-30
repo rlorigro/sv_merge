@@ -365,6 +365,10 @@ bool parse_reversal_token(const string& token){
 void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment& alignment)>& f){
     ifstream file(gaf_path);
 
+    if (not (file.is_open() and file.good())){
+        throw runtime_error("ERROR: could not read file: " + gaf_path.string());
+    }
+
     char c;
 
     int64_t n_delimiters = 0;

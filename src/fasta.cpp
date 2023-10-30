@@ -25,6 +25,10 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
 
     ifstream file(fasta_path);
 
+    if (not (file.is_open() and file.good())){
+        throw runtime_error("ERROR: could not read file: " + fasta_path.string());
+    }
+
     char c;
     Sequence s;
 
