@@ -57,25 +57,27 @@ public:
     void set_map_quality(int64_t q);
     void set_is_primary(bool p);
     void add_tag(const string& tag);
+    void clear_cigar();
 
     /// Accessing
-    string get_path_string() const;
-    string get_query_name() const;
-    string get_ref_name() const;
-    int64_t get_query_length() const override;
-    int64_t get_query_start() const override;
-    int64_t get_query_stop() const;
-    int64_t get_path_length() const;
-    int64_t get_path_start() const;
-    int64_t get_path_stop() const;
-    int64_t get_n_match() const;
-    int64_t get_alignment_length() const;
-    int64_t get_map_quality() const;
-    bool is_primary() const;
-    bool is_reverse() const override;
+    [[nodiscard]] string get_path_string() const;
+    [[nodiscard]] string get_query_name() const;
+    [[nodiscard]] string get_ref_name() const;
+    [[nodiscard]] int64_t get_query_length() const override;
+    [[nodiscard]] int64_t get_query_start() const override;
+    [[nodiscard]] int64_t get_query_stop() const;
+    [[nodiscard]] int64_t get_path_length() const;
+    [[nodiscard]] int64_t get_path_start() const;
+    [[nodiscard]] int64_t get_path_stop() const;
+    [[nodiscard]] const pair<string,bool>& get_path_step(int64_t index) const;
+    [[nodiscard]] int64_t get_n_match() const;
+    [[nodiscard]] int64_t get_alignment_length() const;
+    [[nodiscard]] int64_t get_map_quality() const;
+    [[nodiscard]] bool is_primary() const;
+    [[nodiscard]] bool is_reverse() const override;
 
     /// Helper
-    bool parse_path_reversal_token(char c) const;
+    [[nodiscard]] bool parse_path_reversal_token(char c) const;
     void load_cigar(const string& cigar_string);
 
     /// Iterators and Alignment API fulfillment
@@ -83,8 +85,8 @@ public:
     void for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f) override;
     void get_query_sequence(string& result) override;
     void get_query_name(string& result) const override;
-    int64_t get_ref_start() const override;
-    bool is_unmapped() const override;
+    [[nodiscard]] int64_t get_ref_start() const override;
+    [[nodiscard]] bool is_unmapped() const override;
 };
 
 

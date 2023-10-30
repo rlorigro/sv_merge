@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Sequence.hpp"
+
 #include <functional>
 #include <utility>
 #include <vector>
@@ -206,5 +208,14 @@ void for_cigar_interval_in_alignment(
         const function<void(const CigarInterval& intersection, const interval_t& interval)>& f_query
 );
 
+
+void get_formatted_sequence_of_cigar_interval(
+        const CigarInterval& cigar,
+        const string& ref_sequence,
+        const string& query_sequence,
+        string& s_ref,
+        string& s_query,
+        string& s_crossref
+);
 
 }
