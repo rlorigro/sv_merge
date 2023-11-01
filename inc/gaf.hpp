@@ -84,6 +84,7 @@ public:
     void for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f) override;
     void for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f) override;
     void get_query_sequence(string& result) override;
+    void get_query_sequence(string& result, int64_t start, int64_t stop) override;
     void get_query_name(string& result) const override;
     [[nodiscard]] int64_t get_ref_start() const override;
     [[nodiscard]] bool is_unmapped() const override;

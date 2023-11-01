@@ -310,7 +310,12 @@ void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterv
 
 
 void GafAlignment::get_query_sequence(string& result){
-    throw runtime_error("ERROR: get_query_sequence not implemented");
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
+}
+
+
+void GafAlignment::get_query_sequence(string& result, int64_t start, int64_t stop){
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
 }
 
 

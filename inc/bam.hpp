@@ -52,13 +52,16 @@ public:
 
     // For the htslib bam implementation of this, we can lazily evaluate, only decompress and store the sequence as
     // needed. Unfortunately this makes the getter non-const...
+    void get_query_sequence(string& result, int64_t start, int64_t stop) override;
     void get_query_sequence(string& result) override;
     void get_query_name(string& result) const override;
-    int64_t get_query_length() const override;
-    int64_t get_ref_start() const override;
-    int64_t get_query_start() const override;
-    bool is_unmapped() const override;
-    bool is_reverse() const override;
+    [[nodiscard]] int64_t get_query_length() const override;
+    [[nodiscard]] int64_t get_ref_start() const override;
+    [[nodiscard]] int64_t get_query_start() const override;
+    [[nodiscard]] bool is_unmapped() const override;
+    [[nodiscard]] bool is_reverse() const override;
+    [[nodiscard]] bool is_primary() const override;
+    [[nodiscard]] bool is_not_primary() const;
 };
 
 
@@ -73,11 +76,22 @@ void reverse_complement(string& seq);
 
 /**
  * Convert the compressed representation of an aligned sequence into a string.
- * Does NOT reverse complement the sequence
+ * WARNING: reverse complements the sequence to be F orientation
  * @param alignment - pointer to htslib struct
  * @param sequence - string to be filled with resulting sequence
  */
 void decompress_bam_sequence(const bam1_t* alignment, string& sequence);
+
+
+/**
+ * Convert the compressed representation of an aligned sequence into a string.
+ * WARNING: reverse complements the sequence to be F orientation
+ * @param alignment - pointer to htslib struct
+ * @param sequence - string to be filled with resulting sequence
+ * @param start - start index, in the F orientation of the sequence
+ * @param stop - stop index, in the F orientation of the sequence
+ */
+void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t start, int64_t stop);
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar);
 

@@ -54,10 +54,11 @@ public:
     void add_path(const string& name);
     void add_edge(const string& a, const string& b);
     void add_edge(const string& a, const string& b, float weight);
-    void construct_optimizer();
 
     /// Accessing
     const HeteroNode& get_node(int64_t id) const;
+    const HeteroNode& get_node(const string& name) const;
+    const string& get_sequence(const string& name) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
@@ -94,6 +95,18 @@ TransMap::TransMap():
 
 const HeteroNode& TransMap::get_node(int64_t id) const{
     return graph.get_node(id);
+}
+
+
+const HeteroNode& TransMap::get_node(const string& name) const{
+    auto id = graph.name_to_id(name);
+    return graph.get_node(id);
+}
+
+
+const string& TransMap::get_sequence(const string& name) const{
+    auto id = graph.name_to_id(name);
+    return sequences.at(id);
 }
 
 

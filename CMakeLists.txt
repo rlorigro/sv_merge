@@ -35,7 +35,7 @@ if (dev)
     set(ASAN_OPTIONS=check_initialization_order=1)
     set(ASAN_OPTIONS=detect_leaks=1)
 
-    add_definitions(-ggdb3 -Og -Wall)       # Debugging + No optimization
+    add_definitions(-ggdb3 -Og -Wall)       # Debugging + minimal optimization
 
 else()
     message(STATUS "---- Building with optimization ----")
@@ -60,6 +60,7 @@ include_directories(
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
         src/Alignment.cpp
+        src/Authenticator.cpp
         src/bam.cpp
         src/bed.cpp
         src/fasta.cpp

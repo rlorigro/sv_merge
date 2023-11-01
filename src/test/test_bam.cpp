@@ -73,10 +73,116 @@ void test_bam_sequence_extraction(path data_directory){
     command = "samtools fasta -0 " + region_output_fasta_path.string() + " " + region_output_bam_path.string();
     run_command(command);
 
-    bool success = files_equal(output_path, region_output_fasta_path);
+    map<string,string> expected_sequences;
+    for_sequence_in_fasta_file(region_output_fasta_path, [&](const Sequence& s){
+        expected_sequences[s.name] = s.sequence;
+    });
 
-    cerr << success << '\n';
+    map<string,string> result_sequences;
+    for_sequence_in_fasta_file(output_path, [&](const Sequence& s){
+        result_sequences[s.name] = s.sequence;
+    });
 
+    for (auto& [name, sequence]: expected_sequences){
+        auto result2 = result_sequences.find(name);
+
+        if (result2 == result_sequences.end()){
+            throw runtime_error("FAIL: expected sequence not found in result sequences");
+        }
+
+        if (sequence == result2->second){
+            result_sequences.erase(name);
+            cerr << "PASS: " << name << '\n';
+        }
+        else{
+            throw runtime_error("FAIL: expected sequence not equivalent to result sequence");
+        }
+    }
+
+    if (not result_sequences.empty()){
+        throw runtime_error("FAIL: unexpected sequence in results");
+    }
+
+    cerr << '\n';
+}
+
+
+void test_bam_subsequence_extraction(path data_directory){
+    string region_string = "a:0-5000";
+
+    Region r(region_string);
+
+    cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+
+    map<string,string> result_sequences;
+    for_alignment_in_bam_region(bam_path, region_string, [&](Alignment& alignment){
+        if (alignment.is_unmapped() or not alignment.is_primary()) {
+            return;
+        }
+
+        Sequence s;
+
+        alignment.get_query_name(s.name);
+        alignment.get_query_sequence(s.sequence, 10, 110);
+        result_sequences[s.name] = s.sequence;
+    });
+
+    path samtools_output_bam_path = data_directory / "region.sam";
+
+    string command;
+    string result;
+
+    command = "samtools view -h " + bam_path.string() + " " + region_string;
+    run_command(command, samtools_output_bam_path);
+
+    path samtools_output_fasta_path = data_directory / "region.fasta";
+
+    command = "samtools fasta -0 " + samtools_output_fasta_path.string() + " " + samtools_output_bam_path.string();
+    run_command(command);
+
+    map<string,string> expected_sequences = {
+        {"del_5_at_34", "CATAGCCTATGACAGACTACAAGATATGAACGATCAATATGGTTCGCGACAGAATCGCTGTCCTAGTGGTTACGCGCTTACGGAAGTCGGACCACCCTAT"},
+        {"del_5_at_34_reverse", "ATAGGGTGGTCCGACTTCCGTAAGCGCGTAACCACTAGGACAGCGATTCTGTCGCGAACCATATTGATCGTTCATATCTTGTAGTCTGTCATAGGCTATG"},
+        {"del_5_at_34_ins_5_at_49", "CATAGCCTATGACAGACTACAAGATATGAACGATGGGGGCAATATGGTTCGCGACAGAATCGCTGTCCTAGTGGTTACGCGCTTACGGAAGTCGGACCAC"},
+        {"del_5_at_34_ins_5_at_49_reverse", "GTGGTCCGACTTCCGTAAGCGCGTAACCACTAGGACAGCGATTCTGTCGCGAACCATATTGCCCCCATCGTTCATATCTTGTAGTCTGTCATAGGCTATG"},
+        {"exact_match", "CATAGCCTATGACAGACTACAAGACCCACTATGAACGATCAATATGGTTCGCGACAGAATCGCTGTCCTAGTGGTTACGCGCTTACGGAAGTCGGACCAC"},
+        {"exact_match_reverse", "GTGGTCCGACTTCCGTAAGCGCGTAACCACTAGGACAGCGATTCTGTCGCGAACCATATTGATCGTTCATAGTGGGTCTTGTAGTCTGTCATAGGCTATG"},
+        {"ins_5_at_39", "CATAGCCTATGACAGACTACAAGACCCACGGGGGTATGAACGATCAATATGGTTCGCGACAGAATCGCTGTCCTAGTGGTTACGCGCTTACGGAAGTCGG"},
+        {"ins_5_at_39_reverse", "CCGACTTCCGTAAGCGCGTAACCACTAGGACAGCGATTCTGTCGCGAACCATATTGATCGTTCATACCCCCGTGGGTCTTGTAGTCTGTCATAGGCTATG"},
+        {"mismatch_1_at_49", "CATAGCCTATGACAGACTACAAGACCCACTATGAACGATGAATATGGTTCGCGACAGAATCGCTGTCCTAGTGGTTACGCGCTTACGGAAGTCGGACCAC"},
+        {"mismatch_1_at_49_reverse", "GTGGTCCGACTTCCGTAAGCGCGTAACCACTAGGACAGCGATTCTGTCGCGAACCATATTCATCGTTCATAGTGGGTCTTGTAGTCTGTCATAGGCTATG"},
+        {"softclip_2000", "TCGTGAGAACCTCGACCGCAGTGTGCTAATTTTTCAGCAACTTGTTCAACGAAGAACTTCCAAGTCTTAAGGTCGTAGGACTGCCGCGGCTGCCCATGTG"},
+        {"softclip_2000_reverse", "CACATGGGCAGCCGCGGCAGTCCTACGACCTTAAGACTTGGAAGTTCTTCGTTGAACAAGTTGCTGAAAAATTAGCACACTGCGGTCGAGGTTCTCACGA"},
+        {"supplementary_softclip_2000_at_1000", "ATTTAAATGCTTTCTTAGGGTGACAAGCCGACCACTGACCCGTGCTGAGGAATTCTCGCTTACAGTCGTCTGTCTGGAGCTCATCCCGCTGCGACAATTA"},
+        {"supplementary_softclip_2000_at_1000_reverse", "TAATTGTCGCAGCGGGATGAGCTCCAGACAGACGACTGTAAGCGAGAATTCCTCAGCACGGGTCAGTGGTCGGCTTGTCACCCTAAGAAAGCATTTAAAT"}
+    };
+
+    for (auto& [name, sequence]: expected_sequences){
+        cerr << name << '\n';
+        auto result2 = result_sequences.find(name);
+
+        if (result2 == result_sequences.end()){
+            throw runtime_error("FAIL: expected sequence not found in result sequences");
+        }
+
+        if (sequence == result2->second){
+            result_sequences.erase(name);
+            cerr << "PASS" << '\n';
+        }
+        else{
+            cerr << sequence << '\n';
+            cerr << result2->second << '\n';
+            throw runtime_error("FAIL: expected sequence not equivalent to result sequence");
+        }
+    }
+
+    if (not result_sequences.empty()){
+        throw runtime_error("FAIL: unexpected sequence in results");
+    }
+
+    cerr << '\n';
 }
 
 
@@ -365,6 +471,9 @@ int main(){
 
     cerr << "TESTING: bam_sequence_extraction\n\n";
     test_bam_sequence_extraction(data_directory);
+
+    cerr << "TESTING: test_bam_subsequence_extraction\n\n";
+    test_bam_subsequence_extraction(data_directory);
 
     cerr << "TESTING: cigar iterator\n\n";
     test_cigar_iterator(data_directory);
