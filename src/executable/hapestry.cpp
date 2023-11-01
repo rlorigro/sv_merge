@@ -17,14 +17,10 @@ using std::unordered_map;
 using std::runtime_error;
 using std::ifstream;
 using std::cerr;
+using std::min;
 
 
 using namespace sv_merge;
-
-
-void extract_reads_from_region(Region r, const unordered_map<string,path>& bam_paths, TransMap& transmap){
-    // Do extraction
-}
 
 
 void for_each_sample_bam_path(path bam_csv, const function<void(const string& sample_name, const path& bam_path)>& f){
@@ -95,7 +91,14 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, vector<Region
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
 
-void extract_read_subsequences_from_region(GoogleAuthenticator& authenticator, const string& sample_name, const Region& region, path bam_path, TransMap& transmap){
+void extract_read_subsequences_from_region(
+        GoogleAuthenticator& authenticator,
+        const string& sample_name,
+        const Region& region,
+        path bam_path,
+        TransMap& transmap
+        ){
+
     CigarInterval placeholder;
     placeholder.query_start = numeric_limits<int64_t>::max();
     placeholder.query_stop = numeric_limits<int64_t>::min();
@@ -115,7 +118,7 @@ void extract_read_subsequences_from_region(GoogleAuthenticator& authenticator, c
     // Unused
     vector<interval_t> query_intervals;
 
-    // Make sure the system has the necessary authentication env variables to fetch a remote GS URI
+    // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
     authenticator.update();
 
     // Iterate each alignment in the ref region
@@ -126,8 +129,6 @@ void extract_read_subsequences_from_region(GoogleAuthenticator& authenticator, c
 
         string name;
         alignment.get_query_name(name);
-
-        cerr << name << '\n';
 
         // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
         auto result = query_coords.find(name);
@@ -142,22 +143,48 @@ void extract_read_subsequences_from_region(GoogleAuthenticator& authenticator, c
             auto& x = result3.first->second;
 
             // Fill the value with the sequence
-            // TODO: find a way to not extract the whole sequence?
+            // TODO: find a way to not extract the whole sequence? Tricky when using the Alignment abstract class, and
+            // fetching from remote BAM
             alignment.get_query_sequence(x);
         }
 
         auto& coord = result->second;
 
+        // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
         for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
             [&](const CigarInterval& intersection, const interval_t& interval) {
+//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+
                 // If the alignment touches the START of the ref region, record the query position
-                if (intersection.ref_start == region.start and intersection.query_start < coord.query_start){
-                    coord.query_start = intersection.query_start;
+                if (intersection.ref_start == region.start){
+                    auto [start,stop] = intersection.get_forward_query_interval();
+
+                    if (alignment.is_reverse()){
+                        if (stop > coord.query_stop){
+                            coord.query_stop = stop;
+                        }
+                    }
+                    else{
+                        if (start < coord.query_start){
+                            coord.query_start = start;
+                        }
+                    }
                 }
 
                 // If the alignment touches the END of the region, record the query position
-                if (intersection.ref_stop == region.stop and intersection.query_stop > coord.query_stop){
-                    coord.query_stop = intersection.query_stop;
+                if (intersection.ref_stop == region.stop){
+                    auto [start,stop] = intersection.get_forward_query_interval();
+
+                    if (alignment.is_reverse()){
+                        if (start < coord.query_start){
+                            coord.query_start = start;
+                        }
+                    }
+                    else{
+                        if (stop > coord.query_stop){
+                            coord.query_stop = stop;
+                        }
+                    }
                 }
             },
             null_fn
@@ -165,23 +192,18 @@ void extract_read_subsequences_from_region(GoogleAuthenticator& authenticator, c
     });
 
     for (const auto& [name, coords]: query_coords){
-        if (coords.query_start != placeholder.query_start and coords.query_stop == placeholder.query_stop){
+        if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
             auto i = coords.query_start;
             auto l = coords.query_stop - coords.query_start;
+
+            cerr << name << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+
             transmap.add_read(name, query_sequences[name].substr(i,l));
             transmap.add_edge(sample_name, name);
-
-            cerr << name << '\n';
-            cerr << transmap.get_sequence(name) << '\n';
         }
     }
+    cerr << '\n';
 }
-
-
-//void call_region(const Region& region, path bam_path, TransMap& transmap){
-//    extract_read_subsequences_from_region(region, bam_path, transmap);
-//
-//}
 
 
 void hapestry(
@@ -216,11 +238,18 @@ void hapestry(
     });
 
     // For each region
-    for (const auto& region: regions){
+    for (auto region: regions){
         for (const auto& [sample_name, bam]: bam_paths) {
+            cerr << sample_name << '\n';
+            region.start -= flank_length;
+            region.stop += flank_length;
+
             extract_read_subsequences_from_region(authenticator, sample_name, region, bam, transmap);
         }
+
+
     }
+
 
 }
 
