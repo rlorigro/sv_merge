@@ -70,6 +70,16 @@ void HtsAlignment::get_query_name(string& result) const {
 }
 
 
+void HtsAlignment::get_query_sequence(string& result, int64_t start, int64_t stop){
+    if (not is_decompressed){
+        decompress_bam_sequence(hts_alignment, result, start, stop);
+    }
+    else{
+        result = query_sequence.substr(start, stop-start);
+    }
+}
+
+
 void HtsAlignment::get_query_sequence(string& result){
     if (not is_decompressed){
         decompress_bam_sequence(hts_alignment, query_sequence);
@@ -133,6 +143,16 @@ void HtsAlignment::for_each_cigar_tuple(const function<void(const CigarTuple&)>&
 }
 
 
+bool HtsAlignment::is_not_primary() const {
+    return (hts_alignment->core.flag >> 8) & uint16_t(1);
+}
+
+
+bool HtsAlignment::is_primary() const {
+    return (not is_not_primary());
+}
+
+
 bool HtsAlignment::is_reverse() const {
     return reverse;
 }
@@ -145,22 +165,30 @@ bool HtsAlignment::is_unmapped() const {
 
 void decompress_bam_sequence(const bam1_t* alignment, string& sequence){
     auto length = alignment->core.l_qseq;
+
+    // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
+    int64_t start = 0;
+    int64_t stop = length;
+
+    decompress_bam_sequence(alignment, sequence, start, stop);
+}
+
+
+void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t start, int64_t stop){
     auto compressed_sequence = bam_get_seq(alignment);
     bool is_reverse = bam_is_rev(alignment);
 
     sequence.clear();
 
     uint8_t base_code;
-    string base;
 
     // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
-    int64_t start = 0;
-    int64_t stop = length;
     int64_t increment = 1;
 
     if (is_reverse){
-        start = length - 1;
-        stop = -1;
+        std::swap(start,stop);
+        start -= 1;
+        stop -= 1;
         increment = -1;
     }
 

@@ -310,7 +310,12 @@ void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterv
 
 
 void GafAlignment::get_query_sequence(string& result){
-    throw runtime_error("ERROR: get_query_sequence not implemented");
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
+}
+
+
+void GafAlignment::get_query_sequence(string& result, int64_t start, int64_t stop){
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
 }
 
 
@@ -364,6 +369,10 @@ bool parse_reversal_token(const string& token){
 //
 void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment& alignment)>& f){
     ifstream file(gaf_path);
+
+    if (not (file.is_open() and file.good())){
+        throw runtime_error("ERROR: could not read file: " + gaf_path.string());
+    }
 
     char c;
 

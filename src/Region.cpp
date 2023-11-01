@@ -60,4 +60,9 @@ Region::Region(string& region_string) {
     stop = stoi(stop_token);
 }
 
+
+string Region::to_string() const{
+    return name + ":" + std::to_string(start) + "-" + std::to_string(stop);
+}
+
 }

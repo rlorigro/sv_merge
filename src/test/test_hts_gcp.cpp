@@ -6,71 +6,23 @@
 #include <iomanip>
 
 using std::runtime_error;
-using std::chrono::system_clock;
-using std::chrono::seconds;
-using std::chrono::hours;
 using std::to_string;
 using std::string;
 using std::cerr;
 using std::cout;
 
+#include "Authenticator.hpp"
 #include "Filesystem.hpp"
 #include "misc.hpp"
 
-using sv_merge::run_command;
+using sv_merge::GoogleAuthenticator;
 using sv_merge::get_current_time;
+using sv_merge::run_command;
 using ghc::filesystem::path;
 
 #include "htslib/include/htslib/hts.h"
 #include "htslib/include/htslib/sam.h"
 
-
-///
-/// Consider using this: https://stackoverflow.com/a/57282480
-/// To check for expiration
-///
-class GoogleAuthenticator{
-    /// Attributes
-    system_clock::time_point expiration = get_current_time() - hours(128);
-
-    // 60min duration by default
-    system_clock::duration token_lifetime = seconds(3600);
-
-public:
-    /// Methods
-    void update();
-};
-
-
-void GoogleAuthenticator::update() {
-    // Check if expires within 30sec
-    if (expiration - seconds(30) < get_current_time()){
-        cerr << "Updating token" << '\n';
-        string command = "gcloud auth print-access-token";
-        string token;
-
-        // Will throw error if fails, otherwise returns token
-        auto t = get_current_time();
-        run_command(command, token);
-        expiration = t + token_lifetime;
-
-        string name = "GCS_OAUTH_TOKEN";
-        string env;
-
-        // Update the environment with the token
-        auto error_code = setenv("GCS_OAUTH_TOKEN", token.c_str(), 1);
-        cerr << "result: " << error_code << '\n';
-
-        auto result = getenv(name.data());
-
-        if (result == nullptr or error_code != 0){
-            throw runtime_error("ERROR: environment variable not set");
-        }
-        else{
-            env = result;
-        }
-    }
-}
 
 
 void read_bam_as_system_command(path bam_path){

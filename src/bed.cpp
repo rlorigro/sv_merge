@@ -23,6 +23,9 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
     }
 
     ifstream file(bed_path);
+    if (not (file.is_open() and file.good())){
+        throw runtime_error("ERROR: could not read file: " + bed_path.string());
+    }
 
     char c;
     string region_name;
