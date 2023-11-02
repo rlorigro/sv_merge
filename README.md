@@ -9,7 +9,7 @@ C++ implementation of rlorigro/hapslap
 - zlib1g-dev
 - libbz2-dev
 - autoconf
-- autoheader
+- automake
 - libssl-dev
 
 <!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
