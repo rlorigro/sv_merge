@@ -6,6 +6,7 @@ C++ implementation of rlorigro/hapslap
 
 - c++17
 - gcc
+- cmake
 - zlib1g-dev
 - libbz2-dev
 - autoconf
