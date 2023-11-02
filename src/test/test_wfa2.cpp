@@ -10,11 +10,9 @@ using std::cerr;
 
 using ghc::filesystem::path;
 
-#include "wfa2lib/bindings/cpp/WFAligner.hpp"
+#include "wfa2/include/wfa2lib/bindings/cpp/WFAligner.hpp"
 
-using wfa::WFAlignerGapAffine;
-using wfa::WFAligner;
-
+using namespace wfa;
 
 int main(){
     // Create a WFAligner
@@ -25,8 +23,8 @@ int main(){
     aligner.alignEnd2End(pattern,text); // Align
 
     // Display CIGAR & score
-    string cigar = aligner.getAlignmentCigar();
-    cout << "CIGAR: " << cigar  << endl;
-    cout << "Alignment score " << aligner.getAlignmentScore() << endl;
+    string cigar = aligner.getCIGAR(true);
+    cerr << "CIGAR: " << cigar  << '\n';
+    cerr << "Alignment score " << aligner.getAlignmentScore() << '\n';
     return 0;
 }

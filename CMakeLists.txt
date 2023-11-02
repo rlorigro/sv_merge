@@ -130,43 +130,26 @@ message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 # ------------------------------------------ #
 ##############################################
 
-include(FetchContent)
-FetchContent_Declare(
-        wfa2
+
+ExternalProject_Add(project_wfa
         URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
-)
-FetchContent_MakeAvailable(wfa2)
-
-message(STATUS "wfa2_SOURCE_DIR: " ${wfa2_SOURCE_DIR})
-message(STATUS "wfa2_BINARY_DIR: " ${wfa2_BINARY_DIR})
-message(STATUS "CMAKE_SOURCE_DIR/external/wfa2/: " ${CMAKE_SOURCE_DIR}/external/wfa2/)
-
-file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/external/wfa2/)
-
-# Do not rebuild if -Ddev=1 is specified in cmake args
-#if (NOT DEFINED dev OR NOT dev)
-    # curl configure
-    add_custom_target(
-            BUILD_WFA2
-            ALL
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/wfa2/
-            COMMAND pwd
-            COMMAND cmake ${wfa2_SOURCE_DIR} -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2/
-            COMMAND $(MAKE) install
-    )
-#endif()
-
-include_directories(
-        ${CMAKE_SOURCE_DIR}/external/wfa2/include/
+        TIMEOUT 5
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
+        INSTALL_COMMAND make install
 )
 
-#
-#add_library(curl2 SHARED IMPORTED)
-#set_property(TARGET curl2
-#        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.${LIB_SUFFIX})
-#
-add_dependencies(wfa2 BUILD_WFA2)
+add_library(wfa2 SHARED IMPORTED)
+set_property(TARGET wfa2
+        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/wfa2/lib/libwfa2cpp.${LIB_SUFFIX})
+#                                            /sv_merge/external/wfa2/lib
+
+add_dependencies(wfa2 project_wfa)
 add_dependencies(sv_merge wfa2)
+
+# Specify include dir
+include_directories(
+        ${CMAKE_SOURCE_DIR}/external/wfa2/include/wfa2lib
+)
 
 ##############################################
 # ------------------------------------------ #
@@ -415,6 +398,7 @@ set(TESTS
         test_minimap2_no_io
         test_ortools
         test_transmap
+        test_wfa2
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
@@ -430,6 +414,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
+                wfa2
         )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -441,6 +426,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
+                wfa2
         )
     endif()
 
@@ -466,6 +452,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
+                wfa2
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -477,6 +464,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
+                wfa2
         )
     endif()
 
