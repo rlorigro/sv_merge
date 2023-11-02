@@ -215,8 +215,6 @@ endif()
 
 message(STATUS "Fetching htslib")
 
-find_package(ZLIB REQUIRED)
-
 # Dependencies
 find_library(ZLIB NAMES z)
 if(${ZLIB} STREQUAL "ZLIB-NOTFOUND")
@@ -409,8 +407,8 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
-                ZLIB::ZLIB
                 curl2
+                ZLIB::ZLIB
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
@@ -447,8 +445,8 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
-                ZLIB::ZLIB
                 curl2
+                ZLIB::ZLIB
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
