@@ -13,6 +13,7 @@
 using std::unordered_map;
 using std::unordered_set;
 using std::runtime_error;
+using std::to_string;
 using std::function;
 using std::vector;
 using std::string;
@@ -78,6 +79,7 @@ public:
     T& add_node(const string& name, char type);
 
     void add_edge(const string& name_a, const string& name_b, float weight);
+    void add_edge(int64_t id_a, int64_t id_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
 
     /// Accessing
@@ -85,6 +87,8 @@ public:
     T& get_node(const string& name);
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
+
+    bool has_edge(int64_t id_a, int64_t id_b) const;
 
     /// Global iterators
     void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
@@ -168,6 +172,64 @@ template<class T> void HeteroGraph<T>::add_edge(const string& name_a, const stri
     // Because this is a heterogeneous graph we also want to sort the edges by type of neighbor
     edges[id_a][type_b][id_b] = weight;
     edges[id_b][type_a][id_a] = weight;
+}
+
+
+// TODO: Untested
+template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, float weight) {
+    auto result_a = nodes.find(id_a);
+    auto result_b = nodes.find(id_b);
+
+    if (result_a == nodes.end()){
+        throw runtime_error("ERROR: cannot find id: " + to_string(id_a));
+    }
+
+    if (result_b == nodes.end()){
+        throw runtime_error("ERROR: cannot find id: " + to_string(id_b));
+    }
+
+    auto type_a = result_a->second.type;
+    auto type_b = result_b->second.type;
+
+    // Undirected by default, add both directions. Also, overwrite if it existed already.
+    // Because this is a heterogeneous graph we also want to sort the edges by type of neighbor
+    edges[id_a][type_b][id_b] = weight;
+    edges[id_b][type_a][id_a] = weight;
+}
+
+
+// TODO: Untested
+template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) const{
+    auto r1 = edges.find(id_a);
+    if (r1 == edges.end()){
+        return false;
+    }
+
+    auto result_a = nodes.find(id_a);
+    auto result_b = nodes.find(id_b);
+
+    if (result_a == nodes.end()){
+        return false;
+    }
+
+    if (result_b == nodes.end()){
+        return false;
+    }
+
+    auto type_b = result_b->second.type;
+
+    // Undirected by default
+    auto r2 = r1->second.find(type_b);
+    if (r2 == r1->second.end()){
+        return false;
+    }
+
+    auto r3 = r2->second.find(id_b);
+    if (r3 == r2->second.end()){
+        return false;
+    }
+
+    return true;
 }
 
 

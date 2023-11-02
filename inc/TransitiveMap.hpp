@@ -53,15 +53,21 @@ public:
     void add_read(const string& name, const string& sequence);
     void add_path(const string& name);
     void add_edge(const string& a, const string& b);
+    void add_edge(int64_t a, int64_t b, float weight);
     void add_edge(const string& a, const string& b, float weight);
 
     /// Accessing
+    int64_t get_id(const string& name) const;
+    bool has_edge(int64_t a, int64_t b) const;
+
     const HeteroNode& get_node(int64_t id) const;
     const HeteroNode& get_node(const string& name) const;
     const string& get_sequence(const string& name) const;
+    const string& get_sequence(int64_t id) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_read_id(const function<void(int64_t id)>& f) const;
     void for_each_path(const function<void(const string& name, int64_t id)>& f) const;
 
     void get_read_sample(const string& read_name, string& result) const;
@@ -73,11 +79,8 @@ public:
 
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
-
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
-
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
-
     void for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const;
 };
 
@@ -90,6 +93,11 @@ TransMap::TransMap():
     graph.add_node(sample_node_name, 'S');
     graph.add_node(read_node_name, 'R');
     graph.add_node(path_node_name, 'P');
+}
+
+
+int64_t TransMap::get_id(const string& name) const{
+    return graph.name_to_id(name);
 }
 
 
@@ -106,6 +114,11 @@ const HeteroNode& TransMap::get_node(const string& name) const{
 
 const string& TransMap::get_sequence(const string& name) const{
     auto id = graph.name_to_id(name);
+    return sequences.at(id);
+}
+
+
+const string& TransMap::get_sequence(int64_t id) const{
     return sequences.at(id);
 }
 
@@ -150,6 +163,16 @@ void TransMap::add_path(const string& name){
 
 void TransMap::add_edge(const string& a, const string& b){
     graph.add_edge(a,b,0);
+}
+
+
+void TransMap::add_edge(int64_t a, int64_t b, float weight){
+    graph.add_edge(a,b,weight);
+}
+
+
+bool TransMap::has_edge(int64_t a, int64_t b) const{
+    return graph.has_edge(a,b);
 }
 
 
@@ -204,6 +227,13 @@ void TransMap::get_read_sample(int64_t read_id, string& result) const{
 void TransMap::for_each_read(const function<void(const string& name, int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, id);
+    });
+}
+
+
+void TransMap::for_each_read_id(const function<void(int64_t id)>& f) const{
+    graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
+        f(id);
     });
 }
 

@@ -5,6 +5,9 @@
 #include "misc.hpp"
 #include "bed.hpp"
 #include "bam.hpp"
+#include "bindings/cpp/WFAligner.hpp"
+
+using namespace wfa;
 
 #include <unordered_map>
 #include <stdexcept>
@@ -137,6 +140,7 @@ void extract_read_subsequences_from_region(
         if (result == query_coords.end()){
             // Insert a new placeholder cigar interval and keep a reference to the value inserted
             result = query_coords.emplace(name, placeholder).first;
+            result->second.is_reverse = alignment.is_reverse();
 
             // Insert a new empty sequence and keep a reference to the value inserted
             auto result3 = query_sequences.emplace(name,"");
@@ -175,7 +179,7 @@ void extract_read_subsequences_from_region(
                 if (intersection.ref_stop == region.stop){
                     auto [start,stop] = intersection.get_forward_query_interval();
 
-                    if (alignment.is_reverse()){
+                    if (intersection.is_reverse){
                         if (start < coord.query_start){
                             coord.query_start = start;
                         }
@@ -196,13 +200,53 @@ void extract_read_subsequences_from_region(
             auto i = coords.query_start;
             auto l = coords.query_stop - coords.query_start;
 
-            cerr << name << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
-            transmap.add_read(name, query_sequences[name].substr(i,l));
+            if (coords.is_reverse) {
+                auto s = query_sequences[name].substr(i, l);
+                reverse_complement(s);
+                transmap.add_read(name, s);
+            }
+            else{
+                transmap.add_read(name, query_sequences[name].substr(i, l));
+            }
+
             transmap.add_edge(sample_name, name);
+
+            cerr << transmap.get_sequence(name) << '\n';
         }
     }
     cerr << '\n';
+}
+
+
+void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
+    WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
+
+    auto sample_id = transmap.get_id(sample_name);
+    transmap.for_each_read_of_sample(sample_id, [&](int64_t a){
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t b){
+            if (transmap.has_edge(a,b)){
+                return;
+            }
+
+            auto& seq_a = transmap.get_sequence(a);
+            auto& seq_b = transmap.get_sequence(b);
+
+            if (llabs(int64_t(seq_a.size()) - int64_t(seq_b.size())) > score_threshold){
+                return;
+            }
+
+            if (a != b) {
+                aligner.alignEnd2End(seq_a, seq_b);
+                auto score = aligner.getAlignmentScore();
+
+                transmap.add_edge(a,b, float(score));
+
+                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << score << '\n';
+            }
+        });
+    });
 }
 
 
@@ -220,6 +264,7 @@ void hapestry(
     GoogleAuthenticator authenticator;
     vector<Region> regions;
     TransMap transmap;
+    int64_t score_threshold = 200;
 
     if (windows_bed.empty()){
         construct_windows_from_vcf_and_bed(tandem_bed, vcf, regions);
@@ -245,8 +290,9 @@ void hapestry(
             region.stop += flank_length;
 
             extract_read_subsequences_from_region(authenticator, sample_name, region, bam, transmap);
-        }
 
+            cross_align_sample_reads(transmap, score_threshold, sample_name);
+        }
 
     }
 
