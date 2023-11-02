@@ -158,6 +158,8 @@ include_directories(
 # ------------------------------------------ #
 ##############################################
 
+find_package( ZLIB REQUIRED )
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     message(STATUS "Fetching curl")
 
@@ -201,7 +203,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set_property(TARGET curl2
             PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.${LIB_SUFFIX})
 
-    add_dependencies(curl2 BUILD_CURL)
+    add_dependencies(curl2 BUILD_CURL zlib)
     add_dependencies(sv_merge curl2)
 endif()
 
@@ -214,12 +216,6 @@ endif()
 ##############################################
 
 message(STATUS "Fetching htslib")
-
-# Dependencies
-find_library(ZLIB NAMES z)
-if(${ZLIB} STREQUAL "ZLIB-NOTFOUND")
-    message(WARNING "Couldn't find the 'z' library")
-endif()
 
 find_library(BZ2LIB bz2)
 if(${BZ2LIB} STREQUAL "BZ2LIB-NOTFOUND")
@@ -407,8 +403,8 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
+                ${ZLIB_LIBRARIES}
                 curl2
-                ZLIB::ZLIB
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
@@ -419,7 +415,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
-                ZLIB::ZLIB
+                ${ZLIB_LIBRARIES}
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
@@ -445,8 +441,8 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
+                ${ZLIB_LIBRARIES}
                 curl2
-                ZLIB::ZLIB
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
@@ -457,7 +453,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
-                ZLIB::ZLIB
+                ${ZLIB_LIBRARIES}
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
