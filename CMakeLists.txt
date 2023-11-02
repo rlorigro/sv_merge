@@ -126,6 +126,51 @@ message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ------------------ WFA2 ------------------ #
+# ------------------------------------------ #
+##############################################
+
+include(FetchContent)
+FetchContent_Declare(
+        wfa2
+        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
+)
+FetchContent_MakeAvailable(wfa2)
+
+message(STATUS "wfa2_SOURCE_DIR: " ${wfa2_SOURCE_DIR})
+message(STATUS "wfa2_BINARY_DIR: " ${wfa2_BINARY_DIR})
+message(STATUS "CMAKE_SOURCE_DIR/external/wfa2/: " ${CMAKE_SOURCE_DIR}/external/wfa2/)
+
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/external/wfa2/)
+
+# Do not rebuild if -Ddev=1 is specified in cmake args
+#if (NOT DEFINED dev OR NOT dev)
+    # curl configure
+    add_custom_target(
+            BUILD_WFA2
+            ALL
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/wfa2/
+            COMMAND pwd
+            COMMAND cmake ${wfa2_SOURCE_DIR} -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2/
+            COMMAND $(MAKE) install
+    )
+#endif()
+
+include_directories(
+        ${CMAKE_SOURCE_DIR}/external/wfa2/include/
+)
+
+#
+#add_library(curl2 SHARED IMPORTED)
+#set_property(TARGET curl2
+#        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.${LIB_SUFFIX})
+#
+add_dependencies(wfa2 BUILD_WFA2)
+add_dependencies(sv_merge wfa2)
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ----------------- curl ------------------- #
 # ------------------------------------------ #
 ##############################################
