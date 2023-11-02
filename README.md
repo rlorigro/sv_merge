@@ -12,6 +12,7 @@ C++ implementation of rlorigro/hapslap
 - autoconf
 - automake
 - libssl-dev
+- pkg-config
 
 <!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
 ### GraphAligner
