@@ -123,6 +123,8 @@ message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
 message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
 message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 
+add_dependencies(sv_merge ortools)
+
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
