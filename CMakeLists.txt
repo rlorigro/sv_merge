@@ -275,9 +275,9 @@ set_property(TARGET htslib
 
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    add_dependencies(htslib BUILD_HTS curl2)
+    add_dependencies(htslib BUILD_HTS curl2 zlib)
 else()
-    add_dependencies(htslib BUILD_HTS)
+    add_dependencies(htslib BUILD_HTS zlib)
 endif()
 add_dependencies(sv_merge htslib)
 
@@ -370,9 +370,15 @@ target_link_libraries(minimap2 pthread bz2 z)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(CURL REQUIRED)
 
-message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
+if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    message(STATUS "using compiled curl")
+else()
+    find_package(CURL REQUIRED)
+endif()
+
+
+#message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
 
 # -------- TESTS --------
