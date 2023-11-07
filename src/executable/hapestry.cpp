@@ -10,17 +10,26 @@
 using namespace wfa;
 
 #include <unordered_map>
+#include <exception>
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
+#include <thread>
+#include <memory>
 #include <limits>
 
 using std::numeric_limits;
 using std::unordered_map;
 using std::runtime_error;
+using std::exception;
 using std::ifstream;
+using std::thread;
+using std::atomic;
+using std::mutex;
 using std::cerr;
 using std::min;
+using std::cref;
+using std::ref;
 
 
 using namespace sv_merge;
@@ -94,13 +103,15 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, vector<Region
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
 
-void extract_read_subsequences_from_region(
+void extract_subsequences_from_region(
         GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
         const string& sample_name,
         const Region& region,
         path bam_path,
-        TransMap& transmap
-        ){
+        TransMap& transmap,
+        mutex& transmap_mutex
+){
 
     CigarInterval placeholder;
     placeholder.query_start = numeric_limits<int64_t>::max();
@@ -122,7 +133,9 @@ void extract_read_subsequences_from_region(
     vector<interval_t> query_intervals;
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
+    authenticator_mutex.lock();
     authenticator.update();
+    authenticator_mutex.unlock();
 
     // Iterate each alignment in the ref region
     for_alignment_in_bam_region(bam_path, region.to_string(), [&](Alignment& alignment) {
@@ -200,23 +213,61 @@ void extract_read_subsequences_from_region(
             auto i = coords.query_start;
             auto l = coords.query_stop - coords.query_start;
 
-            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+//            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
             if (coords.is_reverse) {
                 auto s = query_sequences[name].substr(i, l);
                 reverse_complement(s);
+
+                transmap_mutex.lock();
                 transmap.add_read(name, s);
+                transmap_mutex.unlock();
+
             }
             else{
+                transmap_mutex.lock();
                 transmap.add_read(name, query_sequences[name].substr(i, l));
+                transmap_mutex.unlock();
             }
 
+            transmap_mutex.lock();
             transmap.add_edge(sample_name, name);
+            transmap_mutex.unlock();
 
-            cerr << transmap.get_sequence(name) << '\n';
+//            cerr << transmap.get_sequence(name) << '\n';
         }
     }
-    cerr << '\n';
+//    cerr << '\n';
+}
+
+
+void extract_subsequences_from_region_thread_fn(
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        const vector <pair <string,path> >& bam_paths,
+        const Region& region,
+        TransMap& transmap,
+        mutex& transmap_mutex,
+        atomic<size_t>& job_index
+){
+    size_t i = job_index.fetch_add(1);
+
+    while (i < bam_paths.size()){
+        const auto& [sample_name, bam_path] = bam_paths[i];
+
+        extract_subsequences_from_region(
+            authenticator,
+            authenticator_mutex,
+            sample_name,
+            region,
+            bam_path,
+            transmap,
+            transmap_mutex
+            );
+
+        i = job_index.fetch_add(1);
+    }
+
 }
 
 
@@ -255,15 +306,21 @@ void hapestry(
         path tandem_bed,
         path bam_csv,
         path vcf,
-        path ref,
+        path reference,
         int64_t interval_padding,
         int64_t interval_max_length,
-        int64_t flank_length){
+        int64_t flank_length,
+        int64_t n_threads
+        ){
 
-    unordered_map<string,path> bam_paths;
+    vector <pair <string,path> > bam_paths;
     GoogleAuthenticator authenticator;
     vector<Region> regions;
+
+    // TODO: reserve the hash tables used in transmap so that they approximately have the space needed for n_samples*n_fold_coverage ?
     TransMap transmap;
+
+    // TODO: use percent of min(a,b) where a,b are lengths of seqs?
     int64_t score_threshold = 200;
 
     if (windows_bed.empty()){
@@ -271,7 +328,7 @@ void hapestry(
     }
     else{
         for_region_in_bed_file(tandem_bed, [&](const Region &r) {
-            cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+//            cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
             regions.push_back(r);
         });
     }
@@ -279,20 +336,67 @@ void hapestry(
     // Load BAM paths as a map with sample->bam
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         transmap.add_sample(sample_name);
-        bam_paths[sample_name] = bam_path;
+        bam_paths.emplace_back(sample_name,bam_path);
     });
 
     // For each region
     for (auto region: regions){
-        for (const auto& [sample_name, bam]: bam_paths) {
-            cerr << sample_name << '\n';
-            region.start -= flank_length;
-            region.stop += flank_length;
+        cerr << region.name << ' ' << region.start << ' ' << region.stop << '\n';
 
-            extract_read_subsequences_from_region(authenticator, sample_name, region, bam, transmap);
 
-            cross_align_sample_reads(transmap, score_threshold, sample_name);
+        region.start -= flank_length;
+        region.stop += flank_length;
+
+        // Thread-related variables
+        atomic<size_t> job_index = 0;
+        vector<thread> threads;
+        mutex transmap_mutex;
+        mutex authenticator_mutex;
+
+        threads.reserve(n_threads);
+
+        // Launch threads
+        for (uint64_t t=0; t<n_threads; t++){
+            try {
+                cerr << "launching: " << t << '\n';
+                threads.emplace_back(
+                    extract_subsequences_from_region_thread_fn,
+                    std::ref(authenticator),
+                    std::ref(authenticator_mutex),
+                    std::cref(bam_paths),
+                    std::cref(region),
+                    std::ref(transmap),
+                    std::ref(transmap_mutex),
+                    std::ref(job_index)
+                );
+            } catch (const exception& e) {
+                cerr << e.what() << "\n";
+                exit(1);
+            }
         }
+
+        // Wait for threads to finish
+        for (auto& t: threads){
+            t.join();
+        }
+
+//        for (const auto& [sample_name, bam]: bam_paths) {
+//            cerr << sample_name << '\n';
+//
+//            extract_subsequences_from_region(authenticator, sample_name, region, bam, transmap);
+//
+//        }
+
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+            cerr << sample_name << '\n';
+
+            transmap.for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id){
+                const auto& s = transmap.get_sequence(read_id);
+                cerr << read_name << ' ' << s.size() << '\n';
+            });
+        });
+
+//        cross_align_sample_reads(transmap, score_threshold, sample_name);
 
     }
 
@@ -309,43 +413,50 @@ int main (int argc, char* argv[]){
     int64_t interval_padding;
     int64_t interval_max_length;
     int64_t flank_length;
+    int64_t n_threads = 1;
 
     CLI::App app{"App description"};
 
     app.add_option(
+            "--n_threads",
+            n_threads,
+            "Maximum number of threads to use")
+            ->required();
+
+    app.add_option(
             "--tandems",
             windows_bed,
-            "Path to GFA containing phased non-overlapping segments")
+            "Path to BED file containing tandem repeat locations (for automated window generation)")
             ->required();
 
     app.add_option(
             "--windows",
             tandem_bed,
-            "Path to GFA containing phased non-overlapping segments")
+            "Path to BED file containing windows to merge (inferred automatically if not provided)")
             ->required();
 
     app.add_option(
             "--bam_csv",
             bam_csv,
-            "Path to GFA containing phased non-overlapping segments")
+            "Simple headerless CSV file with the format [sample_name],[bam_path]")
             ->required();
 
     app.add_option(
             "--interval_padding",
             interval_padding,
-            "Path to GFA containing phased non-overlapping segments")
+            "How much space to require between adjacent ref windows (if window generation is automated)")
             ->required();
 
     app.add_option(
             "--interval_max_length",
             interval_max_length,
-            "Path to GFA containing phased non-overlapping segments")
+            "Maximum reference window size")
             ->required();
 
     app.add_option(
             "--flank_length",
             flank_length,
-            "Path to GFA containing phased non-overlapping segments")
+            "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
     CLI11_PARSE(app, argc, argv);
@@ -358,7 +469,8 @@ int main (int argc, char* argv[]){
         ref,
         interval_padding,
         interval_max_length,
-        flank_length
+        flank_length,
+        n_threads
     );
 
     return 0;
