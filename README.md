@@ -13,6 +13,7 @@ C++ implementation of rlorigro/hapslap
 - automake
 - libssl-dev
 - pkg-config
+- libnghttp2-dev (For Ubuntu22 curl http2 support)
 
 <!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
 ### GraphAligner
