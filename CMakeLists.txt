@@ -162,8 +162,12 @@ include_directories(
 
 find_package( ZLIB REQUIRED )
 
+
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     message(STATUS "Fetching curl")
+
+    # This is not actually linked but it is required for Ubuntu Curl compilation to use http2
+    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
 
     include(FetchContent)
 
@@ -194,7 +198,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
                 ALL
                 WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
                 COMMAND pwd
-                COMMAND ./configure --with-openssl --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+                COMMAND ./configure --with-openssl --with-nghttp2 --enable- --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
                 COMMAND $(MAKE)
                 COMMAND $(MAKE) install
         )
