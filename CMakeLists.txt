@@ -356,13 +356,14 @@ target_link_libraries(minimap2 pthread bz2 z)
 include(FetchContent)
 FetchContent_Declare(
         ortools
-        GIT_REPOSITORY https://github.com/google/or-tools.git
-        GIT_TAG        main
+        URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
 )
+
 set(BUILD_DEPS ON)
 set(BUILD_DOC OFF)
 set(BUILD_SAMPLES OFF)
 set(BUILD_EXAMPLES OFF)
+set(USE_COINOR OFF)
 FetchContent_MakeAvailable(ortools)
 
 include_directories(
