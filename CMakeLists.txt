@@ -27,6 +27,9 @@ elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(LIB_SUFFIX "so")
 endif()
 
+# If using gperftools, run cmake with additional args:
+# cmake -DCMAKE_CXX_FLAGS=-pg -DCMAKE_EXE_LINKER_FLAGS=-pg -DCMAKE_SHARED_LINKER_FLAGS=-pg ..
+
 if (dev)
     message(STATUS "---- Building with debug options ----")
 
@@ -92,38 +95,6 @@ set_target_properties(sv_merge PROPERTIES DEFINE_SYMBOL "")
 # Need to explicitly enable ExternalProject functionality
 include(ExternalProject)
 
-##############################################
-# ------------------------------------------ #
-# -------- LINKING EXTERNAL LIBRARY -------- #
-# ---------------- ortools ----------------- #
-# ------------------------------------------ #
-##############################################
-
-include(FetchContent)
-FetchContent_Declare(
-        ortools
-        GIT_REPOSITORY https://github.com/google/or-tools.git
-        GIT_TAG        main
-)
-set(BUILD_DEPS ON)
-set(BUILD_DOC OFF)
-set(BUILD_SAMPLES OFF)
-set(BUILD_EXAMPLES OFF)
-FetchContent_MakeAvailable(ortools)
-
-include_directories(
-        ${ortools_SOURCE_DIR}
-        ${ortools_BINARY_DIR}
-        ${absl_SOURCE_DIR}
-        ${protobuf_SOURCE_DIR}/src
-)
-
-message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
-message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
-message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
-message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
-
-add_dependencies(sv_merge ortools)
 
 ##############################################
 # ------------------------------------------ #
@@ -166,14 +137,18 @@ find_package( ZLIB REQUIRED )
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     message(STATUS "Fetching curl")
 
-    # This is not actually linked but it is required for Ubuntu Curl compilation to use http2
-    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
+#    # This is not actually linked but it is required for Ubuntu Curl compilation to use http2
+#    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
+#    find_package(NGHTTP2 REQUIRED)
+
+#    message(STATUS "------------ found nghttp2 ${NGHTTP2_LIBRARIES}")
+
 
     include(FetchContent)
 
     FetchContent_Declare(
             project_curl
-            URL      https://github.com/curl/curl/releases/download/curl-8_3_0/curl-8.3.0.tar.gz
+            URL      https://github.com/curl/curl/releases/download/curl-8_4_0/curl-8.4.0.tar.gz
     )
 
     FetchContent_MakeAvailable(project_curl)
@@ -198,7 +173,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
                 ALL
                 WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
                 COMMAND pwd
-                COMMAND ./configure --with-openssl --with-nghttp2 --enable- --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+                COMMAND ./configure --with-openssl --with-nghttp2 --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
                 COMMAND $(MAKE)
                 COMMAND $(MAKE) install
         )
@@ -370,6 +345,39 @@ add_dependencies(sv_merge minimap2)
 
 target_link_libraries(minimap2 pthread bz2 z)
 
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- ortools ----------------- #
+# ------------------------------------------ #
+##############################################
+
+include(FetchContent)
+FetchContent_Declare(
+        ortools
+        GIT_REPOSITORY https://github.com/google/or-tools.git
+        GIT_TAG        main
+)
+set(BUILD_DEPS ON)
+set(BUILD_DOC OFF)
+set(BUILD_SAMPLES OFF)
+set(BUILD_EXAMPLES OFF)
+FetchContent_MakeAvailable(ortools)
+
+include_directories(
+        ${ortools_SOURCE_DIR}
+        ${ortools_BINARY_DIR}
+        ${absl_SOURCE_DIR}
+        ${protobuf_SOURCE_DIR}/src
+)
+
+message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
+
+add_dependencies(sv_merge ortools)
 
 # ------- Misc -------
 
