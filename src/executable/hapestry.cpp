@@ -1,6 +1,7 @@
 #include "TransitiveMap.hpp"
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"
+#include "Timer.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
 #include "bed.hpp"
@@ -137,6 +138,10 @@ void extract_subsequences_from_region(
     authenticator.update();
     authenticator_mutex.unlock();
 
+    Timer t;
+
+    cerr << t << "Reading BAM: " << bam_path.string() << '\n';
+
     // Iterate each alignment in the ref region
     for_alignment_in_bam_region(bam_path, region.to_string(), [&](Alignment& alignment) {
         if (alignment.is_unmapped() or not alignment.is_primary()){
@@ -145,6 +150,8 @@ void extract_subsequences_from_region(
 
         string name;
         alignment.get_query_name(name);
+
+        cerr << t << name << '\n';
 
         // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
         auto result = query_coords.find(name);
@@ -159,6 +166,8 @@ void extract_subsequences_from_region(
             auto result3 = query_sequences.emplace(name,"");
             auto& x = result3.first->second;
 
+            cerr << t << "Extracting sequence" << '\n';
+
             // Fill the value with the sequence
             // TODO: find a way to not extract the whole sequence? Tricky when using the Alignment abstract class, and
             // fetching from remote BAM
@@ -166,6 +175,8 @@ void extract_subsequences_from_region(
         }
 
         auto& coord = result->second;
+
+        cerr << t << "Parsing cigar" << '\n';
 
         // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
         for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
@@ -207,6 +218,8 @@ void extract_subsequences_from_region(
             null_fn
         );
     });
+
+    cerr << t << "Updating sample-to-read map" << '\n';
 
     for (const auto& [name, coords]: query_coords){
         if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
@@ -312,6 +325,9 @@ void hapestry(
         int64_t flank_length,
         int64_t n_threads
         ){
+    Timer t;
+
+    cerr << t << "Initializing" << '\n';
 
     vector <pair <string,path> > bam_paths;
     GoogleAuthenticator authenticator;
@@ -323,6 +339,8 @@ void hapestry(
     // TODO: use percent of min(a,b) where a,b are lengths of seqs?
     int64_t score_threshold = 200;
 
+    cerr << t << "Constructing windows" << '\n';
+
     if (windows_bed.empty()){
         construct_windows_from_vcf_and_bed(tandem_bed, vcf, regions);
     }
@@ -333,16 +351,19 @@ void hapestry(
         });
     }
 
+    cerr << t << "Loading CSV" << '\n';
+
     // Load BAM paths as a map with sample->bam
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         transmap.add_sample(sample_name);
         bam_paths.emplace_back(sample_name,bam_path);
     });
 
+    cerr << t << "Processing windows" << '\n';
+
     // For each region
     for (auto region: regions){
-        cerr << region.name << ' ' << region.start << ' ' << region.stop << '\n';
-
+        cerr << t << region.name << ' ' << region.start << ' ' << region.stop << '\n';
 
         region.start -= flank_length;
         region.stop += flank_length;
@@ -380,26 +401,14 @@ void hapestry(
             t.join();
         }
 
-//        for (const auto& [sample_name, bam]: bam_paths) {
+//        for (auto& [sample_name, _]: bam_paths){
 //            cerr << sample_name << '\n';
 //
-//            extract_subsequences_from_region(authenticator, sample_name, region, bam, transmap);
-//
+//            cross_align_sample_reads(transmap, score_threshold, sample_name);
 //        }
-
-        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
-            cerr << sample_name << '\n';
-
-            transmap.for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id){
-                const auto& s = transmap.get_sequence(read_id);
-                cerr << read_name << ' ' << s.size() << '\n';
-            });
-        });
-
-//        cross_align_sample_reads(transmap, score_threshold, sample_name);
-
     }
 
+    cerr << t << "Done" << '\n';
 
 }
 

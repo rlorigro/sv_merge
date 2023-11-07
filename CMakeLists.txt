@@ -76,8 +76,8 @@ set(SOURCES
         src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
-        inc/Sequence.hpp
-        inc/TransitiveMap.hpp
+        src/TransitiveMap.cpp
+        src/Timer.cpp
 )
 
 
