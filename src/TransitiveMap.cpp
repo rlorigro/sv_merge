@@ -18,6 +18,16 @@ int64_t TransMap::get_id(const string& name) const{
 }
 
 
+pair<bool,int64_t> TransMap::try_get_id(const string& name) const{
+    return graph.try_name_to_id(name);
+}
+
+
+bool TransMap::has_node(const string& name) const{
+    return graph.try_name_to_id(name).first;
+}
+
+
 const HeteroNode& TransMap::get_node(int64_t id) const{
     return graph.get_node(id);
 }
@@ -91,7 +101,6 @@ void TransMap::add_edge(int64_t a, int64_t b, float weight){
 bool TransMap::has_edge(int64_t a, int64_t b) const{
     return graph.has_edge(a,b);
 }
-
 
 void TransMap::add_edge(const string& a, const string& b, float weight){
     graph.add_edge(a,b,weight);

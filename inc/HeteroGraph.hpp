@@ -52,6 +52,7 @@ template<class T> class HeteroGraph {
 
 public:
     int64_t name_to_id(const string& name) const;
+    pair<bool,int64_t> try_name_to_id(const string& name) const;
 
     /// Building
     T& add_node(const string& name, char type);
@@ -135,6 +136,17 @@ template<class T> int64_t HeteroGraph<T>::name_to_id(const string& name) const{
         throw runtime_error("ERROR: cannot find name: " + name);
     } else {
         return result->second;
+    }
+}
+
+
+template<class T> pair<bool,int64_t> HeteroGraph<T>::try_name_to_id(const string& name) const{
+    auto result = id_map.find(name);
+
+    if (result == id_map.end()) {
+        return {false,-1};
+    } else {
+        return {true,result->second};
     }
 }
 

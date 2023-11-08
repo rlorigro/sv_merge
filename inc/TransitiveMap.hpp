@@ -44,7 +44,9 @@ public:
 
     /// Accessing
     int64_t get_id(const string& name) const;
+    pair<bool,int64_t> try_get_id(const string& name) const;
     bool has_edge(int64_t a, int64_t b) const;
+    bool has_node(const string& name) const;
 
     const HeteroNode& get_node(int64_t id) const;
     const HeteroNode& get_node(const string& name) const;

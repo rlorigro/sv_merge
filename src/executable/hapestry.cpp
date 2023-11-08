@@ -223,7 +223,6 @@ void extract_subsequences_from_region(
                 transmap_mutex.lock();
                 transmap.add_read(name, s);
                 transmap_mutex.unlock();
-
             }
             else{
                 transmap_mutex.lock();
@@ -254,7 +253,6 @@ void extract_subsequences_from_region_thread_fn(
         const auto& [sample_name, bam_path] = bam_paths[i];
 
         Timer t;
-        cerr << t << "starting: " << sample_name << ' ' << region.to_string() << '\n';
 
         extract_subsequences_from_region(
             authenticator,
@@ -266,7 +264,7 @@ void extract_subsequences_from_region_thread_fn(
             transmap_mutex
             );
 
-        cerr << t << "Done: " << sample_name << ' ' << region.to_string() << '\n';
+        cerr << t << "Elapsed for: " << sample_name << ' ' << region.to_string() << '\n';
 
         i = job_index.fetch_add(1);
     }
@@ -324,7 +322,7 @@ void hapestry(
     vector<Region> regions;
 
     // TODO: reserve the hash tables used in transmap so that they approximately have the space needed for n_samples*n_fold_coverage ?
-    TransMap transmap;
+    TransMap sample_only_transmap;
 
     // TODO: use percent of min(a,b) where a,b are lengths of seqs?
     int64_t score_threshold = 200;
@@ -344,7 +342,7 @@ void hapestry(
 
     // Load BAM paths as a map with sample->bam
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
-        transmap.add_sample(sample_name);
+        sample_only_transmap.add_sample(sample_name);
         bam_paths.emplace_back(sample_name,bam_path);
     });
 
@@ -352,6 +350,9 @@ void hapestry(
 
     // For each region
     for (auto region: regions){
+        // Duplicate the base transmap which already has the samples loaded
+        TransMap transmap = sample_only_transmap;
+
         cerr << t << region.name << ' ' << region.start << ' ' << region.stop << '\n';
 
         region.start -= flank_length;
@@ -366,9 +367,9 @@ void hapestry(
         threads.reserve(n_threads);
 
         // Launch threads
-        for (uint64_t t=0; t<n_threads; t++){
+        for (uint64_t n=0; n<n_threads; n++){
             try {
-                cerr << "launching: " << t << '\n';
+                cerr << "launching: " << n << '\n';
                 threads.emplace_back(
                     extract_subsequences_from_region_thread_fn,
                     std::ref(authenticator),
@@ -386,8 +387,8 @@ void hapestry(
         }
 
         // Wait for threads to finish
-        for (auto& t: threads){
-            t.join();
+        for (auto& n: threads){
+            n.join();
         }
 
 //        for (auto& [sample_name, _]: bam_paths){
