@@ -219,7 +219,7 @@ void extract_subsequences_from_region(
         );
     });
 
-    cerr << t << "Updating sample-to-read map" << '\n';
+    cerr << t << "Updating sample-to-read map: " << bam_path << '\n';
 
     for (const auto& [name, coords]: query_coords){
         if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
@@ -250,6 +250,9 @@ void extract_subsequences_from_region(
 //            cerr << transmap.get_sequence(name) << '\n';
         }
     }
+
+    cerr << t << "Done: " << bam_path << '\n';
+
 //    cerr << '\n';
 }
 
