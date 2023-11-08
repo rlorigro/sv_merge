@@ -138,10 +138,6 @@ void extract_subsequences_from_region(
     authenticator.update();
     authenticator_mutex.unlock();
 
-    Timer t;
-
-    cerr << t << "Reading BAM: " << bam_path.string() << '\n';
-
     // Iterate each alignment in the ref region
     for_alignment_in_bam_region(bam_path, region.to_string(), [&](Alignment& alignment) {
         if (alignment.is_unmapped() or not alignment.is_primary()){
@@ -150,8 +146,6 @@ void extract_subsequences_from_region(
 
         string name;
         alignment.get_query_name(name);
-
-        cerr << t << name << '\n';
 
         // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
         auto result = query_coords.find(name);
@@ -166,8 +160,6 @@ void extract_subsequences_from_region(
             auto result3 = query_sequences.emplace(name,"");
             auto& x = result3.first->second;
 
-            cerr << t << "Extracting sequence" << '\n';
-
             // Fill the value with the sequence
             // TODO: find a way to not extract the whole sequence? Tricky when using the Alignment abstract class, and
             // fetching from remote BAM
@@ -175,8 +167,6 @@ void extract_subsequences_from_region(
         }
 
         auto& coord = result->second;
-
-        cerr << t << "Parsing cigar" << '\n';
 
         // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
         for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
@@ -219,8 +209,6 @@ void extract_subsequences_from_region(
         );
     });
 
-    cerr << t << "Updating sample-to-read map: " << bam_path << '\n';
-
     for (const auto& [name, coords]: query_coords){
         if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
             auto i = coords.query_start;
@@ -246,14 +234,8 @@ void extract_subsequences_from_region(
             transmap_mutex.lock();
             transmap.add_edge(sample_name, name);
             transmap_mutex.unlock();
-
-//            cerr << transmap.get_sequence(name) << '\n';
         }
     }
-
-    cerr << t << "Done: " << bam_path << '\n';
-
-//    cerr << '\n';
 }
 
 
@@ -271,6 +253,9 @@ void extract_subsequences_from_region_thread_fn(
     while (i < bam_paths.size()){
         const auto& [sample_name, bam_path] = bam_paths[i];
 
+        Timer t;
+        cerr << t << "starting: " << sample_name << ' ' << region.to_string() << '\n';
+
         extract_subsequences_from_region(
             authenticator,
             authenticator_mutex,
@@ -280,6 +265,8 @@ void extract_subsequences_from_region_thread_fn(
             transmap,
             transmap_mutex
             );
+
+        cerr << t << "Done: " << sample_name << ' ' << region.to_string() << '\n';
 
         i = job_index.fetch_add(1);
     }
@@ -349,7 +336,6 @@ void hapestry(
     }
     else{
         for_region_in_bed_file(tandem_bed, [&](const Region &r) {
-//            cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
             regions.push_back(r);
         });
     }
