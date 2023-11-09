@@ -30,7 +30,7 @@ endif()
 # If using gperftools, run cmake with additional args:
 # cmake -DCMAKE_CXX_FLAGS=-pg -DCMAKE_EXE_LINKER_FLAGS=-pg -DCMAKE_SHARED_LINKER_FLAGS=-pg ..
 
-if (dev)
+if (debug)
     message(STATUS "---- Building with debug options ----")
 
     # Memory debug
@@ -90,7 +90,6 @@ set_target_properties(sv_merge PROPERTIES PREFIX "")
 
 # Eliminate an extraneous -D during compilation.
 set_target_properties(sv_merge PROPERTIES DEFINE_SYMBOL "")
-
 
 # Need to explicitly enable ExternalProject functionality
 include(ExternalProject)
