@@ -138,7 +138,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     message(STATUS "Fetching curl")
 
 #    # This is not actually linked but it is required for Ubuntu Curl compilation to use http2
-#    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
+    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
 #    find_package(NGHTTP2 REQUIRED)
 
 #    message(STATUS "------------ found nghttp2 ${NGHTTP2_LIBRARIES}")
@@ -408,6 +408,7 @@ set(TESTS
         test_heterograph
         test_htslib
         test_hts_gcp
+        test_hts_gcp_speed
         test_interval_graph
         test_minimap2
         test_minimap2_no_io
