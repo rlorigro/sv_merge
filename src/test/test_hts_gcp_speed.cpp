@@ -228,12 +228,12 @@ void iterate_regions_manually(path bam_path, vector<char*>& regions){
 }
 
 
-void test(){
+void test(int type) {
     path bam_path = "gs://fc-bb12940d-f7ba-4515-8a98-42de84f63c34/HPRC/HG002/HG002.bam";
 
     // Construct some arbitrary regions that avoid the telomeres and centromeres of chr20
     vector<string> region_strings;
-    vector<char*> regions;
+    vector<char *> regions;
 
     int64_t left_arm_start = 3'000'000;
     int64_t left_arm_stop = 30'000'000;
@@ -243,11 +243,11 @@ void test(){
     int64_t interval_length = 1000;
     int64_t n_intervals = 1000;
 
-    int64_t gap_length = (left_arm_stop-left_arm_start)/n_intervals;
-    Region r("chr20", left_arm_start, left_arm_start+interval_length);
+    int64_t gap_length = (left_arm_stop - left_arm_start) / n_intervals;
+    Region r("chr20", left_arm_start, left_arm_start + interval_length);
 
     // Fill in left arm regions
-    for (int i=0; i<n_intervals; i++){
+    for (int i = 0; i < n_intervals; i++) {
         r.start += gap_length;
         r.stop += gap_length;
 
@@ -255,12 +255,12 @@ void test(){
         regions.push_back(region_strings.back().data());
     }
 
-    gap_length = (right_arm_stop-right_arm_start)/n_intervals;
+    gap_length = (right_arm_stop - right_arm_start) / n_intervals;
     r.start = right_arm_start;
-    r.stop = right_arm_start+interval_length;
+    r.stop = right_arm_start + interval_length;
 
     // Fill in right arm regions
-    for (int i=0; i<n_intervals; i++){
+    for (int i = 0; i < n_intervals; i++) {
         r.start += gap_length;
         r.stop += gap_length;
 
@@ -269,21 +269,43 @@ void test(){
     }
 
     // Test working
-    for (int64_t i=0; i<regions.size(); i++){
-        cerr << regions[i] << '\n';
-    }
+//    for (int64_t i = 0; i < regions.size(); i++) {
+//        cerr << regions[i] << '\n';
+//    }
 
-    cerr << "Iterating chr20" << '\n';
-    iterate_region(bam_path, "chr20");
-    cerr << "Iterating 2000 regions with hts_iter_regions" << '\n';
-    iterate_regions(bam_path, regions);
-    cerr << "Iterating 2000 regions with hts_iter_querys loop" << '\n';
-    iterate_regions_manually(bam_path, regions);
+    if (type == 0) {
+        cerr << "Iterating chr20" << '\n';
+        iterate_region(bam_path, "chr20");
+    }
+    else if (type == 1) {
+        cerr << "Iterating 2000 regions with hts_iter_regions" << '\n';
+        iterate_regions(bam_path, regions);
+    }
+    else if (type == 2) {
+        cerr << "Iterating 2000 regions with hts_iter_querys loop" << '\n';
+        iterate_regions_manually(bam_path, regions);
+    }
+    else{
+        throw runtime_error("ERROR: cannot parse user provided type index");
+    }
 }
 
 
-int main(){
-    test();
+int main (int argc, char* argv[]){
+    int type;
+
+    CLI::App app{"App description"};
+
+    app.add_option(
+            "--type",
+            type,
+            "Maximum number of threads to use")
+            ->required();
+
+    CLI11_PARSE(app, argc, argv);
+
+    test(type);
 
     return 0;
 }
+
