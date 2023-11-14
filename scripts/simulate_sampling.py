@@ -17,7 +17,7 @@ def coverage_plot():
     max_frequency = 0.1
     f_step_size = 0.001
 
-    # Coverage threshold which we arbitraily define as "bad"
+    # Coverage threshold which we arbitrarily define
     threshold = 100.0
 
     af_steps = int(round((max_frequency - min_frequency) / f_step_size))
@@ -78,9 +78,12 @@ def poisson_plot():
     max_frequency = 0.1
     f_step_size = 0.001
 
-    # Coverage threshold which we arbitraily define
+    # Probability which we arbitrarily define for plotting purposes
     max_threshold = 1.0 - 1e-12
     min_threshold = 0.0 + 1e-12
+
+    # Setting the threshold for the CDF of the Poisson, how many reads do we want to observe?
+    min_observed_reads = 20
 
     af_steps = int(round((max_frequency - min_frequency) / f_step_size))
     coverage_steps = int(round((max_coverage - min_coverage) / c_step_size))
@@ -104,7 +107,7 @@ def poisson_plot():
             n_reads = c * genome_length * sample_size / read_length
             mu = n_reads/(genome_length*sample_size) * (sv_length+q-o)*f*sample_size
 
-            p = poisson.cdf(20, mu)
+            p = poisson.cdf(min_observed_reads, mu)
 
             matrix[i,j] = 1 - p
 
@@ -124,7 +127,7 @@ def poisson_plot():
     axes.get_xaxis().set_major_formatter(FuncFormatter(lambda x, p: '%.3f' % (min_coverage + float(x)*c_step_size)))
 
     cbar = pyplot.colorbar()
-    cbar.ax.set_ylabel('Effective allele coverage', rotation=270)
+    cbar.ax.set_ylabel('Probability of >%d reads in %dbp region' % (min_observed_reads, int(sv_length)), rotation=270, labelpad=15)
     # pyplot.tight_layout()
 
     axes.set_ylabel("Allele frequency")
