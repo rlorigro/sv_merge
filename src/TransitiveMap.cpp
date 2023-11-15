@@ -98,9 +98,15 @@ void TransMap::add_edge(int64_t a, int64_t b, float weight){
 }
 
 
+pair<bool,float> TransMap::try_get_edge_weight(int64_t id_a, int64_t id_b) const{
+    return graph.try_get_edge_weight(id_a, id_b);
+}
+
+
 bool TransMap::has_edge(int64_t a, int64_t b) const{
     return graph.has_edge(a,b);
 }
+
 
 void TransMap::add_edge(const string& a, const string& b, float weight){
     graph.add_edge(a,b,weight);

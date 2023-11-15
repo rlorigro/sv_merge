@@ -348,10 +348,12 @@ void hapestry(
 
     cerr << t << "Processing windows" << '\n';
 
+    unordered_map<Region,TransMap> region_transmaps;
+
     // For each region
     for (auto region: regions){
         // Duplicate the base transmap which already has the samples loaded
-        TransMap transmap = sample_only_transmap;
+        auto& transmap = region_transmaps.emplace(region, sample_only_transmap).first->second;
 
         cerr << t << region.name << ' ' << region.start << ' ' << region.stop << '\n';
 

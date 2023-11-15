@@ -33,10 +33,14 @@ endif()
 if (debug)
     message(STATUS "---- Building with debug options ----")
 
-    # Memory debug
-    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
-    set(ASAN_OPTIONS=check_initialization_order=1)
-    set(ASAN_OPTIONS=detect_leaks=1)
+    if (NOT no_asan OR NOT DEFINED no_asan)
+        # Memory debug
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
+        set(ASAN_OPTIONS=check_initialization_order=1)
+        set(ASAN_OPTIONS=detect_leaks=1)
+    else()
+        set(CMAKE_CXX_FLAGS "-fexceptions")
+    endif()
 
     add_definitions(-ggdb3 -Og -Wall)       # Debugging + minimal optimization
 
@@ -412,6 +416,7 @@ set(TESTS
         test_minimap2
         test_minimap2_no_io
         test_ortools
+        test_read_clustering
         test_transmap
         test_wfa2
         )

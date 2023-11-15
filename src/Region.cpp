@@ -22,6 +22,11 @@ Region::Region(const string& name, int64_t start, int64_t stop):
 {}
 
 
+bool Region::operator==(const Region& other) const{
+    return name == other.name and start == other.start and stop == other.stop;
+}
+
+
 Region::Region(string& region_string) {
     bool found_colon = false;
     bool found_hyphen = false;

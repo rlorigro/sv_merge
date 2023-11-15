@@ -66,6 +66,7 @@ public:
     T& get_node(const string& name);
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
+    pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
 
     bool has_edge(int64_t id_a, int64_t id_b) const;
 
@@ -188,22 +189,29 @@ template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, floa
 }
 
 
+template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) const {
+    return try_get_edge_weight(id_a, id_b).first;
+}
+
+
 // TODO: Untested
-template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) const{
+template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t id_a, int64_t id_b) const{
+    cerr << id_a << ',' << id_b << '\n';
+
     auto r1 = edges.find(id_a);
     if (r1 == edges.end()){
-        return false;
+        return {false,0};
     }
 
     auto result_a = nodes.find(id_a);
     auto result_b = nodes.find(id_b);
 
     if (result_a == nodes.end()){
-        return false;
+        return {false,0};
     }
 
     if (result_b == nodes.end()){
-        return false;
+        return {false,0};
     }
 
     auto type_b = result_b->second.type;
@@ -211,15 +219,17 @@ template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) cons
     // Undirected by default
     auto r2 = r1->second.find(type_b);
     if (r2 == r1->second.end()){
-        return false;
+        return {false,0};
     }
-
+    cerr << "6" << '\n';
     auto r3 = r2->second.find(id_b);
+    cerr << "6b" << '\n';
     if (r3 == r2->second.end()){
-        return false;
+        return {false,0};
     }
 
-    return true;
+    cerr << "7" << '\n';
+    return {true,r3->second};
 }
 
 
