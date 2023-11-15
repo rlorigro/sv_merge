@@ -66,6 +66,8 @@ public:
     T& get_node(const string& name);
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
+    int64_t get_node_count() const;
+    int64_t get_edge_count(int64_t id, char type) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
 
     bool has_edge(int64_t id_a, int64_t id_b) const;
@@ -122,6 +124,11 @@ template<class T> const T& HeteroGraph<T>::get_node(const string& name) const {
 
 template<class T> T& HeteroGraph<T>::get_node(int64_t id) {
     return nodes.at(id);
+}
+
+
+template<class T> int64_t HeteroGraph<T>::get_node_count() const{
+    return nodes.size();
 }
 
 
@@ -196,8 +203,6 @@ template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) cons
 
 // TODO: Untested
 template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t id_a, int64_t id_b) const{
-    cerr << id_a << ',' << id_b << '\n';
-
     auto r1 = edges.find(id_a);
     if (r1 == edges.end()){
         return {false,0};
@@ -221,14 +226,12 @@ template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t i
     if (r2 == r1->second.end()){
         return {false,0};
     }
-    cerr << "6" << '\n';
+
     auto r3 = r2->second.find(id_b);
-    cerr << "6b" << '\n';
     if (r3 == r2->second.end()){
         return {false,0};
     }
 
-    cerr << "7" << '\n';
     return {true,r3->second};
 }
 
@@ -297,6 +300,25 @@ template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, con
             f(nodes.at(id_b), id_b);
         }
     }
+}
+
+
+template<class T> int64_t HeteroGraph<T>::get_edge_count(int64_t id, char type) const{
+    auto result = edges.find(id);
+
+    // No neighbors
+    if (result == edges.end()){
+        return -1;
+    }
+
+    // Iterate all types indiscriminately
+    auto result2 = result->second.find(type);
+
+    if (result2 == result->second.end()){
+        return -1;
+    }
+
+    return int64_t(result2->second.size());
 }
 
 

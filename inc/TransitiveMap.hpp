@@ -48,6 +48,8 @@ public:
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
     bool has_edge(int64_t a, int64_t b) const;
     bool has_node(const string& name) const;
+    int64_t get_node_count() const;
+    int64_t get_edge_count(int64_t id, char type) const;
 
     const HeteroNode& get_node(int64_t id) const;
     const HeteroNode& get_node(const string& name) const;

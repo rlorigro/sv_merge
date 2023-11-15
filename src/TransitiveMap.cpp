@@ -23,8 +23,13 @@ pair<bool,int64_t> TransMap::try_get_id(const string& name) const{
 }
 
 
-bool TransMap::has_node(const string& name) const{
-    return graph.try_name_to_id(name).first;
+int64_t TransMap::get_node_count() const{
+    return graph.get_node_count();
+}
+
+
+int64_t TransMap::get_edge_count(int64_t id, char type) const{
+    return graph.get_edge_count(id, type);
 }
 
 
