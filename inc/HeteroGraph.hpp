@@ -41,8 +41,6 @@ public:
 };
 
 
-
-
 template<class T> class HeteroGraph {
     // node_id --> type_of_neighbor --> neighbor_id --> weight
     unordered_map<int64_t, unordered_map<char, unordered_map <int64_t, float> > > edges;
@@ -60,6 +58,7 @@ public:
     void add_edge(const string& name_a, const string& name_b, float weight);
     void add_edge(int64_t id_a, int64_t id_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
+    void remove_edge(int64_t id_a, int64_t id_b);
 
     /// Accessing
     const T& get_node(const string& name) const;
@@ -240,6 +239,11 @@ template<class T> void HeteroGraph<T>::remove_edge(const string& name_a, const s
     auto id_a = name_to_id(name_a);
     auto id_b = name_to_id(name_b);
 
+    remove_edge(id_a, id_b);
+}
+
+
+template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
     auto type_a = nodes.at(id_a).type;
     auto type_b = nodes.at(id_b).type;
 

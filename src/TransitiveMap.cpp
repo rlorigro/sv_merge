@@ -113,6 +113,11 @@ bool TransMap::has_edge(int64_t a, int64_t b) const{
 }
 
 
+void TransMap::remove_edge(int64_t a, int64_t b){
+    return graph.remove_edge(a,b);
+}
+
+
 void TransMap::add_edge(const string& a, const string& b, float weight){
     graph.add_edge(a,b,weight);
 }

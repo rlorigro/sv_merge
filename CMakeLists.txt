@@ -76,8 +76,9 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-        src/optimizer.cpp
         src/pair_hash.cpp
+        src/path_optimizer.cpp
+        src/read_optimizer.cpp
         src/Region.cpp
         src/Sequence.cpp
         src/TransitiveMap.cpp

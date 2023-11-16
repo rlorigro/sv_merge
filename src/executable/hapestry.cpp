@@ -1,3 +1,4 @@
+#include "read_optimizer.hpp"
 #include "TransitiveMap.hpp"
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"
@@ -6,8 +7,8 @@
 #include "misc.hpp"
 #include "bed.hpp"
 #include "bam.hpp"
-#include "bindings/cpp/WFAligner.hpp"
 
+#include "bindings/cpp/WFAligner.hpp"
 using namespace wfa;
 
 #include <unordered_map>
@@ -24,6 +25,7 @@ using std::unordered_map;
 using std::runtime_error;
 using std::exception;
 using std::ifstream;
+using std::ofstream;
 using std::thread;
 using std::atomic;
 using std::mutex;
@@ -286,6 +288,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
             auto& seq_b = transmap.get_sequence(b);
 
             if (llabs(int64_t(seq_a.size()) - int64_t(seq_b.size())) > score_threshold){
+                cerr << "skipping edge: " << a << ',' << b << " l: " << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << '\n';
                 return;
             }
 
@@ -293,7 +296,8 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 aligner.alignEnd2End(seq_a, seq_b);
                 auto score = aligner.getAlignmentScore();
 
-                transmap.add_edge(a,b, float(score));
+                // WFA creates negative scores for "distance", we make it positive again
+                transmap.add_edge(a,b, float(-score));
 
                 cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << score << '\n';
             }
@@ -303,6 +307,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 
 
 void hapestry(
+        path output_dir,
         path windows_bed,               // Override the interval graph if this is provided
         path tandem_bed,
         path bam_csv,
@@ -313,6 +318,16 @@ void hapestry(
         int64_t flank_length,
         int64_t n_threads
         ){
+    // Flag to control how much logging/dumping
+    bool debug = true;
+
+    if (ghc::filesystem::exists(output_dir)){
+        throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
+    }
+    else{
+        ghc::filesystem::create_directories(output_dir);
+    }
+
     Timer t;
 
     cerr << t << "Initializing" << '\n';
@@ -393,11 +408,31 @@ void hapestry(
             n.join();
         }
 
-//        for (auto& [sample_name, _]: bam_paths){
-//            cerr << sample_name << '\n';
-//
-//            cross_align_sample_reads(transmap, score_threshold, sample_name);
-//        }
+
+        for (auto& [sample_name, _]: bam_paths){
+            cerr << sample_name << '\n';
+            auto sample_id = transmap.get_id(sample_name);
+
+            if (debug){
+                path p = output_dir / (sample_name + "_extracted_reads.fasta");
+                ofstream file(p);
+
+                transmap.for_each_read_of_sample(sample_name, [&](const string& name, int64_t id){
+                    file << '>' << name << '\n';
+                    file << transmap.get_sequence(id) << '\n';
+                });
+            }
+
+            cross_align_sample_reads(transmap, score_threshold, sample_name);
+
+            CpModelBuilder model;
+            ReadVariables vars;
+            vector<int64_t> representatives;
+
+            optimize_reads(transmap, sample_id, representatives);
+
+
+        }
     }
 
     cerr << t << "Done" << '\n';
@@ -406,6 +441,7 @@ void hapestry(
 
 
 int main (int argc, char* argv[]){
+    path output_dir;
     path windows_bed;
     path tandem_bed;
     path bam_csv;
@@ -421,7 +457,12 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--n_threads",
             n_threads,
-            "Maximum number of threads to use")
+            "Maximum number of threads to use");
+
+    app.add_option(
+            "--output_dir",
+            output_dir,
+            "Path to output directory which must not exist yet")
             ->required();
 
     app.add_option(
@@ -463,6 +504,7 @@ int main (int argc, char* argv[]){
     CLI11_PARSE(app, argc, argv);
 
     hapestry(
+        output_dir,
         windows_bed,
         tandem_bed,
         bam_csv,

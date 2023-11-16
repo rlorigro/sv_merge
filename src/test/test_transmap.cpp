@@ -7,7 +7,7 @@ using std::cerr;
 
 #include "pair_hash.hpp"
 #include "TransitiveMap.hpp"
-#include "optimizer.hpp"
+#include "path_optimizer.hpp"
 
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;

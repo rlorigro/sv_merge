@@ -42,6 +42,8 @@ public:
     void add_edge(int64_t a, int64_t b, float weight);
     void add_edge(const string& a, const string& b, float weight);
 
+    void remove_edge(int64_t a, int64_t b);
+
     /// Accessing
     int64_t get_id(const string& name) const;
     pair<bool,int64_t> try_get_id(const string& name) const;
