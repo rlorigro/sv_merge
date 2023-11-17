@@ -28,7 +28,7 @@ void construct_read_model(
 
     // TODO use BFS/connected components to enumerate edges instead, some edges won't be present in practice
     transmap.for_each_read_of_sample(sample_id, [&](int64_t id_a){
-        cerr << id_a << ' ' << transmap.get_node(id_a).name << '\n';
+//        cerr << id_a << ' ' << transmap.get_node(id_a).name << '\n';
 
         transmap.for_each_read_of_sample(sample_id, [&](int64_t id_b){
             if (id_a == id_b){
@@ -45,7 +45,7 @@ void construct_read_model(
             pair<int64_t,int64_t> p = {id_a, id_b};
             auto& e = vars.edges.emplace(p, model.NewBoolVar()).first->second;
 
-            cerr << '\t' <<  transmap.get_node(id_a).name << "->" << transmap.get_node(id_b).name << ' ' << w << '\n';
+//            cerr << '\t' <<  transmap.get_node(id_a).name << "->" << transmap.get_node(id_b).name << ' ' << w << '\n';
 
             // Keep track of which edges would make id_a a parent
             parent_edge_sums[id_a] += e;
@@ -96,17 +96,14 @@ void construct_read_model(
 }
 
 
-void optimize_reads(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives){
-    CpModelBuilder model;
-    ReadVariables vars;
-
-    construct_read_model(transmap, sample_id, model, vars, representatives);
-
-    model.Minimize(vars.cost_d);
+void parse_read_model_solution(
+        const CpSolverResponse& response,
+        const ReadVariables& vars,
+        TransMap& transmap,
+        vector<int64_t>& representatives
+        ){
 
     cerr << '\n';
-
-    const CpSolverResponse response = Solve(model.Build());
 
     if (response.status() == CpSolverStatus::OPTIMAL || response.status() == CpSolverStatus::FEASIBLE) {
         cerr << "Maximum of objective function: " << response.objective_value() << '\n';
@@ -127,15 +124,21 @@ void optimize_reads(TransMap& transmap, int64_t sample_id, vector<int64_t>& repr
             }
         }
 
-        // Iterate the child assignment variables and print them
+        // Iterate the edges and remove any that are not part of the solution
         for (const auto& [e,var]: vars.edges){
             auto [a,b] = e;
-            auto name_a = transmap.get_node(a).name;
-            auto name_b = transmap.get_node(b).name;
-            auto [success, w] = transmap.try_get_edge_weight(a,b);
 
-            bool is_assigned = (SolutionIntegerValue(response, var) == 1);
-            cerr << is_assigned << ' ' << name_a << "->" << name_b << ' ' << w << '\n';
+            // Model uses a directed graph, but transmap uses undirected. We remove the edge in transmap if neither
+            // direction was used by the solution
+            if (a < b){
+                auto var_reverse = vars.edges.at({b,a});
+                bool f_is_assigned = (SolutionIntegerValue(response, var) == 1);
+                bool r_is_assigned = (SolutionIntegerValue(response, var_reverse) == 1);
+
+                if (not (f_is_assigned or r_is_assigned)){
+                    transmap.remove_edge(a,b);
+                }
+            }
         }
 
         for (auto& item: results){
@@ -151,6 +154,64 @@ void optimize_reads(TransMap& transmap, int64_t sample_id, vector<int64_t>& repr
     cerr << "Statistics" << '\n';
     cerr << CpSolverResponseStats(response) << '\n';
 
+}
+
+
+void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives){
+    CpModelBuilder model;
+    ReadVariables vars;
+
+    construct_read_model(transmap, sample_id, model, vars, representatives);
+
+    model.Minimize(vars.cost_d);
+
+    cerr << '\n';
+
+    const CpSolverResponse response = Solve(model.Build());
+
+    parse_read_model_solution(response, vars, transmap, representatives);
+}
+
+
+void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives){
+    CpModelBuilder model;
+    ReadVariables vars;
+
+    construct_read_model(transmap, sample_id, model, vars, representatives);
+
+    // First find one extreme of the pareto set
+    model.Minimize(vars.cost_d);
+
+    const CpSolverResponse response_d = Solve(model.Build());
+
+    auto n_max = SolutionIntegerValue(response_d, vars.cost_n);
+    auto d_min = SolutionIntegerValue(response_d, vars.cost_d);
+
+    // Then find the other extreme of the pareto set
+    model.Minimize(vars.cost_n);
+
+    const CpSolverResponse response_n = Solve(model.Build());
+
+    auto n_min = SolutionIntegerValue(response_n, vars.cost_n);
+    auto d_max = SolutionIntegerValue(response_n, vars.cost_d);
+
+    // Use pareto extremes to normalize the ranges of each objective and then jointly minimize distance from (0,0)
+    auto d_norm = LinearExpr(vars.cost_d);
+    d_norm *= n_min;
+    auto n_norm = LinearExpr(vars.cost_n);
+    n_norm *= d_min;
+
+    auto d_square = model.NewIntVar({d_min*d_min*n_min, d_max*d_max*n_min});
+    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
+
+    auto n_square = model.NewIntVar({n_min*n_min*d_min, n_max*n_max*d_min});
+    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
+
+    model.Minimize(n_square + d_square);
+
+    const CpSolverResponse response_n_d = Solve(model.Build());
+
+    parse_read_model_solution(response_n_d, vars, transmap, representatives);
 }
 
 

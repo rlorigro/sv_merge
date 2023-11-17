@@ -56,7 +56,10 @@ void construct_read_model(
         ReadVariables& vars,
         vector<int64_t>& representatives);
 
-void optimize_reads(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
+void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
+
+
+void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
 
 
 }

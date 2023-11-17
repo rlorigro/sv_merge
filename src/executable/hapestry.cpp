@@ -288,7 +288,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
             auto& seq_b = transmap.get_sequence(b);
 
             if (llabs(int64_t(seq_a.size()) - int64_t(seq_b.size())) > score_threshold){
-                cerr << "skipping edge: " << a << ',' << b << " l: " << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << '\n';
+//                cerr << "skipping edge: " << a << ',' << b << " l: " << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << '\n';
                 return;
             }
 
@@ -429,8 +429,7 @@ void hapestry(
             ReadVariables vars;
             vector<int64_t> representatives;
 
-            optimize_reads(transmap, sample_id, representatives);
-
+            optimize_reads_with_d_and_n(transmap, sample_id, representatives);
 
         }
     }
