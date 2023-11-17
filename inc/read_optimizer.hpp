@@ -29,6 +29,8 @@ using operations_research::sat::BoolVar;
 using operations_research::sat::CpSolverResponse;
 using operations_research::sat::CpSolverStatus;
 using operations_research::sat::LinearExpr;
+using operations_research::sat::SolveWithParameters;
+using operations_research::sat::SatParameters;
 
 
 namespace sv_merge {
@@ -55,6 +57,7 @@ void construct_read_model(
         CpModelBuilder& model,
         ReadVariables& vars,
         vector<int64_t>& representatives);
+
 
 void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
 

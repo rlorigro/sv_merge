@@ -196,22 +196,29 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<i
     auto d_max = SolutionIntegerValue(response_n, vars.cost_d);
 
     // Use pareto extremes to normalize the ranges of each objective and then jointly minimize distance from (0,0)
-    auto d_norm = LinearExpr(vars.cost_d);
-    d_norm *= n_min;
-    auto n_norm = LinearExpr(vars.cost_n);
-    n_norm *= d_min;
+    auto d_norm = model.NewIntVar({d_max*d_max*n_min, d_max*d_max*n_min});
+    auto n_norm = model.NewIntVar({n_max*n_max*d_min, n_max*n_max*d_min});
 
-    auto d_square = model.NewIntVar({d_min*d_min*n_min, d_max*d_max*n_min});
+    model.AddEquality(d_norm, vars.cost_d*n_min);
+    model.AddEquality(n_norm, vars.cost_d*d_min);
+
+    auto d_square = model.NewIntVar({d_max*d_max*n_min, d_max*d_max*n_min});
     model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
 
-    auto n_square = model.NewIntVar({n_min*n_min*d_min, n_max*n_max*d_min});
+    auto n_square = model.NewIntVar({n_max*n_max*d_min, n_max*n_max*d_min});
     model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
 
     model.Minimize(n_square + d_square);
 
-    const CpSolverResponse response_n_d = Solve(model.Build());
+    SatParameters parameters;
+    parameters.set_log_search_progress(true);
+
+    const CpSolverResponse response_n_d = SolveWithParameters(model.Build(), parameters);
+
+//    const CpSolverResponse response_n_d = Solve(model.Build());
 
     parse_read_model_solution(response_n_d, vars, transmap, representatives);
+    throw runtime_error("DEBUG EXIT EARLY");
 }
 
 
