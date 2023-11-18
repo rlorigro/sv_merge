@@ -367,6 +367,9 @@ void hapestry(
 
     // For each region
     for (auto region: regions){
+        path output_subdir = output_dir / region.to_string('_');
+        ghc::filesystem::create_directories(output_subdir);
+
         // Duplicate the base transmap which already has the samples loaded
         auto& transmap = region_transmaps.emplace(region, sample_only_transmap).first->second;
 
@@ -410,11 +413,11 @@ void hapestry(
 
 
         for (auto& [sample_name, _]: bam_paths){
-            cerr << sample_name << '\n';
+            cerr << sample_name << ' ' << region.to_string() << '\n';
             auto sample_id = transmap.get_id(sample_name);
 
             if (debug){
-                path p = output_dir / (sample_name + "_extracted_reads.fasta");
+                path p = output_subdir / (sample_name + "_extracted_reads.fasta");
                 ofstream file(p);
 
                 transmap.for_each_read_of_sample(sample_name, [&](const string& name, int64_t id){

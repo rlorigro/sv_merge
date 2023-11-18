@@ -22,7 +22,7 @@ public:
     int64_t start{};
     int64_t stop{};
 
-    string to_string() const;
+    string to_string(char sep=':') const;
 
     explicit Region(string &region_string);
     Region(string& name, int64_t start, int64_t stop);

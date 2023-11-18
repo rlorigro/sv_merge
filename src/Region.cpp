@@ -66,8 +66,9 @@ Region::Region(string& region_string) {
 }
 
 
-string Region::to_string() const{
-    return name + ":" + std::to_string(start) + "-" + std::to_string(stop);
+string Region::to_string(char sep) const{
+    return name + sep + std::to_string(start) + "-" + std::to_string(stop);
 }
+
 
 }

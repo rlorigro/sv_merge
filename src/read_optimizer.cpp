@@ -196,16 +196,16 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<i
     int64_t d_max = SolutionIntegerValue(response_n, vars.cost_d);
 
     // Use pareto extremes to normalize the ranges of each objective and then jointly minimize distance from (0,0)
-    auto d_norm = model.NewIntVar({n_min*n_min*d_min, d_max*d_max*n_min*2});
-    auto n_norm = model.NewIntVar({n_min*n_min*d_min, d_max*d_max*n_min*2});
+    auto d_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
+    auto n_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
 
     model.AddEquality(d_norm, vars.cost_d*n_min);
     model.AddEquality(n_norm, vars.cost_n*d_min);
 
-    auto d_square = model.NewIntVar({n_min*n_min*d_min, d_max*d_max*n_min*2});
+    auto d_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
     model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
 
-    auto n_square = model.NewIntVar({n_min*n_min*d_min, d_max*d_max*n_min*2});
+    auto n_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
     model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
 
     model.Minimize(n_square + d_square);
