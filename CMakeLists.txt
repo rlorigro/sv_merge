@@ -403,6 +403,7 @@ endif()
 # -------- TESTS --------
 
 set(TESTS
+        demo_multi_objective_ortools
         test_bam
         test_bed
         test_fasta
