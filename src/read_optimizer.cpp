@@ -210,6 +210,25 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<i
 
     model.Minimize(n_square + d_square);
 
+//    auto n_range = n_max - n_min;
+//    n_range *= n_range;
+//    auto d_range = d_max - d_min;
+//    d_range *= d_range;
+//
+//    auto d_norm = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    auto n_norm = model.NewIntVar({0, d_max*d_max*n_range*2});
+//
+//    model.AddEquality(d_norm, (vars.cost_d-d_min));
+//    model.AddEquality(n_norm, (vars.cost_n-n_min));
+//
+//    auto d_square = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
+//
+//    auto n_square = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
+//
+//    model.Minimize(n_square*d_range + d_square*n_range);
+
 //    SatParameters parameters;
 //    parameters.set_log_search_progress(true);
 //    const CpSolverResponse response_n_d = SolveWithParameters(model.Build(), parameters);

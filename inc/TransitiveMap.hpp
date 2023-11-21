@@ -26,6 +26,7 @@ class TransMap {
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,string> sequences;
 
+    int64_t min_usable_id = 3;
     string sample_node_name;
     string read_node_name;
     string path_node_name;
@@ -57,6 +58,8 @@ public:
     const HeteroNode& get_node(const string& name) const;
     const string& get_sequence(const string& name) const;
     const string& get_sequence(int64_t id) const;
+
+    void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;

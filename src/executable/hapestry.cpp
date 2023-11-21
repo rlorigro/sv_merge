@@ -434,6 +434,24 @@ void hapestry(
 
             optimize_reads_with_d_and_n(transmap, sample_id, representatives);
 
+            if (debug){
+                path p = output_subdir / (sample_name + "_clusters.txt");
+                ofstream file(p);
+
+                for (auto a: representatives){
+                    cerr << transmap.get_node(a).name << '\n';
+                    file << transmap.get_node(a).name << '\n';
+                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
+                    file << transmap.get_sequence(a) << '\n';
+                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
+                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
+                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
+                        file << transmap.get_sequence(b) << '\n';
+                    });
+                }
+            }
+
+
         }
     }
 

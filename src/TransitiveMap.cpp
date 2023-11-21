@@ -187,6 +187,16 @@ void TransMap::for_each_sample(const function<void(const string& name, int64_t i
 }
 
 
+void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const{
+    graph.for_each_neighbor_of_type(id, type, [&](int64_t id){
+        if (id < min_usable_id){
+            return;
+        }
+        f(id);
+    });
+}
+
+
 void TransMap::for_each_path(const function<void(const string& name, int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(path_node_name, 'P', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, id);
