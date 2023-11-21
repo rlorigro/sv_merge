@@ -184,6 +184,7 @@ public:
     virtual void get_query_sequence(string& result) = 0;
     virtual void get_query_name(string& result) const = 0;
     virtual int64_t get_ref_start() const = 0;
+    virtual int64_t get_ref_stop() const = 0;
     virtual int64_t get_query_start() const = 0;
     virtual bool is_unmapped() const = 0;
     virtual bool is_reverse() const = 0;

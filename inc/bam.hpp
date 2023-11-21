@@ -3,12 +3,13 @@
 #include <utility>
 #include <string>
 #include <array>
+#include <span>
 
 using std::function;
 using std::string;
 using std::array;
 using std::pair;
-using std::pair;
+using std::span;
 
 #include "htslib/include/htslib/sam.h"
 #include "Filesystem.hpp"
@@ -57,6 +58,7 @@ public:
     void get_query_name(string& result) const override;
     [[nodiscard]] int64_t get_query_length() const override;
     [[nodiscard]] int64_t get_ref_start() const override;
+    [[nodiscard]] int64_t get_ref_stop() const override;
     [[nodiscard]] int64_t get_query_start() const override;
     [[nodiscard]] bool is_unmapped() const override;
     [[nodiscard]] bool is_reverse() const override;
@@ -99,6 +101,12 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f);
 
+void for_alignment_in_bam_subregions(
+        path bam_path,
+        string region,
+        vector<interval_t>& subregions,
+        const function<void(Alignment& alignment, const span<interval_t>& overlapping_regions)>& f
+);
 
 
 }

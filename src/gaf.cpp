@@ -330,6 +330,11 @@ int64_t GafAlignment::get_ref_start() const{
 }
 
 
+int64_t GafAlignment::get_ref_stop() const{
+    return path_stop;
+}
+
+
 bool GafAlignment::is_unmapped() const{
     // It is not possible for a PAF/GAF alignment to represent an unmapped query, so is_unmapped always returns false
     return false;

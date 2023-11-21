@@ -8,13 +8,16 @@
 #include <ranges>
 #include <deque>
 #include <cmath>
+#include <span>
 
+using std::priority_queue;
 using std::runtime_error;
 using std::to_string;
 using std::deque;
 using std::swap;
 using std::cerr;
 using std::cout;
+using std::span;
 using std::min;
 using std::max;
 
@@ -52,6 +55,11 @@ int64_t HtsAlignment::get_query_length() const {
 
 int64_t HtsAlignment::get_ref_start() const {
     return int64_t(hts_alignment->core.pos);
+}
+
+
+int64_t HtsAlignment::get_ref_stop() const {
+    return int64_t(bam_endpos(hts_alignment));
 }
 
 
@@ -262,6 +270,88 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
         a = HtsAlignment(alignment);
 
         f(a);
+    }
+
+    bam_destroy1(alignment);
+    hts_itr_destroy(itr);
+    bam_hdr_destroy(bam_header);
+    hts_close(bam_file);
+    hts_idx_destroy(bam_index);
+}
+
+
+void for_alignment_in_bam_subregions(
+        path bam_path,
+        string region,
+        vector<interval_t>& subregions,
+        const function<void(Alignment& alignment, const span<interval_t>& overlapping_regions)>& f
+        ){
+
+    // How to sort intervals with structure (a,b) by start (a)
+    auto left_comparator = [](const interval_t& a, const interval_t& b){
+        return a.first < b.first;
+    };
+
+    sort(subregions.begin(), subregions.end(), left_comparator);
+
+    samFile *bam_file;
+    bam_hdr_t *bam_header;
+    hts_idx_t *bam_index;
+    bam1_t *alignment;
+
+    bam_file = nullptr;
+    bam_index = nullptr;
+    alignment = bam_init1();
+
+    if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
+        throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
+    }
+
+    // bam index
+    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+    }
+
+    // bam header
+    if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {
+        throw runtime_error("ERROR: Cannot open header for bam file: " + bam_path.string() + "\n");
+    }
+
+    hts_itr_t *itr = sam_itr_querys(bam_index, bam_header, region.c_str());
+
+    HtsAlignment a(alignment);
+
+    int64_t i_start = 0;
+
+    // Iterate a SORTED bam
+    while (sam_itr_next(bam_file, itr, alignment) >= 0) {
+        if (alignment->core.tid < 0) {
+            continue;
+        }
+
+        if (i_start >= subregions.size()){
+            continue;
+        }
+
+        a = HtsAlignment(alignment);
+
+
+        // Set the iterator beyond regions that have been passed by the alignments already
+        while (a.get_ref_start() > subregions[i_start].first){
+            i_start++;
+        }
+
+        auto i_stop = i_start;
+        auto alignment_stop = a.get_ref_stop();
+
+        // Iterate all the subregions that start before/at the alignment end
+        while (i_stop < subregions.size() and alignment_stop >= subregions[i_stop].first){
+            i_stop++;
+        }
+
+        auto s = span(subregions).subspan(i_start, i_stop - i_start);
+
+        f(a, s);
     }
 
     bam_destroy1(alignment);

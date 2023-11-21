@@ -87,6 +87,7 @@ public:
     void get_query_sequence(string& result, int64_t start, int64_t stop) override;
     void get_query_name(string& result) const override;
     [[nodiscard]] int64_t get_ref_start() const override;
+    [[nodiscard]] int64_t get_ref_stop() const override;
     [[nodiscard]] bool is_unmapped() const override;
 };
 
