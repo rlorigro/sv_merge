@@ -104,8 +104,8 @@ void for_read_in_bam_region(path bam_path, string region, const function<void(Se
 void for_alignment_in_bam_subregions(
         path bam_path,
         string region,
-        vector<interval_t>& subregions,
-        const function<void(Alignment& alignment, const span<interval_t>& overlapping_regions)>& f
+        const vector<Region>& subregions,
+        const function<void(Alignment& alignment, span<const Region>& overlapping_regions)>& f
 );
 
 

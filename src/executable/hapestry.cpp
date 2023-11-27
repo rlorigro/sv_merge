@@ -37,6 +37,8 @@ using std::ref;
 
 using namespace sv_merge;
 
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
+
 
 void for_each_sample_bam_path(path bam_csv, const function<void(const string& sample_name, const path& bam_path)>& f){
     if (not (bam_csv.extension() == ".csv")){
@@ -306,6 +308,262 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 }
 
 
+void extract_subregions_from_sample(
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        sample_region_read_map_t& sample_to_region_reads,
+        const string& sample_name,
+        const vector<Region>& subregions,
+        path bam_path
+){
+    if (subregions.empty()){
+        throw runtime_error("ERROR: subregions empty");
+    }
+
+    // Generate a super-region to encompass all subregions, and assume that subregions are sorted, contiguous.
+    // If they are not contiguous and sorted, the iterator function will detect that and error out.
+    Region super_region;
+    super_region.name = subregions[0].name;
+    super_region.start = subregions[0].start;
+    super_region.stop = subregions.back().stop;
+
+    CigarInterval placeholder;
+    placeholder.query_start = numeric_limits<int64_t>::max();
+    placeholder.query_stop = numeric_limits<int64_t>::min();
+    placeholder.ref_start = numeric_limits<int64_t>::max();
+    placeholder.ref_stop = numeric_limits<int64_t>::min();
+
+    // Keep track of the min and max observed query coordinates that intersect the region of interest
+    unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
+    unordered_map<string,string> query_sequences;
+
+    // Keep the F (query) oriented sequence of all the reads if they have an alignment that intersects the region
+    unordered_map <Region, unordered_map<string,string> > alignments_per_region;
+
+    // Unused
+    vector<interval_t> query_intervals;
+
+    // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
+    authenticator_mutex.lock();
+    authenticator.update();
+    authenticator_mutex.unlock();
+
+    // Iterate each alignment in the ref region
+    for_alignment_in_bam_subregions(
+            bam_path,
+            super_region.to_string(),
+            subregions,
+            [&](Alignment& alignment, span<const Region>& overlapping_regions){
+
+        if (alignment.is_unmapped() or not alignment.is_primary()){
+            return;
+        }
+
+        string name;
+        alignment.get_query_name(name);
+
+//        cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+//        for (const auto& item: overlapping_regions){
+//            cerr << item.start << ',' << item.stop << '\n';
+//        }
+
+        // The region of interest is defined in reference coordinate space
+        vector<interval_t> ref_intervals;
+        for (auto& r: overlapping_regions){
+            ref_intervals.emplace_back(r.start, r.stop);
+
+            // Find/or create coord for this region
+            auto& region_coord = query_coords_per_region[r];
+
+            // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
+            auto result = region_coord.find(name);
+
+            // If no previous alignment, initialize with the max placeholder
+            if (result == region_coord.end()){
+                // Insert a new placeholder cigar interval and keep a reference to the value inserted
+                result = region_coord.emplace(name, placeholder).first;
+                result->second.is_reverse = alignment.is_reverse();
+
+                // Try inserting a new empty sequence and keep a reference to the value inserted
+                auto [iter,success] = query_sequences.try_emplace(name,"");
+
+                // If the value existed already, don't do anything, the sequence has already been extracted
+                if (not success){
+                    continue;
+                }
+
+                auto& x = iter->second;
+
+                // Fill the value with the sequence
+                alignment.get_query_sequence(x);
+            }
+        }
+
+        // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
+        for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+            [&](const CigarInterval& intersection, const interval_t& interval) {
+//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+
+                for (auto& region: overlapping_regions){
+                    auto& coord = query_coords_per_region.at(region).at(name);
+
+                    // If the alignment touches the START of the ref region, record the query position
+                    if (intersection.ref_start == region.start){
+                        auto [start,stop] = intersection.get_forward_query_interval();
+
+                        if (alignment.is_reverse()){
+                            if (stop > coord.query_stop){
+                                coord.query_stop = stop;
+                            }
+                        }
+                        else{
+                            if (start < coord.query_start){
+                                coord.query_start = start;
+                            }
+                        }
+                    }
+
+                    // If the alignment touches the END of the region, record the query position
+                    if (intersection.ref_stop == region.stop){
+                        auto [start,stop] = intersection.get_forward_query_interval();
+
+                        if (intersection.is_reverse){
+                            if (start < coord.query_start){
+                                coord.query_start = start;
+                            }
+                        }
+                        else{
+                            if (stop > coord.query_stop){
+                                coord.query_stop = stop;
+                            }
+                        }
+                    }
+                }
+            },
+            null_fn
+        );
+    });
+
+    // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
+    for (const auto& [region, query_coords]: query_coords_per_region){
+        for (const auto& [name, coords]: query_coords){
+            if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
+                auto i = coords.query_start;
+                auto l = coords.query_stop - coords.query_start;
+
+//                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+
+                if (coords.is_reverse) {
+                    auto s = query_sequences[name].substr(i, l);
+                    reverse_complement(s);
+
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s);
+                }
+                else{
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l));
+                }
+            }
+        }
+    }
+}
+
+
+void extract_subsequences_from_sample_thread_fn(
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        sample_region_read_map_t & sample_to_region_reads,
+        const vector <pair <string,path> >& sample_bams,
+        const vector<Region>& regions,
+        atomic<size_t>& job_index
+){
+
+    size_t i = job_index.fetch_add(1);
+
+    while (i < sample_bams.size()){
+        const auto& [sample_name, bam_path] = sample_bams[i];
+
+        Timer t;
+
+        extract_subregions_from_sample(
+            authenticator,
+            authenticator_mutex,
+            sample_to_region_reads,
+            sample_name,
+            regions,
+            bam_path
+        );
+
+        cerr << t << "Elapsed for: " << sample_name << '\n';
+
+        i = job_index.fetch_add(1);
+    }
+
+}
+
+
+void get_reads_for_each_bam_subregion(
+        Timer& t,
+        vector<Region>& regions,
+        GoogleAuthenticator& authenticator,
+        sample_region_read_map_t& sample_to_region_reads,
+        path bam_csv,
+        int64_t flank_length,
+        int64_t n_threads
+){
+    // TODO: use flank length to extend regions
+
+    // Intermediate objects
+    vector <pair <string, path> > sample_bams;
+    TransMap sample_only_transmap;
+
+    cerr << t << "Loading CSV" << '\n';
+
+    // Load BAM paths as a map with sample->bam
+    for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
+        sample_only_transmap.add_sample(sample_name);
+        sample_bams.emplace_back(sample_name, bam_path);
+
+        // Initialize every combo of sample,region with an empty vector
+        for (const auto& region: regions){
+            sample_to_region_reads[sample_name][region] = {};
+        }
+    });
+
+    cerr << t << "Processing windows" << '\n';
+
+    // Thread-related variables
+    atomic<size_t> job_index = 0;
+    vector<thread> threads;
+    mutex authenticator_mutex;
+
+    threads.reserve(n_threads);
+
+    // Launch threads
+    for (uint64_t n=0; n<n_threads; n++){
+        try {
+            cerr << "launching: " << n << '\n';
+            threads.emplace_back(
+                std::ref(extract_subsequences_from_sample_thread_fn),
+                std::ref(authenticator),
+                std::ref(authenticator_mutex),
+                std::ref(sample_to_region_reads),
+                std::cref(sample_bams),
+                std::cref(regions),
+                std::ref(job_index)
+            );
+        } catch (const exception& e) {
+            throw e;
+        }
+    }
+
+    // Wait for threads to finish
+    for (auto& n: threads){
+        n.join();
+    }
+
+}
+
+
 void hapestry(
         path output_dir,
         path windows_bed,               // Override the interval graph if this is provided
@@ -351,111 +609,95 @@ void hapestry(
         for_region_in_bed_file(tandem_bed, [&](const Region &r) {
             regions.push_back(r);
         });
+
+        // How to sort intervals
+        auto left_comparator = [](const Region& a, const Region& b){
+            return a.start < b.start;
+        };
+
+        sort(regions.begin(), regions.end(), left_comparator);
     }
 
-    cerr << t << "Loading CSV" << '\n';
-
-    // Load BAM paths as a map with sample->bam
-    for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
-        sample_only_transmap.add_sample(sample_name);
-        bam_paths.emplace_back(sample_name,bam_path);
-    });
-
-    cerr << t << "Processing windows" << '\n';
-
+    // The goal object
     unordered_map<Region,TransMap> region_transmaps;
 
-    // For each region
-    for (auto region: regions){
-        path output_subdir = output_dir / region.to_string('_');
-        ghc::filesystem::create_directories(output_subdir);
+    // Intermediate object to store results of multithreaded sample read fetching
+    sample_region_read_map_t sample_to_region_reads;
 
-        // Duplicate the base transmap which already has the samples loaded
-        auto& transmap = region_transmaps.emplace(region, sample_only_transmap).first->second;
+    get_reads_for_each_bam_subregion(
+            t,
+            regions,
+            authenticator,
+            sample_to_region_reads,
+            bam_csv,
+            flank_length,
+            n_threads
+    );
 
-        cerr << t << region.name << ' ' << region.start << ' ' << region.stop << '\n';
+    for (const auto& [sample_name,item]: sample_to_region_reads){
+        for (const auto& [region,sequences]: item){
+            path output_subdir = output_dir / region.to_string('_');
 
-        region.start -= flank_length;
-        region.stop += flank_length;
-
-        // Thread-related variables
-        atomic<size_t> job_index = 0;
-        vector<thread> threads;
-        mutex transmap_mutex;
-        mutex authenticator_mutex;
-
-        threads.reserve(n_threads);
-
-        // Launch threads
-        for (uint64_t n=0; n<n_threads; n++){
-            try {
-                cerr << "launching: " << n << '\n';
-                threads.emplace_back(
-                    extract_subsequences_from_region_thread_fn,
-                    std::ref(authenticator),
-                    std::ref(authenticator_mutex),
-                    std::cref(bam_paths),
-                    std::cref(region),
-                    std::ref(transmap),
-                    std::ref(transmap_mutex),
-                    std::ref(job_index)
-                );
-            } catch (const exception& e) {
-                cerr << e.what() << "\n";
-                exit(1);
-            }
-        }
-
-        // Wait for threads to finish
-        for (auto& n: threads){
-            n.join();
-        }
-
-
-        for (auto& [sample_name, _]: bam_paths){
-            cerr << sample_name << ' ' << region.to_string() << '\n';
-            auto sample_id = transmap.get_id(sample_name);
-
-            if (debug){
-                path p = output_subdir / (sample_name + "_extracted_reads.fasta");
-                ofstream file(p);
-
-                transmap.for_each_read_of_sample(sample_name, [&](const string& name, int64_t id){
-                    file << '>' << name << '\n';
-                    file << transmap.get_sequence(id) << '\n';
-                });
+            if (not ghc::filesystem::exists(output_subdir)){
+                ghc::filesystem::create_directories(output_subdir);
             }
 
-            cross_align_sample_reads(transmap, score_threshold, sample_name);
+            path p = output_subdir / (sample_name + "_extracted_reads.fasta");
+            ofstream file(p);
 
-            CpModelBuilder model;
-            ReadVariables vars;
-            vector<int64_t> representatives;
-
-            optimize_reads_with_d_and_n(transmap, sample_id, representatives);
-
-            if (debug){
-                path p = output_subdir / (sample_name + "_clusters.txt");
-                ofstream file(p);
-
-                for (auto a: representatives){
-                    cerr << transmap.get_node(a).name << '\n';
-                    file << transmap.get_node(a).name << '\n';
-                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
-                    file << transmap.get_sequence(a) << '\n';
-                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
-                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
-                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
-                        file << transmap.get_sequence(b) << '\n';
-                    });
+            for (const auto& s: sequences){
+                if (debug){
+                    file << '>' << s.name << '\n';
+                    file << s.sequence << '\n';
                 }
             }
-
-
         }
     }
 
-    cerr << t << "Done" << '\n';
+//        for (auto& [sample_name, _]: bam_paths){
+//            cerr << sample_name << ' ' << region.to_string() << '\n';
+//            auto sample_id = transmap.get_id(sample_name);
+//
+//            if (debug){
+//                path p = output_subdir / (sample_name + "_extracted_reads.fasta");
+//                ofstream file(p);
+//
+//                transmap.for_each_read_of_sample(sample_name, [&](const string& name, int64_t id){
+//                    file << '>' << name << '\n';
+//                    file << transmap.get_sequence(id) << '\n';
+//                });
+//            }
+//
+//            cross_align_sample_reads(transmap, score_threshold, sample_name);
+//
+//            CpModelBuilder model;
+//            ReadVariables vars;
+//            vector<int64_t> representatives;
+//
+//            optimize_reads_with_d_and_n(transmap, sample_id, representatives);
+//
+//            if (debug){
+//                path p = output_subdir / (sample_name + "_clusters.txt");
+//                ofstream file(p);
+//
+//                for (auto a: representatives){
+//                    cerr << transmap.get_node(a).name << '\n';
+//                    file << transmap.get_node(a).name << '\n';
+//                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
+//                    file << transmap.get_sequence(a) << '\n';
+//                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
+//                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
+//                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
+//                        file << transmap.get_sequence(b) << '\n';
+//                    });
+//                }
+//            }
+//
+//
+//        }
+//    }
+//
+//    cerr << t << "Done" << '\n';
 
 }
 

@@ -298,13 +298,20 @@ void test_cigar_interval_iterator(path data_directory){
 void test_for_alignment_in_bam_subregions(path data_directory){
     string region_string = "a:0-5000";
 
-    vector<interval_t> subregions = {
-            {0,10},
-            {2000,2010},
-            {3090,4000},
-            {4990,5000},
-            {60000,6010}
+    vector<Region> subregions = {
+            {"a",2000,2010},
+            {"a",3090,4000},
+            {"a",4990,5000},
+            {"a",60000,6010},
+            {"a",0,10}
     };
+
+    // How to sort intervals
+    auto left_comparator = [](const Region& a, const Region& b){
+        return a.start < b.start;
+    };
+
+    sort(subregions.begin(), subregions.end(), left_comparator);
 
     Region r(region_string);
 
@@ -317,13 +324,13 @@ void test_for_alignment_in_bam_subregions(path data_directory){
             bam_path,
             region_string,
             subregions,
-            [&](Alignment& alignment, const span<interval_t>& overlapping_regions){
+            [&](Alignment& alignment, span<const Region>& overlapping_regions){
 
         string name;
         alignment.get_query_name(name);
         cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
         for (const auto& item: overlapping_regions){
-            cerr << item.first << ',' << item.second << '\n';
+            cerr << item.start << ',' << item.stop << '\n';
         }
     });
 }

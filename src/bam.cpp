@@ -1,5 +1,6 @@
 #include "IntervalGraph.hpp"
 #include "Sequence.hpp"
+#include "Region.hpp"
 #include "bam.hpp"
 
 #include <stdexcept>
@@ -283,16 +284,20 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
 void for_alignment_in_bam_subregions(
         path bam_path,
         string region,
-        vector<interval_t>& subregions,
-        const function<void(Alignment& alignment, const span<interval_t>& overlapping_regions)>& f
+        const vector<Region>& subregions,
+        const function<void(Alignment& alignment, span<const Region>& overlapping_regions)>& f
         ){
 
-    // How to sort intervals with structure (a,b) by start (a)
-    auto left_comparator = [](const interval_t& a, const interval_t& b){
-        return a.first < b.first;
-    };
-
-    sort(subregions.begin(), subregions.end(), left_comparator);
+    // Don't want to rely on user compliance with documentation to guarantee that these are sorted
+    Region r_prev = subregions[0];
+    for (const auto& r: subregions){
+        if (r_prev.start > r.start){
+            throw runtime_error("ERROR: subregions must be sorted by start position");
+        }
+        if (r_prev.name != r.name){
+            throw runtime_error("ERROR: non-contiguous region, names do not match: " + r.name + " != " + r_prev.name);
+        }
+    }
 
     samFile *bam_file;
     bam_hdr_t *bam_header;
@@ -335,17 +340,20 @@ void for_alignment_in_bam_subregions(
 
         a = HtsAlignment(alignment);
 
-
         // Set the iterator beyond regions that have been passed by the alignments already
-        while (a.get_ref_start() > subregions[i_start].first){
+        while (a.get_ref_start() > subregions[i_start].start){
             i_start++;
+
+            if (i_start >= subregions.size()){
+                break;
+            }
         }
 
         auto i_stop = i_start;
         auto alignment_stop = a.get_ref_stop();
 
         // Iterate all the subregions that start before/at the alignment end
-        while (i_stop < subregions.size() and alignment_stop >= subregions[i_stop].first){
+        while (i_stop < subregions.size() and alignment_stop >= subregions[i_stop].start){
             i_stop++;
         }
 
