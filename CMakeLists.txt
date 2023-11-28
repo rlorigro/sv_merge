@@ -1,11 +1,10 @@
 ######################################
-######################################
 # ---------------------------------- #
 # -------- COMPILER VERSION -------- #
 # ---------------------------------- #
 ######################################
 
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.22)
 project(sv_merge VERSION 0.0.0)
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
@@ -289,7 +288,7 @@ set(MINIMAP2_SOURCES
         ${project_minimap2_SOURCE_DIR}/ksw2_dispatch.c
         ${project_minimap2_SOURCE_DIR}/lchain.c
         ${project_minimap2_SOURCE_DIR}/format.c
-#        ${project_minimap2_SOURCE_DIR}/example.c
+        #        ${project_minimap2_SOURCE_DIR}/example.c
         ${project_minimap2_SOURCE_DIR}/ksw2_extz2_sse.c
         ${project_minimap2_SOURCE_DIR}/ksw2_extd2_sse.c
         ${project_minimap2_SOURCE_DIR}/kalloc.c
@@ -373,7 +372,7 @@ set(TESTS
         test_ortools
         test_transmap
         test_vcfreader
-        )
+)
 
 foreach(FILENAME_PREFIX ${TESTS})
     add_executable(${FILENAME_PREFIX} src/test/${FILENAME_PREFIX}.cpp)
@@ -424,7 +423,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 ortools::ortools
-                )
+        )
     else()
         target_link_libraries(${FILENAME_PREFIX}
                 sv_merge
@@ -460,4 +459,3 @@ message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
-
