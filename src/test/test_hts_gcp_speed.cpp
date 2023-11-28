@@ -20,6 +20,7 @@ using std::unordered_map;
 using std::runtime_error;
 using std::exception;
 using std::ifstream;
+using std::ofstream;
 using std::thread;
 using std::atomic;
 using std::mutex;
@@ -246,10 +247,14 @@ void test(int type) {
     int64_t gap_length = (left_arm_stop - left_arm_start) / n_intervals;
     Region r("chr20", left_arm_start, left_arm_start + interval_length);
 
+    ofstream bed_file("test_regions_chr20.bed");
+
     // Fill in left arm regions
     for (int i = 0; i < n_intervals; i++) {
         r.start += gap_length;
         r.stop += gap_length;
+
+        bed_file << r.name << '\t' << r.start << '\t' << r.stop << '\n';
 
         region_strings.push_back(r.to_string());
         regions.push_back(region_strings.back().data());
@@ -264,14 +269,11 @@ void test(int type) {
         r.start += gap_length;
         r.stop += gap_length;
 
+        bed_file << r.name << '\t' << r.start << '\t' << r.stop << '\n';
+
         region_strings.push_back(r.to_string());
         regions.push_back(region_strings.back().data());
     }
-
-    // Test working
-//    for (int64_t i = 0; i < regions.size(); i++) {
-//        cerr << regions[i] << '\n';
-//    }
 
     if (type == 0) {
         cerr << "Iterating chr20" << '\n';

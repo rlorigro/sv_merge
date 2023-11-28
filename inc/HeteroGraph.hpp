@@ -49,10 +49,10 @@ template<class T> class HeteroGraph {
     int64_t id_counter = 0;
 
 public:
-    int64_t name_to_id(const string& name) const;
-    pair<bool,int64_t> try_name_to_id(const string& name) const;
 
     /// Building
+    void reserve_nodes(size_t n);
+    void reserve_edges(size_t n);
     T& add_node(const string& name, char type);
 
     void add_edge(const string& name_a, const string& name_b, float weight);
@@ -61,6 +61,9 @@ public:
     void remove_edge(int64_t id_a, int64_t id_b);
 
     /// Accessing
+    int64_t name_to_id(const string& name) const;
+    pair<bool,int64_t> try_name_to_id(const string& name) const;
+
     const T& get_node(const string& name) const;
     T& get_node(const string& name);
     const T& get_node(int64_t id) const;
@@ -87,6 +90,18 @@ public:
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const;
 };
+
+
+template<class T> void HeteroGraph<T>::reserve_nodes(size_t n){
+    id_map.reserve(n);
+    nodes.reserve(n);
+}
+
+
+template<class T> void HeteroGraph<T>::reserve_edges(size_t n){
+    edges.reserve(n);
+}
+
 
 template<class T> T& HeteroGraph<T>::add_node(const string& name, char type) {
     if (id_map.find(name) != id_map.end()){

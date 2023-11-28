@@ -108,174 +108,6 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, vector<Region
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
 
-void extract_subsequences_from_region(
-        GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
-        const string& sample_name,
-        const Region& region,
-        path bam_path,
-        TransMap& transmap,
-        mutex& transmap_mutex
-){
-
-    CigarInterval placeholder;
-    placeholder.query_start = numeric_limits<int64_t>::max();
-    placeholder.query_stop = numeric_limits<int64_t>::min();
-    placeholder.ref_start = numeric_limits<int64_t>::max();
-    placeholder.ref_stop = numeric_limits<int64_t>::min();
-
-    // Keep track of the min and max observed query coordinates that intersect the region of interest
-    unordered_map<string,CigarInterval> query_coords;
-    unordered_map<string,string> query_sequences;
-
-    // Keep the F (query) oriented sequence of all the reads if they have an alignment that intersects the region
-    unordered_map<string,string> alignments;
-
-    // The region of interest is defined in reference coordinate space
-    vector<interval_t> ref_intervals = {{region.start, region.stop}};
-
-    // Unused
-    vector<interval_t> query_intervals;
-
-    // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-    authenticator_mutex.lock();
-    authenticator.update();
-    authenticator_mutex.unlock();
-
-    // Iterate each alignment in the ref region
-    for_alignment_in_bam_region(bam_path, region.to_string(), [&](Alignment& alignment) {
-        if (alignment.is_unmapped() or not alignment.is_primary()){
-            return;
-        }
-
-        string name;
-        alignment.get_query_name(name);
-
-        // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
-        auto result = query_coords.find(name);
-
-        // If no previous alignment, initialize with the max placeholder
-        if (result == query_coords.end()){
-            // Insert a new placeholder cigar interval and keep a reference to the value inserted
-            result = query_coords.emplace(name, placeholder).first;
-            result->second.is_reverse = alignment.is_reverse();
-
-            // Insert a new empty sequence and keep a reference to the value inserted
-            auto result3 = query_sequences.emplace(name,"");
-            auto& x = result3.first->second;
-
-            // Fill the value with the sequence
-            // TODO: find a way to not extract the whole sequence? Tricky when using the Alignment abstract class, and
-            // fetching from remote BAM
-            alignment.get_query_sequence(x);
-        }
-
-        auto& coord = result->second;
-
-        // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-        for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
-            [&](const CigarInterval& intersection, const interval_t& interval) {
-//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
-
-                // If the alignment touches the START of the ref region, record the query position
-                if (intersection.ref_start == region.start){
-                    auto [start,stop] = intersection.get_forward_query_interval();
-
-                    if (alignment.is_reverse()){
-                        if (stop > coord.query_stop){
-                            coord.query_stop = stop;
-                        }
-                    }
-                    else{
-                        if (start < coord.query_start){
-                            coord.query_start = start;
-                        }
-                    }
-                }
-
-                // If the alignment touches the END of the region, record the query position
-                if (intersection.ref_stop == region.stop){
-                    auto [start,stop] = intersection.get_forward_query_interval();
-
-                    if (intersection.is_reverse){
-                        if (start < coord.query_start){
-                            coord.query_start = start;
-                        }
-                    }
-                    else{
-                        if (stop > coord.query_stop){
-                            coord.query_stop = stop;
-                        }
-                    }
-                }
-            },
-            null_fn
-        );
-    });
-
-    for (const auto& [name, coords]: query_coords){
-        if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
-            auto i = coords.query_start;
-            auto l = coords.query_stop - coords.query_start;
-
-//            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
-
-            if (coords.is_reverse) {
-                auto s = query_sequences[name].substr(i, l);
-                reverse_complement(s);
-
-                transmap_mutex.lock();
-                transmap.add_read(name, s);
-                transmap_mutex.unlock();
-            }
-            else{
-                transmap_mutex.lock();
-                transmap.add_read(name, query_sequences[name].substr(i, l));
-                transmap_mutex.unlock();
-            }
-
-            transmap_mutex.lock();
-            transmap.add_edge(sample_name, name);
-            transmap_mutex.unlock();
-        }
-    }
-}
-
-
-void extract_subsequences_from_region_thread_fn(
-        GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
-        const vector <pair <string,path> >& bam_paths,
-        const Region& region,
-        TransMap& transmap,
-        mutex& transmap_mutex,
-        atomic<size_t>& job_index
-){
-    size_t i = job_index.fetch_add(1);
-
-    while (i < bam_paths.size()){
-        const auto& [sample_name, bam_path] = bam_paths[i];
-
-        Timer t;
-
-        extract_subsequences_from_region(
-            authenticator,
-            authenticator_mutex,
-            sample_name,
-            region,
-            bam_path,
-            transmap,
-            transmap_mutex
-            );
-
-        cerr << t << "Elapsed for: " << sample_name << ' ' << region.to_string() << '\n';
-
-        i = job_index.fetch_add(1);
-    }
-
-}
-
-
 void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -497,7 +329,6 @@ void extract_subsequences_from_sample_thread_fn(
 
         i = job_index.fetch_add(1);
     }
-
 }
 
 
@@ -507,11 +338,8 @@ void get_reads_for_each_bam_subregion(
         GoogleAuthenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         path bam_csv,
-        int64_t flank_length,
         int64_t n_threads
 ){
-    // TODO: use flank length to extend regions
-
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
     TransMap sample_only_transmap;
@@ -576,7 +404,7 @@ void hapestry(
         int64_t flank_length,
         int64_t n_threads
         ){
-    // Flag to control how much logging/dumping
+    // Flag to control extent of logging/dumping
     bool debug = true;
 
     if (ghc::filesystem::exists(output_dir)){
@@ -595,7 +423,7 @@ void hapestry(
     vector<Region> regions;
 
     // TODO: reserve the hash tables used in transmap so that they approximately have the space needed for n_samples*n_fold_coverage ?
-    TransMap sample_only_transmap;
+    TransMap template_transmap;
 
     // TODO: use percent of min(a,b) where a,b are lengths of seqs?
     int64_t score_threshold = 200;
@@ -603,11 +431,14 @@ void hapestry(
     cerr << t << "Constructing windows" << '\n';
 
     if (windows_bed.empty()){
+        // TODO: interval padding used here
         construct_windows_from_vcf_and_bed(tandem_bed, vcf, regions);
     }
     else{
         for_region_in_bed_file(tandem_bed, [&](const Region &r) {
             regions.push_back(r);
+            regions.back().start -= flank_length;
+            regions.back().stop += flank_length;
         });
 
         // How to sort intervals
@@ -624,35 +455,75 @@ void hapestry(
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_read_map_t sample_to_region_reads;
 
-    get_reads_for_each_bam_subregion(
-            t,
-            regions,
-            authenticator,
-            sample_to_region_reads,
-            bam_csv,
-            flank_length,
-            n_threads
-    );
+    // Get a nested map of sample -> region -> vector<Sequence>
+    get_reads_for_each_bam_subregion(t, regions, authenticator, sample_to_region_reads, bam_csv, n_threads);
 
+    // Construct template transmap with only samples
     for (const auto& [sample_name,item]: sample_to_region_reads){
-        for (const auto& [region,sequences]: item){
-            path output_subdir = output_dir / region.to_string('_');
+        template_transmap.add_sample(sample_name);
+    }
 
-            if (not ghc::filesystem::exists(output_subdir)){
-                ghc::filesystem::create_directories(output_subdir);
-            }
+    unordered_map<Region, size_t> region_coverage;
+    for (const auto& [sample_name,item]: sample_to_region_reads) {
+        for (const auto& [region,sequences]: item) {
+            region_coverage[region] += sequences.size();
+        }
+    }
 
-            path p = output_subdir / (sample_name + "_extracted_reads.fasta");
-            ofstream file(p);
+    // Copy the template transmap into every region and reserve approximate space for nodes/edges/sequences
+    region_transmaps.reserve(regions.size());
+    for (const auto& r: regions){
+        auto item = region_transmaps.emplace(r, template_transmap).first->second;
+        auto n_reads = region_coverage[r];
+        auto n_samples = sample_to_region_reads.size();
 
-            for (const auto& s: sequences){
-                if (debug){
-                    file << '>' << s.name << '\n';
-                    file << s.sequence << '\n';
-                }
+        // Number of reads is known exactly
+        item.reserve_sequences(n_reads + 2);
+
+        // An approximate upper limit that assumes every sample has 1 unique haplotype
+        item.reserve_nodes(n_reads + n_samples*2);
+
+        // An approximate upper limit that assumes every sample has 1 unique haplotype, fully connected in read->hap
+        item.reserve_edges(n_reads * n_samples);
+    }
+
+    // Move the downloaded data into a transmap, construct edges for sample->read
+    for (auto& [sample_name,item]: sample_to_region_reads){
+        for (auto& [region,sequences]: item){
+            auto& transmap = region_transmaps.at(region);
+
+            auto sample_id = transmap.get_id(sample_name);
+
+            for (auto& s: sequences) {
+                transmap.add_read_with_move(s.name, s.sequence);
+                transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
             }
         }
     }
+
+    // Iterate sample reads
+    for (const auto& region: regions){
+        path output_subdir = output_dir / region.to_string('_');
+
+        if (not ghc::filesystem::exists(output_subdir)){
+            ghc::filesystem::create_directories(output_subdir);
+        }
+
+        auto& transmap = region_transmaps.at(region);
+
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+            if (debug) {
+                path p = output_subdir / (sample_name + "_extracted_reads.fasta");
+                ofstream file(p);
+
+                transmap.for_each_read_of_sample(sample_name, [&](const string &name, int64_t id) {
+                    file << '>' << name << '\n';
+                    file << transmap.get_sequence(id) << '\n';
+                });
+            }
+        });
+    }
+
 
 //        for (auto& [sample_name, _]: bam_paths){
 //            cerr << sample_name << ' ' << region.to_string() << '\n';

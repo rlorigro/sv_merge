@@ -35,9 +35,13 @@ public:
     TransMap();
 
     /// Building
+    void reserve_nodes(size_t n);
+    void reserve_edges(size_t n);
+    void reserve_sequences(size_t n);
     void add_sample(const string& name);
     void add_read(const string& name);
     void add_read(const string& name, const string& sequence);
+    void add_read_with_move(string& name, string& sequence);
     void add_path(const string& name);
     void add_edge(const string& a, const string& b);
     void add_edge(int64_t a, int64_t b, float weight);

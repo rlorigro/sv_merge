@@ -13,6 +13,21 @@ TransMap::TransMap():
 }
 
 
+void TransMap::reserve_nodes(size_t n){
+    graph.reserve_nodes(n);
+}
+
+
+void TransMap::reserve_edges(size_t n){
+    graph.reserve_edges(n);
+}
+
+
+void TransMap::reserve_sequences(size_t n){
+    sequences.reserve(n);
+}
+
+
 int64_t TransMap::get_id(const string& name) const{
     return graph.name_to_id(name);
 }
@@ -72,6 +87,18 @@ void TransMap::add_read(const string& name, const string& sequence){
     graph.add_edge(read_node_name, name, 0);
 
     sequences.emplace(graph.name_to_id(name), sequence);
+}
+
+
+void TransMap::add_read_with_move(string& name, string& sequence){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    sequences.emplace(graph.name_to_id(name), std::move(sequence));
 }
 
 
