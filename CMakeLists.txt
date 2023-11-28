@@ -1,10 +1,11 @@
 ######################################
+######################################
 # ---------------------------------- #
 # -------- COMPILER VERSION -------- #
 # ---------------------------------- #
 ######################################
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.21)
 project(sv_merge VERSION 0.0.0)
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
@@ -35,7 +36,7 @@ if (dev)
     set(ASAN_OPTIONS=check_initialization_order=1)
     set(ASAN_OPTIONS=detect_leaks=1)
 
-    add_definitions(-ggdb3 -Og -Wall)       # Debugging + No optimization
+    add_definitions(-ggdb3 -Og -Wall)       # Debugging + minimal optimization
 
 else()
     message(STATUS "---- Building with optimization ----")
@@ -60,9 +61,11 @@ include_directories(
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
         src/Alignment.cpp
+        src/Authenticator.cpp
         src/bam.cpp
         src/bed.cpp
         src/fasta.cpp
+        src/gaf.cpp
         src/Graph.cpp
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
@@ -73,6 +76,7 @@ set(SOURCES
         src/Sequence.cpp
         inc/Sequence.hpp
         inc/TransitiveMap.hpp
+        src/VcfReader.cpp
 )
 
 
@@ -306,7 +310,7 @@ set(MINIMAP2_SOURCES
         ${project_minimap2_SOURCE_DIR}/splitidx.c
         ${project_minimap2_SOURCE_DIR}/seed.c
         ${project_minimap2_SOURCE_DIR}/misc.c
-        )
+)
 
 message(STATUS "minimap2_SOURCE_DIR: ${project_minimap2_SOURCE_DIR}")
 
@@ -357,7 +361,9 @@ set(TESTS
         test_bam
         test_bed
         test_fasta
+        test_gaf
         test_graph
+        test_graphaligner
         test_heterograph
         test_htslib
         test_hts_gcp
@@ -366,6 +372,7 @@ set(TESTS
         test_minimap2_no_io
         test_ortools
         test_transmap
+        test_vcfreader
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
@@ -402,6 +409,7 @@ endforeach()
 
 set(EXECUTABLES
         a
+        hapestry
 )
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
