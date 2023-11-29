@@ -11,6 +11,7 @@
 
 using std::pair;
 using std::string;
+using std::string_view;
 using std::vector;
 using std::unordered_map;
 using std::function;
@@ -20,64 +21,6 @@ using std::cerr;
 using std::runtime_error;
 
 namespace sv_merge {
-
-
-/**
- * Basic VCF constants
- */
-const char VCF_COMMENT = '#';
-const char LINE_END = '\n';  // Change to '\r\n' for CR+LF.
-const char VCF_SEPARATOR = '\t';
-const char VCF_MISSING_CHAR = '.';
-const char SYMBOLIC_CHAR_OPEN = '<';
-const char SYMBOLIC_CHAR_CLOSE = '>';
-const string PASS_STR = "PASS";
-const char ALT_SEPARATOR = ',';
-const char GT_SEPARATOR = ':';
-const char UNPHASED_CHAR = '/';
-const char PHASED_CHAR = '|';
-
-/**
- * Info field constants
- */
-const char INFO_ASSIGNMENT = '=';
-const char INFO_SEPARATOR = ';';
-const string SVTYPE_STR = "SVTYPE";
-const string SVLEN_STR = "SVLEN";
-const string END_STR = "END";
-const string CIPOS_STR = "CIPOS";
-const uint16_t CIPOS_STR_LENGTH = CIPOS_STR.length();
-const string CIEND_STR = "CIEND";
-const uint16_t CIEND_STR_LENGTH = CIEND_STR.length();
-const string CILEN_STR = "CILEN";
-const uint16_t CILEN_STR_LENGTH = CILEN_STR.length();
-const string PRECISE_STR = "PRECISE";
-const string IMPRECISE_STR = "IMPRECISE";
-
-/**
- * Supported SV types
- */
-const uint8_t TYPE_INSERTION = 1;
-const uint8_t TYPE_DELETION = 2;
-const uint8_t TYPE_INVERSION = 3;
-const uint8_t TYPE_DUPLICATION = 4;
-const uint8_t TYPE_BREAKEND = 5;
-const uint8_t TYPE_REPLACEMENT = 6;
-
-/**
- * Supported SV types: labels used by the callers.
- */
-const string DEL_STR = "DEL";
-const string DEL_ME_STR = "DEL:ME";
-const string INS_STR = "INS";
-const string INS_ME_STR = "INS:ME";
-const string INS_NOVEL_STR = "INS:NOVEL";
-const string DUP_STR = "DUP";
-const string DUP_TANDEM_STR = "DUP:TANDEM";
-const string DUP_INT_STR = "DUP:INT";
-const string INV_STR = "INV";
-const string BND_STR = "BND";
-
 
 /**
  * Reused container, allocated only once and overwritten with each VCF line.
@@ -203,40 +146,124 @@ private:
     bool set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, bool skip_samples, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
 };
 
-/**
- * Calls `f` on every VCF record that passes the constraints. See `VcfRecord` for details.
- *
- * @param path a VCF file that contains only calls in `chromosome`;
- * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
- */
-void for_record_in_vcf(const string& path, const function<void(VcfRecord& record)>& f, uint32_t progress_n_lines, const string& chromosome, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, bool skip_samples, uint32_t n_samples_in_vcf, float min_allele_frequency, float min_nonmissing_frequency);
 
-/**
- * Remark: this performs a linear scan of `info`.
- *
- * @return TRUE iff `key` is found in `ìnfo`; in this case `out` contains the value of `key`.
- */
-bool get_info_field(const string& info, const string& key, string& out);
+class VcfReader {
+public:
+    /**
+     * Basic VCF constants
+     */
+    static const char VCF_COMMENT;
+    static const char LINE_END;
+    static const char VCF_SEPARATOR;
+    static const char VCF_MISSING_CHAR;
+    static const char SYMBOLIC_CHAR_OPEN;
+    static const char SYMBOLIC_CHAR_CLOSE;
+    static const string PASS_STR;
+    static const char ALT_SEPARATOR;
+    static const char GT_SEPARATOR;
+    static const char UNPHASED_CHAR;
+    static const char PHASED_CHAR;
 
-/**
- * Remark: the procedure handles the case where there are two copies of the chromosome but the GT field contains
- * just one value (this can happen with CNVs or when the sample is a haploid reference).
- *
- * @param buffer the content of a VCF sample field;
- * @return out output pair, containing the number of zero (`.first`) and nonzero (`.second`) haplotypes.
- */
-void ncalls_in_sample(const string& buffer, bool is_diploid, pair<uint8_t, uint8_t>& out);
+    /**
+     * Info field constants
+     */
+    static const char INFO_ASSIGNMENT;
+    static const char INFO_SEPARATOR;
+    static const string SVTYPE_STR;
+    static const string SVLEN_STR;
+    static const string END_STR;
+    static const string CIPOS_STR;
+    static const uint16_t CIPOS_STR_LENGTH;
+    static const string CIEND_STR;
+    static const uint16_t CIEND_STR_LENGTH;
+    static const string CILEN_STR;
+    static const uint16_t CILEN_STR_LENGTH;
+    static const string PRECISE_STR;
+    static const string IMPRECISE_STR;
 
-/**
- * @param buffer the content of a VCF sample field (can contain just one haplotype).
- */
-bool is_phased(const string& buffer);
+    /**
+     * Supported SV types
+     */
+    static const uint8_t TYPE_INSERTION;
+    static const uint8_t TYPE_DELETION;
+    static const uint8_t TYPE_INVERSION;
+    static const uint8_t TYPE_DUPLICATION;
+    static const uint8_t TYPE_BREAKEND;
+    static const uint8_t TYPE_REPLACEMENT;
 
-/**
- * Stores in `map` the set of all and only the key->value relationships in `info`.
- *
- * @param tmp_buffer_* reused temporary space.
- */
-void info2map(const string& info, unordered_map<string,string>& map, string& tmp_buffer_1, string& tmp_buffer_2);
+    /**
+     * Supported SV types: labels used by the callers.
+     */
+    static const string DEL_STR;
+    static const string DEL_ME_STR;
+    static const string INS_STR;
+    static const string INS_ME_STR;
+    static const string INS_NOVEL_STR;
+    static const string DUP_STR;
+    static const string DUP_TANDEM_STR;
+    static const string DUP_INT_STR;
+    static const string INV_STR;
+    static const string BND_STR;
+
+    /**
+     * Internal state of VcfReader. See `VcfRecord` for details.
+     */
+    uint32_t progress_n_lines;
+    bool high_qual_only;
+    float min_qual;
+    bool pass_only;
+    uint32_t min_sv_length;
+    bool skip_samples;
+    uint32_t n_samples_in_vcf;
+    float min_allele_frequency;
+    float min_nonmissing_frequency;
+
+    /**
+     * @param path a VCF file that contains only calls in `chromosome`;
+     * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
+     * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
+     */
+    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, const string& chromosome, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, bool skip_samples, uint32_t n_samples_in_vcf, float min_allele_frequency, float min_nonmissing_frequency);
+    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, const string& chromosome, bool is_diploid);
+
+    void for_record_in_vcf();
+
+private:
+    /**
+     * Internal state of VcfReader
+     */
+    string path;
+    function<void(VcfRecord& record)> callback;
+    string chromosome;
+    bool is_diploid;
+
+    /**
+     * Remark: this performs a linear scan of `info`.
+     *
+     * @return TRUE iff `key` is found in `ìnfo`; in this case `out` contains the value of `key`.
+     */
+    static bool get_info_field(const string& info, const string& key, string& out);
+
+    /**
+     * Remark: the procedure handles the case where there are two copies of the chromosome but the GT field contains
+     * just one value (this can happen with CNVs or when the sample is a haploid reference).
+     *
+     * @param buffer the content of a VCF sample field;
+     * @return out output pair, containing the number of zero (`.first`) and nonzero (`.second`) haplotypes.
+     */
+    static void ncalls_in_sample(const string& buffer, bool is_diploid, pair<uint8_t, uint8_t>& out);
+
+    /**
+     * @param buffer the content of a VCF sample field (can contain just one haplotype).
+     */
+    static bool is_phased(const string& buffer);
+
+    /**
+     * Stores in `map` the set of all and only the key->value relationships in `info`.
+     *
+     * @param tmp_buffer_* reused temporary space.
+     */
+    static void info2map(const string& info, unordered_map<string,string>& map, string& tmp_buffer_1, string& tmp_buffer_2);
+}
 
 }

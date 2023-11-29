@@ -10,7 +10,7 @@ using std::to_string;
 using std::ofstream;
 using sv_merge::run_command;
 using sv_merge::VcfRecord;
-using sv_merge::for_record_in_vcf;
+using sv_merge::VcfReader;
 
 
 /**
@@ -57,8 +57,9 @@ void test(const string& test_id, const string& chromosome, const bool& is_diploi
     cerr << "   n_samples_in_vcf: " << n_samples_in_vcf << '\n';
     cerr << "   min_allele_frequency: " << min_af << '\n';
     cerr << "   min_nonmissing_frequency: " << min_nmf << '\n';
+    VcfReader reader(input_vcf,test_callback,PROGRESS_EVERY_LINES,chromosome,is_diploid,high_qual_only,min_qual,pass_only,min_sv_length,skip_samples,n_samples_in_vcf,min_af,min_nmf);
     outstream.open(test_vcf);
-    for_record_in_vcf(input_vcf,test_callback,PROGRESS_EVERY_LINES,chromosome,is_diploid,high_qual_only,min_qual,pass_only,min_sv_length,skip_samples,n_samples_in_vcf,min_af,min_nmf);
+    reader.for_record_in_vcf();
     outstream.close();
     string command = "diff --brief "+test_vcf.string()+" "+truth_vcf.string();
     run_command(command);
