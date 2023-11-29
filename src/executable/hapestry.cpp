@@ -405,7 +405,7 @@ void hapestry(
         int64_t n_threads
         ){
     // Flag to control extent of logging/dumping
-    bool debug = true;
+    bool debug = false;
 
     if (ghc::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
@@ -524,6 +524,7 @@ void hapestry(
         });
     }
 
+    cerr << t << "Done" << '\n';
 
 //        for (auto& [sample_name, _]: bam_paths){
 //            cerr << sample_name << ' ' << region.to_string() << '\n';
@@ -568,8 +569,6 @@ void hapestry(
 //        }
 //    }
 //
-//    cerr << t << "Done" << '\n';
-
 }
 
 
