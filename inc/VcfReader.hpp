@@ -42,6 +42,10 @@ public:
     bool pass_only, high_qual_only;
     uint32_t min_sv_length, n_samples_to_load;
     float min_qual, min_af, min_nmf;
+
+    /**
+     * Values derived from the user constraints above
+     */
     float min_n_haplotypes_alt_baseline, min_n_haplotypes_nonmissing_baseline;
     uint32_t min_n_haplotypes_alt, min_n_haplotypes_nonmissing;
 
@@ -88,7 +92,7 @@ public:
     void set(ifstream& stream);
 
     /**
-     * @return TRUE iff the record passes all the constraints set at construction time.
+     * @return TRUE iff the record passes all the user constraints set at construction time.
      */
     bool passes_constraints() const;
 
@@ -126,6 +130,8 @@ public:
     void ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out) const;
 
     /**
+     * Remark: a haploid sample is assumed to be phased.
+     *
      * @param buffer the content of a VCF sample field (can contain just one haplotype).
      */
     static bool is_phased(const string& buffer);
@@ -232,17 +238,22 @@ public:
     static const string BND_STR;
 
     /**
-     * Internal state of VcfReader. See `VcfRecord` for details.
+     * Configuration parameters. See `VcfRecord` for details.
+     * This is public to allow users to set only specific parameters.
      */
     uint32_t progress_n_lines;
     bool high_qual_only;
     float min_qual;
     bool pass_only;
     uint32_t min_sv_length;
-    uint32_t n_samples_in_vcf;  // According to the header
-    uint32_t n_samples_to_load;  // Prefix of the list of all samples. 0=do not load any sample.
+    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample.
     float min_allele_frequency;
     float min_nonmissing_frequency;
+
+    /**
+     * Total number of samples in the VCF according to the header
+     */
+    uint32_t n_samples_in_vcf;
 
     /**
      * @param path a VCF file that contains only calls in `chromosome`;

@@ -136,13 +136,10 @@ void test_joint_vcf_hprc(const path& joint_vcf, const vector<string> CHROMOSOMES
     }
 }
 
-/**
- * Requirements:
- * - the environment variable `BCFTOOLS_PLUGINS` should be set.
- */
+
 int main(int argc, char* argv[]) {
     const path ROOT_DIR = path(argv[1]);  // Assumed to contain every raw input file used for testing
-    const char* BCFTOOLS_PLUGINS_DIR = argv[2];
+    const char* BCFTOOLS_PLUGINS_DIR = argv[2];  // Needed by bcftools +fill-tags
     const string N_THREADS = string(argv[3]);
 
     /**
@@ -152,17 +149,16 @@ int main(int argc, char* argv[]) {
     const vector<float> MIN_QUALS = {0.0, 10.0, 20.0, 30.0};
     const vector<float> MIN_AFS = {0.02, 0.08, 0.16, 0.32, 0.64};
     const vector<float> MIN_NMFS = {0.02, 0.08, 0.16, 0.32, 0.64};
-    //const vector<string> CHROMOSOMES = {"chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8","chr9","chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22","chrX","chrY"};
-    const vector<string> CHROMOSOMES = {"chrY"};  // <---- Neither chrY nor chrM are present in HPRC!!!!!!!!!!!
+    // sniffles (and maybe others) doesn't have chrM calls.
+    const vector<string> CHROMOSOMES_SINGLE_SAMPLE = {"chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8","chr9","chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22","chrX","chrY"};
+    // chrY and chrM are not present in the HPRC VCF. Our AF filters in chrX behave differently from bcftools and would
+    // require a better implementation of `test_callback()`.
+    const vector<string> CHROMOSOMES_HPRC = {"chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8","chr9","chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"};
     const vector<string> SAMPLE_IDS = {"NA24385", "HG03125", "HG00512"};
     const string HPRC_FILE_ID = "hprc-v1.1-mc-chm13.raw.sv";
 
-    /**
-     * Temporary files created during the tests
-     */
-    path input_vcf, test_vcf, truth_vcf, tmp1_vcf, tmp2_vcf;
-
     string command;
+    path input_vcf, test_vcf, truth_vcf, tmp1_vcf, tmp2_vcf;  // Temporary files created during the tests
 
     setenv("BCFTOOLS_PLUGINS",BCFTOOLS_PLUGINS_DIR,1);
     input_vcf=ROOT_DIR/"input.vcf";
@@ -170,14 +166,13 @@ int main(int argc, char* argv[]) {
     truth_vcf=ROOT_DIR/"truth.vcf";
     tmp1_vcf=ROOT_DIR/"tmp1.vcf";
     tmp2_vcf=ROOT_DIR/"tmp2.vcf";
-
-//    for (auto& sample_id: SAMPLE_IDS) {
-//        test_single_sample_vcf(ROOT_DIR/(sample_id+".sniffles.vcf.gz"),true,"SNIFFLES",CHROMOSOMES,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
-//        test_single_sample_vcf(ROOT_DIR/(sample_id+".pbsv.vcf.gz"),false/*Filtering by QUAL skipped, since QUAL is always '.'*/,"PBSV",CHROMOSOMES,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
-//        test_single_sample_vcf(ROOT_DIR/(sample_id+".pav_sv.vcf.gz"),false/*Filtering by QUAL skipped, since QUAL is always '.'*/,"PAV",CHROMOSOMES,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
-//    }
+    for (auto& sample_id: SAMPLE_IDS) {
+        test_single_sample_vcf(ROOT_DIR/(sample_id+".sniffles.vcf.gz"),true,"SNIFFLES",CHROMOSOMES_SINGLE_SAMPLE,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
+        test_single_sample_vcf(ROOT_DIR/(sample_id+".pbsv.vcf.gz"),false/*Filtering by QUAL skipped, since QUAL is always '.'*/,"PBSV",CHROMOSOMES_SINGLE_SAMPLE,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
+        test_single_sample_vcf(ROOT_DIR/(sample_id+".pav_sv.vcf.gz"),false/*Filtering by QUAL skipped, since QUAL is always '.'*/,"PAV",CHROMOSOMES_SINGLE_SAMPLE,MIN_QUALS,MIN_SV_LENGTHS,input_vcf,truth_vcf,test_vcf);
+    }
     command="rm -f "+input_vcf.string()+" "+test_vcf.string()+" "+truth_vcf.string(); run_command(command);
-    test_joint_vcf_hprc(ROOT_DIR/(HPRC_FILE_ID+".vcf.gz"),CHROMOSOMES,MIN_QUALS,MIN_AFS,MIN_NMFS,N_THREADS,tmp1_vcf,tmp2_vcf,input_vcf,truth_vcf,test_vcf);
+    test_joint_vcf_hprc(ROOT_DIR/(HPRC_FILE_ID+".vcf.gz"),CHROMOSOMES_HPRC,MIN_QUALS,MIN_AFS,MIN_NMFS,N_THREADS,tmp1_vcf,tmp2_vcf,input_vcf,truth_vcf,test_vcf);
     command="rm -f "+input_vcf.string()+" "+test_vcf.string()+" "+truth_vcf.string()+" "+tmp1_vcf.string()+" "+tmp2_vcf.string(); run_command(command);
     return 0;
 }
