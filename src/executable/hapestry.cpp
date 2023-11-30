@@ -2,6 +2,7 @@
 #include "TransitiveMap.hpp"
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"
+#include "VcfReader.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
@@ -86,13 +87,15 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 }
 
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, vector<Region>& regions){
+void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int64_t flank_length, vector<Region>& regions){
     vector<labeled_interval_t> intervals;
 
     // Iterate the VCF file and construct a vector of labeled intervals for the IntervalGraph
     // Need to append `interval_padding` onto intervals and then subtract it afterwards
     // TODO: fill in when vcf reader exists
     IntervalGraph<string> g(intervals);
+
+    VcfReader vcf_reader(vcf);
 
     g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
         cerr << interval.first << "," << interval.second;
@@ -399,7 +402,6 @@ void hapestry(
         path bam_csv,
         path vcf,
         path reference,
-        int64_t interval_padding,
         int64_t interval_max_length,
         int64_t flank_length,
         int64_t n_threads,
@@ -431,7 +433,7 @@ void hapestry(
 
     if (windows_bed.empty()){
         // TODO: interval padding used here
-        construct_windows_from_vcf_and_bed(tandem_bed, vcf, regions);
+        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, regions);
     }
     else{
         for_region_in_bed_file(tandem_bed, [&](const Region &r) {
@@ -569,7 +571,6 @@ int main (int argc, char* argv[]){
     path bam_csv;
     path vcf = ""; // TODO: add arg for this when vcf reader exists
     path ref;
-    int64_t interval_padding;
     int64_t interval_max_length;
     int64_t flank_length;
     int64_t n_threads = 1;
@@ -607,12 +608,6 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
-            "--interval_padding",
-            interval_padding,
-            "How much space to require between adjacent ref windows (if window generation is automated)")
-            ->required();
-
-    app.add_option(
             "--interval_max_length",
             interval_max_length,
             "Maximum reference window size")
@@ -635,7 +630,6 @@ int main (int argc, char* argv[]){
         bam_csv,
         vcf,
         ref,
-        interval_padding,
         interval_max_length,
         flank_length,
         n_threads,

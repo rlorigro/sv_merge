@@ -1,11 +1,18 @@
 #pragma once
 
+#include "Filesystem.hpp"
+
+using ghc::filesystem::path;
+
 #include <climits>
+#include <numeric>
+#include <cmath>
 #include <utility>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <fstream>
+#include <functional>
 #include <ostream>
 #include <iostream>
 
@@ -18,6 +25,7 @@ using std::function;
 using std::ifstream;
 using std::ostream;
 using std::cerr;
+using std::ceil;
 using std::runtime_error;
 
 namespace sv_merge {
@@ -260,16 +268,16 @@ public:
      * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
-    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
-    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback);
+    VcfReader(const path& vcf_path, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
+    VcfReader(const path& vcf_path);
 
-    void for_record_in_vcf();
+    void for_record_in_vcf(const function<void(VcfRecord& record)>& callback);
 
 private:
     /**
      * Internal state of VcfReader
      */
-    string path;
+    string vcf_path;
     function<void(VcfRecord& record)> callback;
 };
 

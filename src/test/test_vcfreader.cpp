@@ -32,9 +32,9 @@ void test(const string& test_id, const string& chromosome, const bool& high_qual
     cerr << "   n_samples_to_load: " << n_samples_to_load << '\n';
     cerr << "   min_allele_frequency: " << min_af << '\n';
     cerr << "   min_nonmissing_frequency: " << min_nmf << '\n';
-    VcfReader reader(input_vcf,test_callback,10000,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf);
+    VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf);
     outstream.open(test_vcf);
-    reader.for_record_in_vcf();
+    reader.for_record_in_vcf(test_callback);
     outstream.close();
     string command = "diff --brief "+test_vcf.string()+" "+truth_vcf.string();
     run_command(command);
