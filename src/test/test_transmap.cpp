@@ -7,7 +7,7 @@ using std::cerr;
 
 #include "pair_hash.hpp"
 #include "TransitiveMap.hpp"
-#include "optimizer.hpp"
+#include "path_optimizer.hpp"
 
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
@@ -177,6 +177,38 @@ int main(){
         }
     });
     cerr << '\n';
+
+    cerr << "TESTING try_get_ methods" << '\n';
+
+    cerr << "id1" << '\n';
+    string name1 = "read_01";
+    auto [success1,id1] = transmap.try_get_id(name1);
+    if (not (success1 == 1 and id1 == 3)){
+        throw runtime_error("FAIL: non existent ID found in graph");
+    }
+
+    cerr << "id2" << '\n';
+    string name2 = "read_02";
+    auto [success2,id2] = transmap.try_get_id(name2);
+    if (not (success2 == 1 and id2 == 5)){
+        throw runtime_error("FAIL: non existent ID found in graph");
+    }
+
+    cerr << "e12" << '\n';
+    auto [success_e12, w12] = transmap.try_get_edge_weight(id1, id2);
+    if (not (success_e12 == 0 and w12 == 0)){
+        throw runtime_error("FAIL: non existent edge found in graph");
+    }
+
+    transmap.add_edge(id1, id2, 0.666);
+
+    cerr << "e12" << '\n';
+    std::tie(success_e12, w12) = transmap.try_get_edge_weight(id1, id2);
+    if (not (success_e12 == 1 and int(w12*1000) == 666)){
+        throw runtime_error("FAIL: non existent ID found in graph");
+    }
+
+    cerr << success_e12 << ',' << w12 << '\n';
 
     test_optimization();
 

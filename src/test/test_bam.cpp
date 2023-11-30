@@ -7,6 +7,7 @@
 #include "bam.hpp"
 
 using ghc::filesystem::path;
+using sv_merge::for_alignment_in_bam_subregions;
 using sv_merge::for_cigar_interval_in_alignment;
 using sv_merge::for_alignment_in_bam_region;
 using sv_merge::for_sequence_in_fasta_file;
@@ -31,6 +32,7 @@ using sv_merge::Region;
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <span>
 #include <map>
 
 using std::unordered_map;
@@ -39,6 +41,7 @@ using std::to_string;
 using std::ofstream;
 using std::string;
 using std::cerr;
+using std::span;
 using std::map;
 using std::max;
 
@@ -292,6 +295,47 @@ void test_cigar_interval_iterator(path data_directory){
 }
 
 
+void test_for_alignment_in_bam_subregions(path data_directory){
+    string region_string = "a:0-5000";
+
+    vector<Region> subregions = {
+            {"a",2000,2010},
+            {"a",3090,4000},
+            {"a",4990,5000},
+            {"a",60000,6010},
+            {"a",0,10}
+    };
+
+    // How to sort intervals
+    auto left_comparator = [](const Region& a, const Region& b){
+        return a.start < b.start;
+    };
+
+    sort(subregions.begin(), subregions.end(), left_comparator);
+
+    Region r(region_string);
+
+    cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+    path ref_path = data_directory / "test_ref.fasta";
+
+    for_alignment_in_bam_subregions(
+            bam_path,
+            region_string,
+            subregions,
+            [&](Alignment& alignment, span<const Region>& overlapping_regions){
+
+        string name;
+        alignment.get_query_name(name);
+        cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+        for (const auto& item: overlapping_regions){
+            cerr << item.start << ',' << item.stop << '\n';
+        }
+    });
+}
+
+
 void test_windowed_cigar_interval_iterator(path data_directory){
     string region_string = "a:0-5000";
 
@@ -483,6 +527,9 @@ int main(){
 
     cerr << "TESTING: windowed cigar interval iterator\n\n";
     test_windowed_cigar_interval_iterator(data_directory);
+
+    cerr << "TESTING: windowed cigar interval iterator\n\n";
+    test_for_alignment_in_bam_subregions(data_directory);
 
 
     return 0;
