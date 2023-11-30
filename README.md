@@ -6,11 +6,14 @@ C++ implementation of rlorigro/hapslap
 
 - c++17
 - gcc
+- cmake
 - zlib1g-dev
 - libbz2-dev
 - autoconf
-- autoheader
+- automake
 - libssl-dev
+- pkg-config
+- libnghttp2-dev (For Ubuntu22 curl http2 support)
 
 <!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
 ### GraphAligner

@@ -83,6 +83,8 @@ set(SOURCES
         src/Sequence.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
+        inc/Sequence.hpp
+        src/VcfReader.cpp
 )
 
 
@@ -420,6 +422,7 @@ set(TESTS
         test_read_clustering
         test_transmap
         test_wfa2
+        test_vcfreader
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
