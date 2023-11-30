@@ -75,6 +75,7 @@ set(SOURCES
         src/Sequence.cpp
         inc/Sequence.hpp
         inc/TransitiveMap.hpp
+        src/VcfReader.cpp
 )
 
 
@@ -370,6 +371,7 @@ set(TESTS
         test_minimap2_no_io
         test_ortools
         test_transmap
+        test_vcfreader
         )
 
 foreach(FILENAME_PREFIX ${TESTS})
