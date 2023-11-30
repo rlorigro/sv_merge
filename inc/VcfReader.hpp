@@ -35,27 +35,23 @@ public:
     static const uint64_t STREAMSIZE_MAX;
 
     /**
-     * Properties that are set by the user
-     */
-    bool is_diploid;
-    string chrom;
-
-    /**
      * Constraints specified by the user at construction time.
      *
      * Remark: `pass_only` means FILTER=PASS or FILTER='.'
      */
     bool pass_only, high_qual_only;
     uint32_t min_sv_length, n_samples_to_load;
-    float min_qual;
-    double min_n_haplotypes_alt, min_n_haplotypes_nonmissing;
+    float min_qual, min_af, min_nmf;
+    float min_n_haplotypes_alt_baseline, min_n_haplotypes_nonmissing_baseline;
+    uint32_t min_n_haplotypes_alt, min_n_haplotypes_nonmissing;
 
     /**
      * VCF fields loaded from a line
      */
+    bool is_autosomal;
     float qual;  // -1 = missing
     uint64_t pos;
-    string id, ref, alt, filter, info, format;
+    string chrom, id, ref, alt, filter, info, format;
     vector<string> genotypes;
 
     /**
@@ -69,20 +65,14 @@ public:
     uint32_t n_haplotypes_ref, n_haplotypes_alt;
 
     /**
-     * @param chromosome the chromosome to which all lines in the VCF belong;
-     * @param is_diploid TRUE iff there are two copies of `chromosome`;
      * @param n_samples_to_load number of samples in a line that are interesting for the user;
      * @param pass_only calls with FILTER different from PASS or `.` are discarded by the user;
      * @param high_qual_only calls with `QUAL<min_qual` are discarded by the user;
      * @param min_sv_length calls shorter than this are discarded by the user;
-     * @param min_allele_frequency calls with too few haplotypes containing the ALT allele are discarded by the user;
-     * the procedure assumes that every sample has the same ploidy, so it might not work for CNVs or if a sample is a
-     * haploid reference;
-     * @param min_nonmissing_frequency calls with too few non-missing haplotypes are discarded by the user;
-     * the procedure assumes that every sample has the same ploidy, so it might not work for CNVs or if a sample is a
-     * haploid reference.
+     * @param min_af calls with too few haplotypes containing the ALT allele are discarded by the user;
+     * @param min_nmf calls with too few non-missing haplotypes are discarded by the user.
      */
-    VcfRecord(const string& chromosome, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
+    VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_af, float min_nmf);
 
     /**
      * Reads `stream` until EOL/EOF and loads some or all of the data in the current line.
@@ -108,12 +98,12 @@ public:
     void print(ostream& stream) const;
 
     /**
-     * Remark: the procedure handles the case where there are two copies of the chromosome but the GT field contains
-     * just one value (this can happen with CNVs or when the sample is a haploid reference).
+     * Remark: it can happen that there are two copies of a chromosome but the GT field contains just one value (e.g.
+     * with CNVs).
      *
      * @param sample sample ID (the first sample has ID zero);
      * @param out output pair that stores the only GT haplotype ID in `first`, or the two haplotype IDs in `first` and
-     * `second`, depending on the ploidy of `chrom`; -1 = missing haplotype;
+     * `second`, depending on the ploidy of `chrom` in `sample`; -1 = missing haplotype;
      * @param tmp_buffer reused temporary space;
      * @return number of GT haplotypes in `sample` (zero iff `sample` is invalid).
      */
@@ -124,16 +114,16 @@ public:
      *
      * @return TRUE iff `key` is found in `ìnfo`; in this case `out` contains the value of `key`.
      */
-    bool get_info_field(const string& key, string& out);
+    bool get_info_field(const string& key, string& out) const;
 
     /**
-     * Remark: the procedure handles the case where there are two copies of the chromosome but the GT field contains
-     * just one value (this can happen with CNVs or when the sample is a haploid reference).
+     * Remark: it can happen that there are two copies of a chromosome but the GT field contains just one value (e.g.
+     * with CNVs).
      *
      * @param buffer the content of a VCF sample field;
      * @return out output pair, containing the number of zero (`.first`) and nonzero (`.second`) haplotypes.
      */
-    void ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out);
+    void ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out) const;
 
     /**
      * @param buffer the content of a VCF sample field (can contain just one haplotype).
@@ -176,7 +166,7 @@ private:
      *
      * @return TRUE iff some VCF fields were skipped.
      */
-    bool set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
+    bool set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, float min_af, float min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
 };
 
 
@@ -259,8 +249,8 @@ public:
      * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
-    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, const string& chromosome, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
-    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, const string& chromosome, bool is_diploid);
+    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
+    VcfReader(const string& path, const function<void(VcfRecord& record)>& callback);
 
     void for_record_in_vcf();
 
@@ -270,8 +260,6 @@ private:
      */
     string path;
     function<void(VcfRecord& record)> callback;
-    string chromosome;
-    bool is_diploid;
 };
 
 }

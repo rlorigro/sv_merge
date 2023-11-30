@@ -57,12 +57,10 @@ const string VcfReader::BND_STR = "BND";
 const uint64_t VcfRecord::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
 
-VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, const string& chromosome, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency) {
+VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency) {
     this->path=path;
     this->callback=callback;
     this->progress_n_lines=progress_n_lines;
-    this->chromosome=chromosome;
-    this->is_diploid=is_diploid;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->pass_only=pass_only;
@@ -74,11 +72,10 @@ VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>
 }
 
 
-VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, const string& chromosome, bool is_diploid) {
+VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback) {
     this->path=path;
     this->callback=callback;
     progress_n_lines=10000;
-    this->is_diploid=is_diploid;
     high_qual_only=false;
     min_qual=0.0;
     pass_only=false;
@@ -120,19 +117,19 @@ int8_t string_to_svtype_alt(const string& type) {
 }
 
 
-VcfRecord::VcfRecord(const string& chrom, bool is_diploid, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency) {
+VcfRecord::VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_af, float min_nmf) {
     this->pass_only=pass_only;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->min_sv_length=min_sv_length;
-    this->chrom=chrom;
-    this->is_diploid=is_diploid;
     this->n_samples_to_load=n_samples_to_load;
+    this->min_af=min_af;
+    this->min_nmf=min_nmf;
     genotypes=vector<string>(n_samples_to_load);
-    min_n_haplotypes_alt=ceil((is_diploid?2.0:1.0)*n_samples_to_load*min_allele_frequency);
-    min_n_haplotypes_nonmissing=ceil((is_diploid?2.0:1.0)*n_samples_to_load*min_nonmissing_frequency);
     tmp_buffer_1=""; tmp_buffer_2="";
     tmp_pair.first=0; tmp_pair.second=0;
+    min_n_haplotypes_alt_baseline=n_samples_to_load*min_af;
+    min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nmf;
 }
 
 
@@ -141,19 +138,18 @@ void VcfRecord::set(ifstream& stream) {
     char c;
     uint32_t current_field, upper_bound;
 
-    id.clear(); ref.clear(); alt.clear(); filter.clear(); info.clear(); format.clear(); genotypes.clear();
-    stream.ignore(STREAMSIZE_MAX,VcfReader::VCF_SEPARATOR);  // Skipping CHROM
-    current_field=1; n_alts=1; n_samples=0; n_haplotypes_ref=0; n_haplotypes_alt=0; fields_skipped=false;
+    chrom.clear(); id.clear(); ref.clear(); alt.clear(); filter.clear(); info.clear(); format.clear(); genotypes.clear();
+    current_field=0; n_alts=1; n_samples=0; n_haplotypes_ref=0; n_haplotypes_alt=0; fields_skipped=false; is_autosomal=false;
     tmp_buffer_1.clear();
     while (stream.get(c)) {
         if (c==VcfReader::VCF_SEPARATOR || c==VcfReader::LINE_END) {
-            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,stream,tmp_buffer_2,tmp_pair);
+            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
             if (fields_skipped) break;
             else {
                 tmp_buffer_1.clear(); current_field++;
                 if (c==VcfReader::LINE_END) break;
                 upper_bound=n_samples_to_load-n_samples;
-                if (is_diploid) upper_bound<<=1;
+                if (is_autosomal || chrom=="chrX" || chrom=="X") upper_bound<<=1;
                 if ( n_haplotypes_alt+upper_bound<min_n_haplotypes_alt ||
                      (n_haplotypes_ref+n_haplotypes_alt)+upper_bound<min_n_haplotypes_nonmissing
                      ) {
@@ -168,13 +164,18 @@ void VcfRecord::set(ifstream& stream) {
             if (current_field==4 && c==VcfReader::ALT_SEPARATOR) n_alts++;
         }
     }
-    if (!fields_skipped && tmp_buffer_1.length()!=0) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,stream,tmp_buffer_2,tmp_pair);
+    if (!fields_skipped && tmp_buffer_1.length()!=0) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
 }
 
 
-bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
-    // field_id is never zero since CHROM is skipped
-    if (field_id==1) pos=stoul(field);
+bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, float min_af, float min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
+    if (field_id==0) {
+        chrom=field;
+        is_autosomal = chrom!="chrX" && chrom!="X" &&  chrom!="chrY" && chrom!="Y" && chrom!="chrM" && chrom!="M";
+        min_n_haplotypes_alt=ceil((is_autosomal?2.0:1.0)*min_n_haplotypes_alt_baseline);
+        min_n_haplotypes_nonmissing=ceil((is_autosomal?2.0:1.0)*min_n_haplotypes_nonmissing_baseline);
+    }
+    else if (field_id==1) pos=stoul(field);
     else if (field_id==2) id+=field;
     else if (field_id==3) ref+=field;
     else if (field_id==4) {
@@ -300,38 +301,22 @@ uint8_t VcfRecord::get_gt(uint32_t sample, pair<int8_t,int8_t>& out) {
     size_t i;
 
     out.first=-1; out.second=-1;
-    if (!is_diploid) {
-        if (genotypes[sample].starts_with(VcfReader::VCF_MISSING_CHAR)) return 1;
-        tmp_buffer_1.clear();
-        for (i=0; i<LENGTH; i++) {
-            c=genotypes[sample].at(i);
-            if (c==VcfReader::GT_SEPARATOR) {
-                out.first=(int8_t)stoi(tmp_buffer_1);
-                return 1;
-            }
-            else tmp_buffer_1+=c;
+    tmp_buffer_1.clear();
+    for (i=0; i<LENGTH; i++) {
+        c=genotypes[sample].at(i);
+        if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
+            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.first=(int8_t)stoi(tmp_buffer_1);
+            tmp_buffer_1.clear();
         }
-        out.first=(int8_t)stoi(genotypes[sample]);
-        return 1;
-    }
-    else {
-        tmp_buffer_1.clear();
-        for (i=0; i<LENGTH; i++) {
-            c=genotypes[sample].at(i);
-            if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
-                if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.first=(int8_t)stoi(tmp_buffer_1);
-                tmp_buffer_1.clear();
-            }
-            else if (c==VcfReader::GT_SEPARATOR) {
-                if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
-                return 2;
-            }
-            else tmp_buffer_1+=c;
+        else if (c==VcfReader::GT_SEPARATOR) {
+            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
+            return 2;
         }
-        if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
-        if (out.first==-1 && out.second!=-1) { out.first=out.second; out.second=-1; return 1; }
-        else return 2;
+        else tmp_buffer_1+=c;
     }
+    if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
+    if (out.first==-1 && out.second!=-1) { out.first=out.second; out.second=-1; return 1; }
+    else return 2;
 }
 
 
@@ -344,7 +329,7 @@ bool VcfRecord::passes_constraints() const {
 }
 
 
-bool VcfRecord::get_info_field(const string &key, string &out) {
+bool VcfRecord::get_info_field(const string &key, string &out) const {
     const uint8_t KEY_LENGTH = key.length()+1;
     size_t i, p, q;
 
@@ -362,36 +347,30 @@ bool VcfRecord::get_info_field(const string &key, string &out) {
 }
 
 
-void VcfRecord::ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out) {
+void VcfRecord::ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out) const {
     char c;
     const size_t LENGTH = buffer.length();
     size_t i, j;
 
     out.first=0; out.second=0;
-    if (!is_diploid) {
-        if (buffer.starts_with('0')) out.first=1;
-        else if (!buffer.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=1;
-    }
-    else {
-        j=0;
-        for (i=0; i<LENGTH; i++) {
-            c=buffer.at(i);
-            if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
-                if (buffer.starts_with('0')) out.first=1;
-                else if (!buffer.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=1;
-                j=i+1;
-            }
-            else if (c==VcfReader::GT_SEPARATOR) {
-                c=buffer.at(j);
-                if (c=='0') out.first++;
-                else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
-                return;
-            }
+    j=0;
+    for (i=0; i<LENGTH; i++) {
+        c=buffer.at(i);
+        if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
+            if (buffer.starts_with('0')) out.first=1;
+            else if (!buffer.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=1;
+            j=i+1;
         }
-        c=buffer.at(j);
-        if (c=='0') out.first++;
-        else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
+        else if (c==VcfReader::GT_SEPARATOR) {
+            c=buffer.at(j);
+            if (c=='0') out.first++;
+            else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
+            return;
+        }
     }
+    c=buffer.at(j);
+    if (c=='0') out.first++;
+    else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
 }
 
 
@@ -438,7 +417,7 @@ void VcfReader::for_record_in_vcf() {
     uint8_t i;
     uint32_t n_fields;
     uint64_t n_lines;
-    VcfRecord record(chromosome,is_diploid,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
+    VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
     ifstream file;
 
     file.open(path,std::ifstream::in);
