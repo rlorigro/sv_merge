@@ -173,7 +173,7 @@ void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t
 }
 
 
-void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives){
+void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, int64_t d_weight, int64_t n_weight, vector<int64_t>& representatives){
     CpModelBuilder model;
     ReadVariables vars;
 
@@ -196,38 +196,38 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, vector<i
     int64_t d_max = SolutionIntegerValue(response_n, vars.cost_d);
 
     // Use pareto extremes to normalize the ranges of each objective and then jointly minimize distance from (0,0)
-    auto d_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
-    auto n_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
-
-    model.AddEquality(d_norm, vars.cost_d*n_min);
-    model.AddEquality(n_norm, vars.cost_n*d_min);
-
-    auto d_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
-    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
-
-    auto n_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
-    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
-
-    model.Minimize(n_square + d_square);
-
-//    auto n_range = n_max - n_min;
-//    n_range *= n_range;
-//    auto d_range = d_max - d_min;
-//    d_range *= d_range;
+//    auto d_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
+//    auto n_norm = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
 //
-//    auto d_norm = model.NewIntVar({0, d_max*d_max*n_range*2});
-//    auto n_norm = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    model.AddEquality(d_norm, vars.cost_d*n_min);
+//    model.AddEquality(n_norm, vars.cost_n*d_min);
 //
-//    model.AddEquality(d_norm, (vars.cost_d-d_min));
-//    model.AddEquality(n_norm, (vars.cost_n-n_min));
-//
-//    auto d_square = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    auto d_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
 //    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
 //
-//    auto n_square = model.NewIntVar({0, d_max*d_max*n_range*2});
+//    auto n_square = model.NewIntVar({n_min*d_min, d_max*d_max*n_min*2});
 //    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
 //
-//    model.Minimize(n_square*d_range + d_square*n_range);
+//    model.Minimize(n_square + d_square);
+
+    auto n_range = n_max - n_min;
+    n_range *= n_range;
+    auto d_range = d_max - d_min;
+    d_range *= d_range;
+
+    auto d_norm = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    auto n_norm = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+
+    model.AddEquality(d_norm, (vars.cost_d-d_min));
+    model.AddEquality(n_norm, (vars.cost_n-n_min));
+
+    auto d_square = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
+
+    auto n_square = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
+
+    model.Minimize(n_square*d_range*n_weight + d_square*n_range*d_weight);
 
 //    SatParameters parameters;
 //    parameters.set_log_search_progress(true);
