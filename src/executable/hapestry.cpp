@@ -402,10 +402,9 @@ void hapestry(
         int64_t interval_padding,
         int64_t interval_max_length,
         int64_t flank_length,
-        int64_t n_threads
+        int64_t n_threads,
+        bool debug
         ){
-    // Flag to control extent of logging/dumping
-    bool debug = false;
 
     if (ghc::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
@@ -426,7 +425,7 @@ void hapestry(
     TransMap template_transmap;
 
     // TODO: use percent of min(a,b) where a,b are lengths of seqs?
-    int64_t score_threshold = 200;
+    int64_t score_threshold = 150;
 
     cerr << t << "Constructing windows" << '\n';
 
@@ -503,16 +502,20 @@ void hapestry(
 
     // Iterate sample reads
     for (const auto& region: regions){
+        // Per-region output and logging directory
         path output_subdir = output_dir / region.to_string('_');
 
         if (not ghc::filesystem::exists(output_subdir)){
             ghc::filesystem::create_directories(output_subdir);
         }
 
+        // Get the sample-read-path transitive mapping for this region
         auto& transmap = region_transmaps.at(region);
 
+        // Iterate samples within this region and cluster reads
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
             if (debug) {
+
                 path p = output_subdir / (sample_name + "_extracted_reads.fasta");
                 ofstream file(p);
 
@@ -521,54 +524,41 @@ void hapestry(
                     file << transmap.get_sequence(id) << '\n';
                 });
             }
+
+            // Reads must be aligned all-vs-all to get scoring for cluster scheme
+            cross_align_sample_reads(transmap, score_threshold, sample_name);
+
+            CpModelBuilder model;
+            ReadVariables vars;
+            vector<int64_t> representatives;
+
+            // Cluster reads within samples, with an emphasis on minimizing the number of clusters.
+            // Weight on the n term helps prevent arbitrary clusters from being formed in cases where only 1 exists
+            int64_t n_weight = 2;
+            int64_t d_weight = 1;
+            optimize_reads_with_d_and_n(transmap, sample_id, d_weight, n_weight, representatives);
+
+            if (debug){
+                path p = output_subdir / (sample_name + "_clusters.txt");
+                ofstream file(p);
+
+                for (auto a: representatives){
+                    cerr << transmap.get_node(a).name << '\n';
+                    file << transmap.get_node(a).name << '\n';
+                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
+                    file << transmap.get_sequence(a) << '\n';
+                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
+                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
+                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
+                        file << transmap.get_sequence(b) << '\n';
+                    });
+                }
+            }
         });
     }
 
     cerr << t << "Done" << '\n';
 
-//        for (auto& [sample_name, _]: bam_paths){
-//            cerr << sample_name << ' ' << region.to_string() << '\n';
-//            auto sample_id = transmap.get_id(sample_name);
-//
-//            if (debug){
-//                path p = output_subdir / (sample_name + "_extracted_reads.fasta");
-//                ofstream file(p);
-//
-//                transmap.for_each_read_of_sample(sample_name, [&](const string& name, int64_t id){
-//                    file << '>' << name << '\n';
-//                    file << transmap.get_sequence(id) << '\n';
-//                });
-//            }
-//
-//            cross_align_sample_reads(transmap, score_threshold, sample_name);
-//
-//            CpModelBuilder model;
-//            ReadVariables vars;
-//            vector<int64_t> representatives;
-//
-//            optimize_reads_with_d_and_n(transmap, sample_id, representatives);
-//
-//            if (debug){
-//                path p = output_subdir / (sample_name + "_clusters.txt");
-//                ofstream file(p);
-//
-//                for (auto a: representatives){
-//                    cerr << transmap.get_node(a).name << '\n';
-//                    file << transmap.get_node(a).name << '\n';
-//                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
-//                    file << transmap.get_sequence(a) << '\n';
-//                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
-//                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
-//                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
-//                        file << transmap.get_sequence(b) << '\n';
-//                    });
-//                }
-//            }
-//
-//
-//        }
-//    }
-//
 }
 
 
@@ -583,6 +573,7 @@ int main (int argc, char* argv[]){
     int64_t interval_max_length;
     int64_t flank_length;
     int64_t n_threads = 1;
+    bool debug = false;
 
     CLI::App app{"App description"};
 
@@ -633,6 +624,8 @@ int main (int argc, char* argv[]){
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
+    app.add_flag("--debug", debug, "Invoke this to add more logging and output");
+
     CLI11_PARSE(app, argc, argv);
 
     hapestry(
@@ -645,7 +638,8 @@ int main (int argc, char* argv[]){
         interval_padding,
         interval_max_length,
         flank_length,
-        n_threads
+        n_threads,
+        debug
     );
 
     return 0;
