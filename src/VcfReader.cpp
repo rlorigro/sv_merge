@@ -57,9 +57,8 @@ const string VcfReader::BND_STR = "BND";
 const uint64_t VcfRecord::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
 
-VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency) {
-    this->path=path;
-    this->callback=callback;
+VcfReader::VcfReader(const path& vcf_path, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency) {
+    this->vcf_path=vcf_path;
     this->progress_n_lines=progress_n_lines;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
@@ -72,9 +71,8 @@ VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>
 }
 
 
-VcfReader::VcfReader(const string& path, const function<void(VcfRecord& record)>& callback) {
-    this->path=path;
-    this->callback=callback;
+VcfReader::VcfReader(const path& vcf_path) {
+    this->vcf_path=vcf_path;
     progress_n_lines=10000;
     high_qual_only=false;
     min_qual=0.0;
@@ -411,7 +409,7 @@ void VcfRecord::info2map(unordered_map<string,string>& map) {
 }
 
 
-void VcfReader::for_record_in_vcf() {
+void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callback) {
     bool is_header;
     char c;
     uint8_t i;
@@ -420,8 +418,8 @@ void VcfReader::for_record_in_vcf() {
     VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
     ifstream file;
 
-    file.open(path,std::ifstream::in);
-    if (!file.is_open() || !file.good()) throw runtime_error("ERROR: could not read file: " + path);
+    file.open(vcf_path,std::ifstream::in);
+    if (!file.is_open() || !file.good()) throw runtime_error("ERROR: could not read file: " + vcf_path);
     n_lines=0;
     while (!file.eof()) {
         c=file.peek();
