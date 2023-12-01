@@ -254,7 +254,7 @@ public:
     float min_qual;
     bool pass_only;
     uint32_t min_sv_length;
-    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample.
+    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample. MAX=load all samples.
     float min_allele_frequency;
     float min_nonmissing_frequency;
 

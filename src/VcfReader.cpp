@@ -77,9 +77,9 @@ VcfReader::VcfReader(const path& vcf_path) {
     high_qual_only=false;
     min_qual=0.0;
     pass_only=false;
-    min_sv_length=50;
-    n_samples_to_load=1;
-    n_samples_in_vcf=1;
+    min_sv_length=0;
+    n_samples_to_load=numeric_limits<uint32_t>::max();
+    n_samples_in_vcf=0;
     min_allele_frequency=0.0;
     min_nonmissing_frequency=0.0;
 }
@@ -123,11 +123,18 @@ VcfRecord::VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32
     this->n_samples_to_load=n_samples_to_load;
     this->min_af=min_af;
     this->min_nmf=min_nmf;
-    genotypes=vector<string>(n_samples_to_load);
+    if (n_samples_to_load==numeric_limits<uint32_t>::max()) {
+        genotypes=vector<string>(0);
+        min_n_haplotypes_alt_baseline=0.0;
+        min_n_haplotypes_nonmissing_baseline=0.0;
+    }
+    else {
+        genotypes=vector<string>(n_samples_to_load);
+        min_n_haplotypes_alt_baseline=n_samples_to_load*min_af;
+        min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nmf;
+    }
     tmp_buffer_1=""; tmp_buffer_2="";
     tmp_pair.first=0; tmp_pair.second=0;
-    min_n_haplotypes_alt_baseline=n_samples_to_load*min_af;
-    min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nmf;
 }
 
 
@@ -136,7 +143,7 @@ void VcfRecord::set(ifstream& stream) {
     char c;
     uint32_t current_field, upper_bound;
 
-    chrom.clear(); id.clear(); ref.clear(); alt.clear(); filter.clear(); info.clear(); format.clear(); genotypes.clear();
+    chrom.clear(); id.clear(); ref.clear(); alt.clear(); filter.clear(); info.clear(); format.clear();
     current_field=0; n_alts=1; n_samples=0; n_haplotypes_ref=0; n_haplotypes_alt=0; fields_skipped=false; is_autosomal=false;
     tmp_buffer_1.clear();
     while (stream.get(c)) {
@@ -440,7 +447,10 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             }
             n_samples_in_vcf=n_fields-N_NONSAMPLE_FIELDS_VCF;
             n_samples_to_load=min(n_samples_to_load,n_samples_in_vcf);
+            record.min_n_haplotypes_alt_baseline=n_samples_to_load*min_allele_frequency;
+            record.min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nonmissing_frequency;
             record.n_samples_to_load=n_samples_to_load;
+            if (n_samples_to_load>record.genotypes.size()) record.genotypes.resize(n_samples_to_load);
             continue;
         }
         else if (c==EOF) break;
