@@ -15,14 +15,52 @@ using sv_merge::VcfReader;
 
 
 ofstream outstream;
+vector<uint32_t> tmp_vector;
+pair<float, float> tmp_pair;
+string tmp_string;
 
 void test_callback(VcfRecord& record) { record.print(outstream); outstream << '\n'; }
+
+void test_callback_2(VcfRecord& record) {
+    record.get_samples_with_alt(tmp_vector);
+    for (auto& id: tmp_vector) { outstream << id << ","; }
+    outstream << "\n";
+}
+
+/**
+ * For PBSV.
+ * Remark: SIGMA_MULTIPLE must be set to 1 in get_confidence_interval() for this test to work.
+ */
+void test_callback_3(VcfRecord& record) {
+    if (record.get_info_field(VcfReader::CIPOS_STR,0,tmp_string)==string::npos) outstream << ".,\n";
+    else {
+        record.get_confidence_interval_pos(tmp_pair);
+        outstream << tmp_pair.first << "," << tmp_pair.second << ",\n";
+    }
+}
+
+/**
+ * For Sniffles.
+ * Remark: SIGMA_MULTIPLE must be set to 1 in get_confidence_interval() for this test to work.
+ */
+void test_callback_4(VcfRecord& record) {
+    if (record.get_info_field(VcfReader::STDEV_POS_STR,0,tmp_string)==string::npos) outstream << ".,";
+    else {
+        record.get_confidence_interval_pos(tmp_pair);
+        outstream << tmp_pair.second << ",";
+    }
+    if (record.get_info_field(VcfReader::STDEV_LEN_STR,0,tmp_string)==string::npos) outstream << ".,\n";
+    else {
+        record.get_confidence_interval_length(tmp_pair);
+        outstream << tmp_pair.second << ",\n";
+    }
+}
 
 
 /**
  * Performs `input_vcf -> test_vcf` and compares `test_vcf` to `truth_vcf`.
  */
-void test(const string& test_id, const string& chromosome, const bool& high_qual_only, const float& min_qual, const bool& pass_only, const uint32_t min_sv_length, const uint32_t n_samples_to_load, const float& min_af, const float& min_nmf, path input_vcf, path truth_vcf, path test_vcf) {
+void test(const function<void(VcfRecord& record)>& callback, const string& test_id, const string& chromosome, const bool high_qual_only, const float min_qual, const bool pass_only, const uint32_t min_sv_length, const uint32_t n_samples_to_load, const float min_af, const float min_nmf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     cerr << "Test ID: " << test_id << '\n';
     cerr << "   chromosome: " << chromosome << '\n';
     cerr << "   high_qual_only: " << high_qual_only << '\n';
@@ -34,14 +72,16 @@ void test(const string& test_id, const string& chromosome, const bool& high_qual
     cerr << "   min_nonmissing_frequency: " << min_nmf << '\n';
     VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf);
     outstream.open(test_vcf);
-    reader.for_record_in_vcf(test_callback);
+    reader.for_record_in_vcf(callback);
     outstream.close();
+    for (auto sample_id: reader.sample_ids) cerr << sample_id << "  ";
+    cerr << "\n";
     string command = "diff --brief "+test_vcf.string()+" "+truth_vcf.string();
     run_command(command);
 }
 
 
-void test_single_sample_vcf(const path& caller_vcf, const bool& filter_by_qual, const string& caller_id, const vector<string> CHROMOSOMES, const vector<float> MIN_QUALS, const vector<int> MIN_SV_LENGTHS, path input_vcf, path truth_vcf, path test_vcf) {
+void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, const string& caller_id, const vector<string>& CHROMOSOMES, const vector<float>& MIN_QUALS, const vector<int>& MIN_SV_LENGTHS, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
     uint32_t min_sv_length;
     float min_qual, min_af, min_nmf;
@@ -50,13 +90,28 @@ void test_single_sample_vcf(const path& caller_vcf, const bool& filter_by_qual, 
     for (auto& chromosome: CHROMOSOMES) {
         command=R"(bcftools filter --include "ALT!=\"<INS>\" && ALT!=\"<CNV>\"" --regions )"+chromosome+" "+caller_vcf.string();
         run_command(command,input_vcf);
+        // Testing get_confidence_interval_*()
+        high_qual_only=false; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
+        if (caller_id=="PBSV") {
+            command=R"(bcftools query -f '%CIPOS,\n' )"+input_vcf.string();
+            run_command(command,truth_vcf);
+            test(test_callback_3,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        }
+        else if (caller_id=="SNIFFLES") {
+            command=R"(bcftools query -f '%STDEV_POS,%STDEV_LEN,\n' )"+input_vcf.string();
+            run_command(command,truth_vcf);
+            test(test_callback_4,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        }
+        else if (caller_id=="PAV") {
+            // NOP: PAV has no confidence interval information.
+        }
         // Filtering by QUAL
         if (filter_by_qual) {
             high_qual_only=true; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
             for (auto& min_qual: MIN_QUALS) {
                 command=R"(bcftools filter --include "QUAL>=)"+to_string(min_qual)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]")";
                 run_command(command,truth_vcf);
-                test(caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+                test(test_callback,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
             }
         }
         // Filtering by FILTER
@@ -64,19 +119,19 @@ void test_single_sample_vcf(const path& caller_vcf, const bool& filter_by_qual, 
         command=R"(bcftools filter --include "FILTER=\"PASS\"" )"+input_vcf.string()+R"( | grep "^[^#]")";
         run_command(command,truth_vcf);
         min_qual=0.0;
-        test(caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        test(test_callback,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         // Filtering by SVLEN
         for (auto& min_sv_length: MIN_SV_LENGTHS) {
             high_qual_only=false; pass_only=false; min_af=0.0; min_nmf=0.0;
             command=R"(bcftools filter --include "SVLEN>=)"+to_string(min_sv_length)+" || SVLEN<=-"+to_string(min_sv_length)+R"( || SVTYPE==\"BND\"" )"+input_vcf.string()+R"( | grep "^[^#]")";
             run_command(command,truth_vcf);
-            test(caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+            test(test_callback,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,1,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         }
         // Removing sample columns
         high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
         command="cut -f 1-9 "+input_vcf.string()+R"( | grep "^[^#]")";
         run_command(command,truth_vcf);
-        test(caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,0,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        test(test_callback,caller_id,chromosome,high_qual_only,min_qual,pass_only,min_sv_length,0,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
     }
 }
 
@@ -84,7 +139,7 @@ void test_single_sample_vcf(const path& caller_vcf, const bool& filter_by_qual, 
 /**
  * Currently tuned for the "raw" HPRC VCF.
  */
-void test_joint_vcf_hprc(const path& joint_vcf, const vector<string> CHROMOSOMES, const vector<float> MIN_QUALS, const vector<float> MIN_AFS, const vector<float> MIN_NMFS, const string N_THREADS, const path tmp1_vcf, const path tmp2_vcf, const path input_vcf, const path truth_vcf, const path test_vcf) {
+void test_joint_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOMES, const vector<float>& MIN_QUALS, const vector<float>& MIN_AFS, const vector<float>& MIN_NMFS, const string& N_THREADS, const path& tmp1_vcf, const path& tmp2_vcf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
     uint32_t min_sv_length, n_samples_to_load, n_haplotypes;
     float min_qual, min_af, min_nmf;
@@ -104,12 +159,17 @@ void test_joint_vcf_hprc(const path& joint_vcf, const vector<string> CHROMOSOMES
         command="rm -f "+tmp2_vcf.string(); run_command(command);
         command="bcftools +fill-tags "+tmp1_vcf.string()+" -Ob -o "+input_vcf.string()+" -- -t AC,AF,AN,F_MISSING"; run_command(command);
         command="rm -f tmp1_vcf"; run_command(command);
+        // Testing get_samples_with_alt()
+        command="bcftools view -H "+input_vcf.string()+R"( | awk '{for (i=10; i<=54; i++) { if ($i=="0/1" || $i=="0|1" || $i=="1/0" || $i=="1|0" || $i=="1/1" || $i=="1|1" || $i=="./1" || $i==".|1" || $i=="1/." || $i=="1|.") printf("%d,",(i-10)); } printf("\n");}')";
+        run_command(command,truth_vcf);
+        high_qual_only=false; min_qual=0; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
+        test(test_callback_2,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         // Filtering by QUAL
         high_qual_only=true; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
         for (auto& min_qual: MIN_QUALS) {
             command="bcftools filter --threads "+N_THREADS+R"( --include "QUAL>=)"+to_string(min_qual)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
             run_command(command,truth_vcf);
-            test("HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         }
         // Filtering by FILTER skipped, since FILTER is always '.'
         // Filtering by SVLEN skipped, since the SVLEN tag is missing, bcftools does not work for adding it, and
@@ -118,20 +178,20 @@ void test_joint_vcf_hprc(const path& joint_vcf, const vector<string> CHROMOSOMES
         high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
         command="cut -f 1-9 "+input_vcf.string()+R"( | grep "^[^#]")";
         run_command(command,truth_vcf);
-        test("HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,0,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,0,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         // Filtering by AF
         high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_nmf=0.0;
         for (auto& min_af: MIN_AFS) {
             command="bcftools filter --threads "+N_THREADS+R"( --include "AC/)"+to_string(n_haplotypes)+">="+to_string(min_af)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
             run_command(command,truth_vcf);
-            test("HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         }
         // Filtering by MIN_NMF
         high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_af=0.0;
         for (auto& min_nmf: MIN_NMFS) {
             command="bcftools filter --threads "+N_THREADS+R"( --include "AN/)"+to_string(n_haplotypes)+">="+to_string(min_nmf)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
             run_command(command,truth_vcf);
-            test("HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
         }
     }
 }

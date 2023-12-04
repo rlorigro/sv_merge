@@ -71,7 +71,7 @@ public:
      */
     bool is_high_quality, is_pass, is_symbolic;
     int8_t sv_type;  // -1 = unsupported type
-    uint32_t sv_length;  // UINT_MAX = the length of the SV could not be inferred
+    uint32_t sv_length;  // MAX = the length of the SV could not be inferred
     uint32_t n_alts;  // >1 iff the site is multiallelic
     uint32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
     uint32_t n_haplotypes_ref, n_haplotypes_alt;
@@ -91,11 +91,11 @@ public:
      *
      * - If the call is a symbolic INS, no field after ALT is loaded.
      * - If there are zero or more than one ALT, no field after ALT is loaded.
-     * - If `HIGH_QUAL_ONLY` is true and the call has low quality, no field after QUAL is loaded.
-     * - If `PASS_ONLY` is true and the call is not PASS, no field after FILTER is loaded.
+     * - If `high_qual_only` is true and the call has low quality, no field after QUAL is loaded.
+     * - If `pass_only` is true and the call is not PASS, no field after FILTER is loaded.
      * - If the call is not of a supported type, no field after INFO is loaded.
-     * - If the call is shorter than `MIN_SV_LENGTH`, no field after INFO is loaded.
-     * - If there are more samples than `N_SAMPLES_TO_LOAD`, no sample after the maximum is loaded.
+     * - If the call is shorter than `min_sv_length`, no field after INFO is loaded.
+     * - If there are more samples than `n_samples_to_load`, no sample after the maximum is loaded.
      */
     void set(ifstream& stream);
 
@@ -124,9 +124,10 @@ public:
     /**
      * Remark: this performs a linear scan of `info`.
      *
-     * @return TRUE iff `key` is found in `ìnfo`; in this case `out` contains the value of `key`.
+     * @return the first occurrence of `key` in `ìnfo[from..]`, if present (in this case `out` contains the value of
+     * `key`); `string::npos` if `key` does not occur in `ìnfo`.
      */
-    bool get_info_field(const string& key, string& out) const;
+    size_t get_info_field(const string& key, const size_t from, string& out) const;
 
     /**
      * Remark: it can happen that there are two copies of a chromosome but the GT field contains just one value (e.g.
@@ -149,12 +150,78 @@ public:
      */
     void info2map(unordered_map<string,string>& map);
 
+    /**
+     * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
+     */
+    void get_samples_with_alt(vector<uint32_t>& out);
+
+    /**
+     * Same as above, but returns just the string ID of each sample.
+     */
+    void get_samples_with_alt(vector<string>& out);
+
+    bool is_alt_symbolic() const;
+
+    /**
+     * Remark: `out` is set to an empty string if the chromosome could not be determined.
+     */
+    void get_breakend_chromosome(string& out) const;
+
+    /**
+     * @return UINT64_MAX if the position could not be determined.
+     */
+    uint64_t get_breakend_pos();
+
+    /**
+     * @return
+     * 0 if the orientation could not be determined;
+     * 1 if the breakend continues to the left of `pos`;
+     * 2 if the breakend continues the the right of `pos`.
+     */
+    uint8_t get_breakend_orientation_cis() const;
+
+    /**
+    * @return
+    * 0 if the orientation could not be determined;
+    * 1 if the breakend continues to the left of the position in `alt`;
+    * 2 if the breakend continues the the right of the position in `alt`.
+    */
+    uint8_t get_breakend_orientation_trans() const;
+
+    /**
+     * Checks the IMPRECISE tag and the confidence intervals fields.
+     */
+    bool is_precise();
+
+    /**
+	 * @param out `first`: quantity to be added to `pos` to get the first position of the confidence interval
+     * (typically <=0); `second`: quantity to be added to `pos` to get the last position of the confidence interval
+     * (typically >=0).
+	 */
+    void get_confidence_interval_pos(pair<float, float>& out);
+    void get_confidence_interval_end(pair<float, float>& out);
+    void get_confidence_interval_length(pair<float, float>& out);
+
+    /**
+     * Stores in `out` the zero-based coordinates of the SV in the reference:
+     * - if the SV affects all and only the zero-based positions in a closed interval [x..y], out=(x,y+1);
+     * - if the SV is an INS between zero-based positions x and x+1, out=(x,x);
+     * - if the SV is a BND, either between zero-based positions x and x+1, or between zero-based positions x-1 and x,
+     *   out=(x,x);
+     * - if a value cannot be determined, it is set to UINT64_MAX.
+     *
+     * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
+     * `sv_length`, if available.
+     */
+    void get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out);
+
 private:
     /**
      * Reused temporary space
      */
     string tmp_buffer_1, tmp_buffer_2;
     pair<uint8_t, uint8_t> tmp_pair;
+    pair<float, float> tmp_pair_2;
 
     /**
      * Sets `sv_type` using `ref`, `alt` and `info`, which are assumed to be already set.
@@ -181,6 +248,13 @@ private:
      * @return TRUE iff some VCF fields were skipped.
      */
     bool set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, float min_af, float min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
+
+    /**
+     * Core logic of confidence intervals extraction
+     *
+     * @param which 0=pos, 1=sv_length, 2=end.
+     */
+    void get_confidence_interval(uint8_t which, pair<float, float>& out);
 };
 
 
@@ -198,9 +272,12 @@ public:
     static const char VCF_MISSING_CHAR;
     static const char SYMBOLIC_CHAR_OPEN;
     static const char SYMBOLIC_CHAR_CLOSE;
+    static const char BREAKEND_CHAR_OPEN;
+    static const char BREAKEND_CHAR_CLOSE;
     static const string PASS_STR;
     static const char ALT_SEPARATOR;
     static const char GT_SEPARATOR;
+    static const char BREAKEND_SEPARATOR;
     static const char UNPHASED_CHAR;
     static const char PHASED_CHAR;
 
@@ -218,6 +295,13 @@ public:
     static const uint16_t CIEND_STR_LENGTH;
     static const string CILEN_STR;
     static const uint16_t CILEN_STR_LENGTH;
+    static const char CI_SEPARATOR;
+    static const string STDEV_POS_STR;
+    static const uint16_t STDEV_POS_STR_LENGTH;
+    static const string STDEV_LEN_STR;
+    static const uint16_t STDEV_LEN_STR_LENGTH;
+    static const string STDEV_END_STR;
+    static const uint16_t STDEV_END_STR_LENGTH;
     static const string PRECISE_STR;
     static const string IMPRECISE_STR;
 
@@ -254,13 +338,14 @@ public:
     float min_qual;
     bool pass_only;
     uint32_t min_sv_length;
-    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample.
+    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample. MAX=load all samples.
     float min_allele_frequency;
     float min_nonmissing_frequency;
 
     /**
-     * Total number of samples in the VCF according to the header
+     * All the samples in the VCF according to the header
      */
+    vector<string> sample_ids;
     uint32_t n_samples_in_vcf;
 
     /**
