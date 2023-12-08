@@ -11,6 +11,7 @@ using ghc::filesystem::path;
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <fstream>
 #include <functional>
 #include <ostream>
@@ -21,6 +22,7 @@ using std::string;
 using std::string_view;
 using std::vector;
 using std::unordered_map;
+using std::unordered_set;
 using std::function;
 using std::ifstream;
 using std::ostream;
@@ -152,13 +154,9 @@ public:
 
     /**
      * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
+     * ID must be used in conjunction with VcfReader to find the
      */
-    void get_samples_with_alt(vector<uint32_t>& out);
-
-    /**
-     * Same as above, but returns just the string ID of each sample.
-     */
-    void get_samples_with_alt(vector<string>& out);
+    void get_samples_with_alt(unordered_set<uint32_t>& out);
 
     bool is_alt_symbolic() const;
 
@@ -350,12 +348,15 @@ public:
 
     /**
      * @param path a VCF file that contains only calls in `chromosome`;
-     * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
     VcfReader(const path& vcf_path, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
     VcfReader(const path& vcf_path);
 
+    /**
+     *
+     * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
+     */
     void for_record_in_vcf(const function<void(VcfRecord& record)>& callback);
 
 private:
@@ -363,7 +364,6 @@ private:
      * Internal state of VcfReader
      */
     string vcf_path;
-    function<void(VcfRecord& record)> callback;
 };
 
 }

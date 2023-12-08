@@ -88,22 +88,52 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 
 
 void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int64_t flank_length, vector<Region>& regions){
-    vector<labeled_interval_t> intervals;
-
-    // Iterate the VCF file and construct a vector of labeled intervals for the IntervalGraph
-    // Need to append `interval_padding` onto intervals and then subtract it afterwards
-    // TODO: fill in when vcf reader exists
-    IntervalGraph<string> g(intervals);
-
     VcfReader vcf_reader(vcf);
+    vcf_reader.min_sv_length = 0;
 
-    g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
-        cerr << interval.first << "," << interval.second;
-        for (const auto& v: values){
-            cerr << ' ' << v;
+    pair<uint64_t, uint64_t> coord;
+    unordered_set<uint32_t> sample_ids;
+    unordered_set<string> sample_names;
+
+    unordered_map<string,vector<labeled_interval_t> > contig_intervals;
+
+    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
+        r.get_samples_with_alt(sample_ids);
+
+        if (sample_ids.empty()){
+            return;
+        }
+
+        r.get_reference_coordinates(true, coord);
+
+        cerr << coord.first << ',' << coord.second << '\n';
+        sample_names.clear();
+        for (auto id: sample_ids){
+            cerr << '\t' << "id: " << id << '\n';
+            cerr << '\t' << "name: " << vcf_reader.sample_ids[id] << '\n';
+
+            sample_names.emplace(vcf_reader.sample_ids[id]);
         }
         cerr << '\n';
+
+        contig_intervals[r.chrom].emplace_back(coord, sample_names);
     });
+
+    for (auto& [contig, intervals]: contig_intervals){
+        // Iterate the VCF file and construct a vector of labeled intervals for the IntervalGraph
+        // Need to append `interval_padding` onto intervals and then subtract it afterwards (if desired)
+        IntervalGraph<string> g(intervals);
+
+        g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
+            cerr << interval.first << "," << interval.second;
+            for (const auto& v: values){
+                cerr << ' ' << v;
+            }
+            cerr << '\n';
+
+            regions.emplace_back(contig, interval.first, interval.second);
+        });
+    }
 }
 
 
@@ -111,7 +141,7 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int64_t flank
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
 
-void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
+void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name, int64_t flank_length){
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
     auto sample_id = transmap.get_id(sample_name);
@@ -136,7 +166,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 // WFA creates negative scores for "distance", we make it positive again
                 transmap.add_edge(a,b, float(-score));
 
-                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << score << '\n';
+                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << '\n';
             }
         });
     });
@@ -395,63 +425,15 @@ void get_reads_for_each_bam_subregion(
 }
 
 
-void hapestry(
-        path output_dir,
-        path windows_bed,               // Override the interval graph if this is provided
-        path tandem_bed,
+void fetch_reads(
+        Timer& t,
+        vector<Region>& regions,
         path bam_csv,
-        path vcf,
-        path reference,
-        int64_t interval_max_length,
-        int64_t flank_length,
         int64_t n_threads,
-        bool debug
-        ){
-
-    if (ghc::filesystem::exists(output_dir)){
-        throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
-    }
-    else{
-        ghc::filesystem::create_directories(output_dir);
-    }
-
-    Timer t;
-
-    cerr << t << "Initializing" << '\n';
-
-    vector <pair <string,path> > bam_paths;
+        unordered_map<Region,TransMap>& region_transmaps
+){
     GoogleAuthenticator authenticator;
-    vector<Region> regions;
-
-    // TODO: reserve the hash tables used in transmap so that they approximately have the space needed for n_samples*n_fold_coverage ?
     TransMap template_transmap;
-
-    // TODO: use percent of min(a,b) where a,b are lengths of seqs?
-    int64_t score_threshold = 150;
-
-    cerr << t << "Constructing windows" << '\n';
-
-    if (windows_bed.empty()){
-        // TODO: interval padding used here
-        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, regions);
-    }
-    else{
-        for_region_in_bed_file(tandem_bed, [&](const Region &r) {
-            regions.push_back(r);
-            regions.back().start -= flank_length;
-            regions.back().stop += flank_length;
-        });
-
-        // How to sort intervals
-        auto left_comparator = [](const Region& a, const Region& b){
-            return a.start < b.start;
-        };
-
-        sort(regions.begin(), regions.end(), left_comparator);
-    }
-
-    // The goal object
-    unordered_map<Region,TransMap> region_transmaps;
 
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_read_map_t sample_to_region_reads;
@@ -464,6 +446,7 @@ void hapestry(
         template_transmap.add_sample(sample_name);
     }
 
+    // Compute coverages for regions
     unordered_map<Region, size_t> region_coverage;
     for (const auto& [sample_name,item]: sample_to_region_reads) {
         for (const auto& [region,sequences]: item) {
@@ -501,6 +484,80 @@ void hapestry(
             }
         }
     }
+}
+
+
+void load_windows_from_bed(path windows_bed, vector<Region>& regions){
+    for_region_in_bed_file(windows_bed, [&](const Region &r) {
+        regions.push_back(r);
+    });
+
+    // How to sort regions
+    auto left_comparator = [](const Region& a, const Region& b){
+        if (a.name != b.name) {
+            return a.name < b.name;
+        }
+        else {
+            return a.start < b.start;
+        }
+    };
+
+    sort(regions.begin(), regions.end(), left_comparator);
+}
+
+
+void hapestry(
+        path output_dir,
+        path windows_bed,               // Override the interval graph if this is provided
+        path tandem_bed,
+        path bam_csv,
+        path vcf,
+        path reference,
+        int64_t interval_max_length,
+        int64_t flank_length,
+        int64_t n_threads,
+        bool debug
+        ){
+
+    if (ghc::filesystem::exists(output_dir)){
+        throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
+    }
+    else{
+        ghc::filesystem::create_directories(output_dir);
+    }
+
+    Timer t;
+
+    cerr << t << "Initializing" << '\n';
+
+    vector <pair <string,path> > bam_paths;
+    vector<Region> regions;
+
+    // TODO: use percent of min(a,b) where a,b are lengths of seqs?
+    int64_t score_threshold = 150;
+
+    cerr << t << "Constructing windows" << '\n';
+
+    if (windows_bed.empty()){
+        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, regions);
+    }
+    else{
+        load_windows_from_bed(windows_bed, regions);
+    }
+
+    for (auto& r: regions) {
+        r.start -= flank_length;
+        r.stop += flank_length;
+    }
+
+    // The container to store all fetched reads and their relationships to samples/paths
+    unordered_map<Region,TransMap> region_transmaps;
+
+    cerr << t << "Fetching reads for all windows" << '\n';
+
+    fetch_reads(t, regions, bam_csv, n_threads, region_transmaps);
+
+    cerr << t << "Processing windows" << '\n';
 
     // Iterate sample reads
     for (const auto& region: regions){
@@ -517,6 +574,8 @@ void hapestry(
         // Iterate samples within this region and cluster reads
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
             if (debug) {
+                cerr << '\n';
+                cerr << sample_name << '\n';
 
                 path p = output_subdir / (sample_name + "_extracted_reads.fasta");
                 ofstream file(p);
@@ -528,7 +587,7 @@ void hapestry(
             }
 
             // Reads must be aligned all-vs-all to get scoring for cluster scheme
-            cross_align_sample_reads(transmap, score_threshold, sample_name);
+            cross_align_sample_reads(transmap, score_threshold, sample_name, flank_length);
 
             CpModelBuilder model;
             ReadVariables vars;
@@ -541,6 +600,8 @@ void hapestry(
             optimize_reads_with_d_and_n(transmap, sample_id, d_weight, n_weight, representatives);
 
             if (debug){
+                cerr << sample_name << '\n';
+
                 path p = output_subdir / (sample_name + "_clusters.txt");
                 ofstream file(p);
 
@@ -569,7 +630,7 @@ int main (int argc, char* argv[]){
     path windows_bed;
     path tandem_bed;
     path bam_csv;
-    path vcf = ""; // TODO: add arg for this when vcf reader exists
+    path vcf;
     path ref;
     int64_t interval_max_length;
     int64_t flank_length;
@@ -590,16 +651,20 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
-            "--tandems",
-            windows_bed,
-            "Path to BED file containing tandem repeat locations (for automated window generation)")
+            "--vcf",
+            vcf,
+            "Path to VCF file containing variants to be merged")
             ->required();
 
     app.add_option(
-            "--windows",
+            "--tandems",
             tandem_bed,
-            "Path to BED file containing windows to merge (inferred automatically if not provided)")
-            ->required();
+            "Path to BED file containing tandem repeat locations (for automated window generation)");
+
+    app.add_option(
+            "--windows",
+            windows_bed,
+            "Path to BED file containing windows to merge (inferred automatically if not provided)");
 
     app.add_option(
             "--bam_csv",
