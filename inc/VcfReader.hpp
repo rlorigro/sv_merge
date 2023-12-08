@@ -87,6 +87,12 @@ public:
     VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_af, float min_nmf);
 
     /**
+     * @return a new object that contains a copy of every variable of the current object that was loaded from a VCF
+     * record; the state of every other variable is undefined.
+     */
+    VcfRecord clone() const;
+
+    /**
      * Reads `stream` until EOL/EOF and loads some or all of the data in the current line.
      *
      * - If the call is a symbolic INS, no field after ALT is loaded.
@@ -168,9 +174,9 @@ public:
     void get_breakend_chromosome(string& out) const;
 
     /**
-     * @return UINT64_MAX if the position could not be determined.
+     * @return UINT32_MAX if the position could not be determined; otherwise, the original, one-based value.
      */
-    uint64_t get_breakend_pos();
+    uint32_t get_breakend_pos();
 
     /**
      * @return
@@ -203,17 +209,19 @@ public:
     void get_confidence_interval_length(pair<float, float>& out);
 
     /**
-     * Stores in `out` the zero-based coordinates of the SV in the reference:
-     * - if the SV affects all and only the zero-based positions in a closed interval [x..y], out=(x,y+1);
-     * - if the SV is an INS between zero-based positions x and x+1, out=(x,x);
-     * - if the SV is a BND, either between zero-based positions x and x+1, or between zero-based positions x-1 and x,
-     *   out=(x,x);
-     * - if a value cannot be determined, it is set to UINT64_MAX.
+     * Stores in `out` the zero-based coordinates of the SV in the reference.
+     * - If the SV affects all and only the zero-based positions in a closed interval `[x..y]`, `out=(x,y+1)`.
+     * - If the SV is an INS between zero-based positions `x` and `x+1`, `out=(x+1,x+1)`. Note that `x=-1` is allowed
+     *   (telomeric insertion).
+     * - If the SV is a BND, either between zero-based positions `x` and `x+1`, or between zero-based positions `x-1`
+     *   and `x`, `out=(x,x)`. The spec allows `x=-1` (virtual telomeric breakend), but the function returns UINT32_MAX
+     *   instead, since a virtual breakend carries no information.
+     * - If a value cannot be determined, it is set to UINT32_MAX.
      *
      * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
      * `sv_length`, if available.
      */
-    void get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out);
+    void get_reference_coordinates(bool use_confidence_intervals, pair<uint32_t, uint32_t>& out);
 
 private:
     /**

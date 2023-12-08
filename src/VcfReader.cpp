@@ -150,6 +150,32 @@ VcfRecord::VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32
 }
 
 
+VcfRecord VcfRecord::clone() const {
+    VcfRecord out = VcfRecord(false,0.0,false,0,0,0.0,0.0);
+    out.is_autosomal=this->is_autosomal;
+    out.qual=this->qual;
+    out.pos=this->pos;
+    out.chrom=this->chrom;
+    out.id=this->id;
+    out.ref=this->ref;
+    out.alt=this->alt;
+    out.filter=this->filter;
+    out.info=this->info;
+    out.format=this->format;
+    out.genotypes=this->genotypes;
+    out.is_high_quality=this->is_high_quality;
+    out.is_pass=this->is_pass;
+    out.is_symbolic=this->is_symbolic;
+    out.sv_type=this->sv_type;
+    out.sv_length=this->sv_length;
+    out.n_alts=this->n_alts;
+    out.n_samples=this->n_samples;
+    out.n_haplotypes_ref=this->n_haplotypes_ref;
+    out.n_haplotypes_alt=this->n_haplotypes_alt;
+    return out;
+}
+
+
 void VcfRecord::set(ifstream& stream) {
     bool fields_skipped;
     char c;
@@ -474,7 +500,7 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
 }
 
 
-uint64_t VcfRecord::get_breakend_pos() {
+uint32_t VcfRecord::get_breakend_pos() {
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
@@ -491,7 +517,7 @@ uint64_t VcfRecord::get_breakend_pos() {
             tmp_buffer_1+=c;
         }
     }
-    return stoull(tmp_buffer_1);
+    return stoul(tmp_buffer_1);
 }
 
 
@@ -569,9 +595,20 @@ void VcfRecord::get_confidence_interval_length(pair<float, float>& out) { get_co
 void VcfRecord::get_confidence_interval_end(pair<float, float>& out) { get_confidence_interval(2,out); }
 
 
-void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out) {
-    if (sv_type==VcfReader::TYPE_INSERTION || sv_type==VcfReader::TYPE_BREAKEND) {
+void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<uint32_t, uint32_t>& out) {
+    if (sv_type==VcfReader::TYPE_INSERTION) {
         if (use_confidence_intervals) {
+            get_confidence_interval_pos(tmp_pair_2);
+            out.first=(uint64_t)floor(pos+tmp_pair_2.first);
+            out.second=(uint64_t)ceil(pos+tmp_pair_2.second);
+        }
+        else { out.first=pos; out.second=out.first; }
+    }
+    if (sv_type==VcfReader::TYPE_BREAKEND) {
+        if (pos==0) {  // Virtual telomeric breakend
+            out.first=UINT32_MAX; out.second=UINT32_MAX;
+        }
+        else if (use_confidence_intervals) {
             get_confidence_interval_pos(tmp_pair_2);
             out.first=(uint64_t)floor(pos-1+tmp_pair_2.first);
             out.second=(uint64_t)ceil(pos-1+tmp_pair_2.second);
@@ -590,9 +627,10 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<ui
         }
         else {
             out.first=pos;
-            out.second=sv_length==UINT32_MAX?UINT64_MAX:pos+sv_length;
+            out.second=sv_length==UINT32_MAX?UINT32_MAX:pos+sv_length;
         }
     }
+    else { out.first=UINT32_MAX; out.second=UINT32_MAX; }
 }
 
 
