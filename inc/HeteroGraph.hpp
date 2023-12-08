@@ -76,11 +76,13 @@ public:
 
     /// Global iterators
     void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
+    void for_each_node(const function<void(int64_t id, const T& node)>& f) const;
     void for_node_in_bfs(const string& start_name, const function<void(const T& node, int64_t id)>& f) const;
 
     // This iterator allows the user to filter nodes out within the inner loop of BFS before returning them
     void for_node_in_bfs(
             const string& start_name,
+            float min_edge_weight,
             const function<bool(const T& node)>& criteria,
             const function<void(const T& node, int64_t id)>& f) const;
 
@@ -303,6 +305,13 @@ template<class T> void HeteroGraph<T>::for_each_edge(const function<void(const s
 }
 
 
+template<class T> void HeteroGraph<T>::for_each_node(const function<void(int64_t id, const T& node)>& f) const{
+    for (const auto& [id,node]: nodes){
+        f(id, node);
+    }
+}
+
+
 template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const{
     auto id = name_to_id(name);
 
@@ -439,6 +448,7 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name,
 
 template<class T> void HeteroGraph<T>::for_node_in_bfs(
         const string& start_name,
+        float min_edge_weight,
         const function<bool(const T& node)>& criteria,
         const function<void(const T& node, int64_t id)>& f) const{
     auto start_id = name_to_id(start_name);
@@ -458,6 +468,10 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(
         // Iterate all types indiscriminately
         for (const auto& [type_b,item]: edges.at(n)) {
             for (const auto &[n_other,w]: item) {
+                if (w < min_edge_weight){
+                    continue;
+                }
+
                 if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true) {
                     q.emplace(n_other);
                     visited.emplace(n_other);

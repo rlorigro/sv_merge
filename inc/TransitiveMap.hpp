@@ -26,7 +26,6 @@ class TransMap {
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,string> sequences;
 
-    int64_t min_usable_id = 3;
     string sample_node_name;
     string read_node_name;
     string path_node_name;
@@ -54,7 +53,6 @@ public:
     pair<bool,int64_t> try_get_id(const string& name) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
     bool has_edge(int64_t a, int64_t b) const;
-    bool has_node(const string& name) const;
     int64_t get_node_count() const;
     int64_t get_edge_count(int64_t id, char type) const;
 
@@ -82,6 +80,12 @@ public:
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
     void for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const;
+
+    void for_node_in_bfs(
+            const string& start_name,
+            float min_edge_weight,
+            const function<bool(const HeteroNode& node)>& criteria,
+            const function<void(const HeteroNode& node, int64_t id)>& f) const;
 };
 
 
