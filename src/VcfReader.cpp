@@ -428,7 +428,7 @@ void VcfRecord::info2map(unordered_map<string,string>& map) {
 }
 
 
-void VcfRecord::get_samples_with_alt(vector<uint32_t>& out) {
+void VcfRecord::get_samples_with_alt(unordered_set<uint32_t>& out) {
     uint32_t i;
     const uint32_t SIZE = genotypes.size();
 
@@ -436,20 +436,7 @@ void VcfRecord::get_samples_with_alt(vector<uint32_t>& out) {
     for (i=0; i<SIZE; i++) {
         tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
         ncalls_in_sample(tmp_buffer_1,tmp_pair);
-        if (tmp_pair.second!=0) out.push_back(i);
-    }
-}
-
-
-void VcfRecord::get_samples_with_alt(vector<string>& out) {
-    uint32_t i;
-    const uint32_t SIZE = genotypes.size();
-
-    out.clear();
-    for (i=0; i<SIZE; i++) {
-        tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
-        ncalls_in_sample(tmp_buffer_1,tmp_pair);
-        if (tmp_pair.second!=0) out.push_back(genotypes.at(i));
+        if (tmp_pair.second!=0) out.emplace(i);
     }
 }
 
