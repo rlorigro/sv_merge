@@ -66,9 +66,6 @@ void iterate_region(path bam_path, string region){
     }
     cerr << t << "sam_hdr_read" << '\n';
 
-    hts_name2id_f getid = (hts_name2id_f)bam_name2id;
-    int r_count;
-
     hts_itr_t *itr = sam_itr_querys(bam_index, bam_header, region.c_str());
 
     cerr << t << "sam_itr_region" << '\n';
@@ -229,50 +226,19 @@ void iterate_regions_manually(path bam_path, vector<char*>& regions){
 }
 
 
-void test(int type) {
-    path bam_path = "gs://fc-bb12940d-f7ba-4515-8a98-42de84f63c34/HPRC/HG002/HG002.bam";
-
-    // Construct some arbitrary regions that avoid the telomeres and centromeres of chr20
+void test(path bed_path, path bam_path, int type) {
     vector<string> region_strings;
     vector<char *> regions;
 
-    int64_t left_arm_start = 3'000'000;
-    int64_t left_arm_stop = 30'000'000;
-    int64_t right_arm_start = 40'000'000;
-    int64_t right_arm_stop = 64'000'000;
-
-    int64_t interval_length = 1000;
-    int64_t n_intervals = 1000;
-
-    int64_t gap_length = (left_arm_stop - left_arm_start) / n_intervals;
-    Region r("chr20", left_arm_start, left_arm_start + interval_length);
-
-    ofstream bed_file("test_regions_chr20.bed");
-
-    // Fill in left arm regions
-    for (int i = 0; i < n_intervals; i++) {
-        r.start += gap_length;
-        r.stop += gap_length;
-
-        bed_file << r.name << '\t' << r.start << '\t' << r.stop << '\n';
-
+    for_region_in_bed_file(bed_path, [&](const Region& r){
         region_strings.push_back(r.to_string());
-        regions.push_back(region_strings.back().data());
-    }
+    });
 
-    gap_length = (right_arm_stop - right_arm_start) / n_intervals;
-    r.start = right_arm_start;
-    r.stop = right_arm_start + interval_length;
-
-    // Fill in right arm regions
-    for (int i = 0; i < n_intervals; i++) {
-        r.start += gap_length;
-        r.stop += gap_length;
-
-        bed_file << r.name << '\t' << r.start << '\t' << r.stop << '\n';
-
-        region_strings.push_back(r.to_string());
-        regions.push_back(region_strings.back().data());
+    // Htslib only accepts c-style char*, so fill the second vector with pointers to the strings allocated
+    // in the first vector.
+    regions.reserve(region_strings.size());
+    for (auto& item: region_strings){
+        regions.push_back(item.data());
     }
 
     if (type == 0) {
@@ -280,11 +246,11 @@ void test(int type) {
         iterate_region(bam_path, "chr20");
     }
     else if (type == 1) {
-        cerr << "Iterating 2000 regions with hts_iter_regions" << '\n';
+        cerr << "Iterating " << regions.size() << " regions with hts_iter_regions" << '\n';
         iterate_regions(bam_path, regions);
     }
     else if (type == 2) {
-        cerr << "Iterating 2000 regions with hts_iter_querys loop" << '\n';
+        cerr << "Iterating " << regions.size() << " regions with hts_iter_querys loop" << '\n';
         iterate_regions_manually(bam_path, regions);
     }
     else{
@@ -294,9 +260,24 @@ void test(int type) {
 
 
 int main (int argc, char* argv[]){
+    path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
+    path data_directory = project_directory / "data";
+
+    path bed_path = data_directory / "test_chr20_2000_sites.bed";
+    path bam_path = "gs://fc-bb12940d-f7ba-4515-8a98-42de84f63c34/HPRC/HG002/HG002.bam";
     int type;
 
     CLI::App app{"App description"};
+
+    app.add_option(
+            "--bed",
+            bed_path,
+            "Path to BED file containing regions to be extracted from the BAM");
+
+    app.add_option(
+            "--bam",
+            bam_path,
+            "Path/URI of BAM (assumed to be stored on GCS)");
 
     app.add_option(
             "--type",
@@ -306,7 +287,7 @@ int main (int argc, char* argv[]){
 
     CLI11_PARSE(app, argc, argv);
 
-    test(type);
+    test(bed_path, bam_path, type);
 
     return 0;
 }
