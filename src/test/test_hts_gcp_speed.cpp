@@ -264,7 +264,7 @@ int main (int argc, char* argv[]){
     path data_directory = project_directory / "data";
 
     path bed_path = data_directory / "test_chr20_2000_sites.bed";
-    path bam_path = "gs://fc-bb12940d-f7ba-4515-8a98-42de84f63c34/HPRC/HG002/HG002.bam";
+    path bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
     int type;
 
     CLI::App app{"App description"};
@@ -282,7 +282,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--type",
             type,
-            "Maximum number of threads to use")
+            "Type of iteration")
             ->required();
 
     CLI11_PARSE(app, argc, argv);
