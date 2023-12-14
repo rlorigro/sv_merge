@@ -5,7 +5,7 @@ C++ implementation of rlorigro/hapslap
 ## Dependencies
 
 - c++17
-- gcc
+- gcc or clang
 - cmake
 - zlib1g-dev
 - libbz2-dev
@@ -14,24 +14,19 @@ C++ implementation of rlorigro/hapslap
 - automake
 - libssl-dev
 - pkg-config
-- libnghttp2-dev (For Ubuntu22 curl http2 support)
-- libcurl-dev (generally libcurl4-openssl-dev, currently only required for MacOS)
-- libjansson4
+- libnghttp2-dev (For curl http2 support, **only required for Ubuntu22**)
+- libcurl-dev (generally libcurl4-openssl-dev, currently **only required for MacOS**)
 
-<!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
-### GraphAligner
+## Installation
 
-- protobuf-compiler
-- libsparsehash-dev
-- libsdsl-dev
-- jemalloc (source installation required on Ubuntu 22.04)
-
+First verify that the system level dependencies are installed and then run:
 ```
-cd ~/software/
-git clone https://github.com/jemalloc/jemalloc.git
-cd jemalloc/
-./autogen.sh
+git clone https://github.com/rlorigro/sv_merge
+cd sv_merge
+mkdir build
+cmake ..
 make -j [n_threads]
-sudo make install
 ```
--->
+
+(if any dependencies are not installed you should see an error in the `cmake` step)
+
