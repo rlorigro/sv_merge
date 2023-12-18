@@ -45,7 +45,6 @@ class Variables{
 public:
     // Edges where the left node is the parent
     unordered_map <pair<int64_t,int64_t>, BoolVar> edges;
-    unordered_map <int64_t, BoolVar> is_parent;
 
     // Cost of all edges assigned
     LinearExpr cost_d;
@@ -209,7 +208,7 @@ int main(){
         return (node.type == 'R');
     };
 
-    vector<vector<int64_t> > clusters;
+    vector <vector<int64_t> > clusters;
 
     while (unvisited.size() > 0){
         auto start_name = transmap.get_node(*unvisited.begin()).name;
@@ -217,6 +216,7 @@ int main(){
         // Initialize new empty cluster
         clusters.emplace_back();
 
+        // Update cluster with each connected component from the solution
         transmap.for_node_in_bfs(start_name, 0, criteria, [&](const HeteroNode& node, int64_t id){
             unvisited.erase(id);
             clusters.back().emplace_back(id);

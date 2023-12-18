@@ -1,4 +1,4 @@
-#include "read_optimizer.hpp"
+#include "read_cluster_optimizer.hpp"
 #include "TransitiveMap.hpp"
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"
@@ -32,6 +32,7 @@ using std::thread;
 using std::atomic;
 using std::mutex;
 using std::cerr;
+using std::max;
 using std::min;
 using std::cref;
 using std::ref;
@@ -114,10 +115,14 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 aligner.alignEnd2End(seq_a, seq_b);
                 auto score = aligner.getAlignmentScore();
 
-                // WFA creates negative scores for "distance", we make it positive again
-                transmap.add_edge(a,b, float(-score));
+//                // WFA creates negative scores for "distance", we make it positive again and rescale it as a percent
+                size_t scaled_score = 100 - (100*size_t(-score)) / min(seq_a.size(), seq_b.size());
 
-                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << '\n';
+//                int64_t scaled_score = score > -100 ? 1 : -1;
+
+                transmap.add_edge(a,b, float(scaled_score));
+
+                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << ' ' << scaled_score << '\n';
             }
         });
     });
@@ -485,7 +490,7 @@ void hapestry(
     vector<Region> regions;
 
     // TODO: use percent of min(a,b) where a,b are lengths of seqs?
-    int64_t score_threshold = 150;
+    int64_t score_threshold = 200;
 
     cerr << t << "Constructing windows" << '\n';
 
@@ -541,14 +546,13 @@ void hapestry(
             cross_align_sample_reads(transmap, score_threshold, sample_name, flank_length);
 
             CpModelBuilder model;
-            ReadVariables vars;
-            vector<int64_t> representatives;
+            ReadClusterVariables vars;
+            vector <vector<int64_t> > clusters;
 
-            // Cluster reads within samples, with an emphasis on minimizing the number of clusters.
-            // Weight on the n term helps prevent arbitrary clusters from being formed in cases where only 1 exists
-            int64_t n_weight = 2;
-            int64_t d_weight = 1;
-            optimize_reads_with_d_and_n(transmap, sample_id, d_weight, n_weight, representatives);
+            // Cluster reads within samples
+            int64_t n_weight = 1;
+            int64_t d_weight = 2;
+            cluster_reads(transmap, sample_id, d_weight, n_weight, clusters);
 
             if (debug){
                 cerr << sample_name << '\n';
@@ -556,17 +560,31 @@ void hapestry(
                 path p = output_subdir / (sample_name + "_clusters.txt");
                 ofstream file(p);
 
-                for (auto a: representatives){
-                    cerr << transmap.get_node(a).name << '\n';
-                    file << transmap.get_node(a).name << '\n';
-                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
-                    file << transmap.get_sequence(a) << '\n';
-                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
-                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
-                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
-                        file << transmap.get_sequence(b) << '\n';
-                    });
+                int c = 0;
+                for (const auto& cluster: clusters){
+                    cerr << c << '\n';
+                    file << c << '\n';
+                    for (const auto& id: cluster){
+                        cerr << '\t' << id << ' ' << transmap.get_node(id).name << '\n';
+                        file << transmap.get_sequence(id) << '\n';
+                    }
+
+                    c++;
                 }
+
+                throw runtime_error("DEBUG EARLY EXIT");
+
+//                for (auto a: representatives){
+//                    cerr << transmap.get_node(a).name << '\n';
+//                    file << transmap.get_node(a).name << '\n';
+//                    cerr << transmap.get_sequence(a).substr(0, 100) << '\n';
+//                    file << transmap.get_sequence(a) << '\n';
+//                    transmap.for_each_neighbor_of_type(a, 'R', [&](int64_t b){
+//                        cerr << b << ' ' << transmap.get_node(b).name << '\n';
+//                        cerr << transmap.get_sequence(b).substr(0, 100) << '\n';
+//                        file << transmap.get_sequence(b) << '\n';
+//                    });
+//                }
             }
         });
     }
@@ -604,8 +622,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--vcf",
             vcf,
-            "Path to VCF file containing variants to be merged")
-            ->required();
+            "Path to VCF file containing variants to be merged");
 
     app.add_option(
             "--tandems",

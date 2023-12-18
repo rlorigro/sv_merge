@@ -1,4 +1,4 @@
-#include "read_optimizer.hpp"
+#include "read_centroid_optimizer.hpp"
 
 
 namespace sv_merge{
@@ -7,7 +7,7 @@ void construct_read_model(
         const TransMap& transmap,
         int64_t sample_id,
         CpModelBuilder& model,
-        ReadVariables& vars,
+        ReadCentroidVariables& vars,
         vector<int64_t>& representatives
         ){
 
@@ -98,7 +98,7 @@ void construct_read_model(
 
 void parse_read_model_solution(
         const CpSolverResponse& response,
-        const ReadVariables& vars,
+        const ReadCentroidVariables& vars,
         TransMap& transmap,
         vector<int64_t>& representatives
         ){
@@ -159,7 +159,7 @@ void parse_read_model_solution(
 
 void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives){
     CpModelBuilder model;
-    ReadVariables vars;
+    ReadCentroidVariables vars;
 
     construct_read_model(transmap, sample_id, model, vars, representatives);
 
@@ -175,7 +175,7 @@ void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t
 
 void optimize_reads_with_d_and_n(TransMap& transmap, int64_t sample_id, int64_t d_weight, int64_t n_weight, vector<int64_t>& representatives){
     CpModelBuilder model;
-    ReadVariables vars;
+    ReadCentroidVariables vars;
 
     construct_read_model(transmap, sample_id, model, vars, representatives);
 
