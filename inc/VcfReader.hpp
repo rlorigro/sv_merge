@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Filesystem.hpp"
+#include "misc.hpp"
 
 using ghc::filesystem::path;
 
@@ -12,6 +13,7 @@ using ghc::filesystem::path;
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <fstream>
 #include <functional>
 #include <ostream>
@@ -23,6 +25,7 @@ using std::string_view;
 using std::vector;
 using std::unordered_map;
 using std::unordered_set;
+using std::set;
 using std::function;
 using std::ifstream;
 using std::ostream;
@@ -99,7 +102,7 @@ public:
      * - If the call is shorter than `min_sv_length`, no field after INFO is loaded.
      * - If there are more samples than `n_samples_to_load`, no sample after the maximum is loaded.
      */
-    void set(ifstream& stream);
+    void set_from_stream(ifstream& stream);
 
     /**
      * @return TRUE iff the record passes all the user constraints set at construction time.
@@ -158,6 +161,12 @@ public:
      */
     void get_samples_with_alt(unordered_set<uint32_t>& out);
 
+    /**
+     * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
+     * ID must be used in conjunction with VcfReader to find the
+     */
+    void get_samples_with_alt(set<uint32_t>& out);
+
     bool is_alt_symbolic() const;
 
     /**
@@ -168,7 +177,7 @@ public:
     /**
      * @return UINT64_MAX if the position could not be determined.
      */
-    uint64_t get_breakend_pos();
+    uint32_t get_breakend_pos();
 
     /**
      * @return
@@ -211,7 +220,7 @@ public:
      * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
      * `sv_length`, if available.
      */
-    void get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out);
+    void get_reference_coordinates(bool use_confidence_intervals, coord_t& out);
 
 private:
     /**

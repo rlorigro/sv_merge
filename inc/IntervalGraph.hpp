@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pair_hash.hpp"
+#include "Region.hpp"
 #include "misc.hpp"
 
 #include <unordered_map>

@@ -3,6 +3,7 @@
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"
 #include "VcfReader.hpp"
+#include "windows.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
@@ -83,56 +84,6 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
         else {
             throw runtime_error("ERROR: too many delimiters in bam csv");
         }
-    }
-}
-
-
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int64_t flank_length, vector<Region>& regions){
-    VcfReader vcf_reader(vcf);
-    vcf_reader.min_sv_length = 0;
-
-    pair<uint64_t, uint64_t> coord;
-    unordered_set<uint32_t> sample_ids;
-    unordered_set<string> sample_names;
-
-    unordered_map<string,vector<labeled_interval_t> > contig_intervals;
-
-    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        r.get_samples_with_alt(sample_ids);
-
-        if (sample_ids.empty()){
-            return;
-        }
-
-        r.get_reference_coordinates(true, coord);
-
-        cerr << coord.first << ',' << coord.second << '\n';
-        sample_names.clear();
-        for (auto id: sample_ids){
-            cerr << '\t' << "id: " << id << '\n';
-            cerr << '\t' << "name: " << vcf_reader.sample_ids[id] << '\n';
-
-            sample_names.emplace(vcf_reader.sample_ids[id]);
-        }
-        cerr << '\n';
-
-        contig_intervals[r.chrom].emplace_back(coord, sample_names);
-    });
-
-    for (auto& [contig, intervals]: contig_intervals){
-        // Iterate the VCF file and construct a vector of labeled intervals for the IntervalGraph
-        // Need to append `interval_padding` onto intervals and then subtract it afterwards (if desired)
-        IntervalGraph<string> g(intervals);
-
-        g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
-            cerr << interval.first << "," << interval.second;
-            for (const auto& v: values){
-                cerr << ' ' << v;
-            }
-            cerr << '\n';
-
-            regions.emplace_back(contig, interval.first, interval.second);
-        });
     }
 }
 
@@ -513,9 +464,9 @@ void hapestry(
         path bam_csv,
         path vcf,
         path reference,
-        int64_t interval_max_length,
-        int64_t flank_length,
-        int64_t n_threads,
+        int32_t interval_max_length,
+        int32_t flank_length,
+        int32_t n_threads,
         bool debug
         ){
 
@@ -539,7 +490,7 @@ void hapestry(
     cerr << t << "Constructing windows" << '\n';
 
     if (windows_bed.empty()){
-        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, regions);
+        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, interval_max_length, regions);
     }
     else{
         load_windows_from_bed(windows_bed, regions);
@@ -632,9 +583,9 @@ int main (int argc, char* argv[]){
     path bam_csv;
     path vcf;
     path ref;
-    int64_t interval_max_length;
-    int64_t flank_length;
-    int64_t n_threads = 1;
+    int32_t interval_max_length;
+    int32_t flank_length;
+    int32_t n_threads = 1;
     bool debug = false;
 
     CLI::App app{"App description"};

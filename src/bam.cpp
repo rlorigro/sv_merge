@@ -31,13 +31,13 @@ namespace sv_merge {
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar){
     cigar.code = int8_t(bytes & bam_cigar_mask);
-    cigar.length = int64_t(bytes >> bam_cigar_shift);
+    cigar.length = int32_t(bytes >> bam_cigar_shift);
 }
 
 
 void decompress_cigar_bytes(uint32_t bytes, CigarInterval& cigar){
     cigar.code = int8_t(bytes & bam_cigar_mask);
-    cigar.length = int64_t(bytes >> bam_cigar_shift);
+    cigar.length = int32_t(bytes >> bam_cigar_shift);
 }
 
 
@@ -49,24 +49,24 @@ HtsAlignment::HtsAlignment(bam1_t* a):
 {}
 
 
-int64_t HtsAlignment::get_query_length() const {
-    return int64_t(hts_alignment->core.l_qseq);
+int32_t HtsAlignment::get_query_length() const {
+    return int32_t(hts_alignment->core.l_qseq);
 }
 
 
-int64_t HtsAlignment::get_ref_start() const {
-    return int64_t(hts_alignment->core.pos);
+int32_t HtsAlignment::get_ref_start() const {
+    return int32_t(hts_alignment->core.pos);
 }
 
 
-int64_t HtsAlignment::get_ref_stop() const {
-    return int64_t(bam_endpos(hts_alignment));
+int32_t HtsAlignment::get_ref_stop() const {
+    return int32_t(bam_endpos(hts_alignment));
 }
 
 
-int64_t HtsAlignment::get_query_start() const {
+int32_t HtsAlignment::get_query_start() const {
     if (is_reverse()){
-        return int64_t(get_query_length());
+        return int32_t(get_query_length());
     }
     else{
         return 0;
@@ -79,7 +79,7 @@ void HtsAlignment::get_query_name(string& result) const {
 }
 
 
-void HtsAlignment::get_query_sequence(string& result, int64_t start, int64_t stop){
+void HtsAlignment::get_query_sequence(string& result, int32_t start, int32_t stop){
     if (not is_decompressed){
         decompress_bam_sequence(hts_alignment, result, start, stop);
     }
@@ -176,14 +176,14 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence){
     auto length = alignment->core.l_qseq;
 
     // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
-    int64_t start = 0;
-    int64_t stop = length;
+    int32_t start = 0;
+    int32_t stop = length;
 
     decompress_bam_sequence(alignment, sequence, start, stop);
 }
 
 
-void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t start, int64_t stop){
+void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int32_t start, int32_t stop){
     auto compressed_sequence = bam_get_seq(alignment);
     bool is_reverse = bam_is_rev(alignment);
 
@@ -193,7 +193,7 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t 
     uint8_t base_code;
 
     // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
-    int64_t increment = 1;
+    int32_t increment = 1;
 
     if (is_reverse){
         std::swap(start,stop);
@@ -202,8 +202,8 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t 
         increment = -1;
     }
 
-    for (int64_t i=start; i!=stop; i+=increment){
-        uint64_t index = i/2;
+    for (int32_t i=start; i!=stop; i+=increment){
+        uint32_t index = i/2;
 
         if (i%2 == 0){
             // Perform bit SHIFT and decode using the standard or complemented base map
@@ -326,7 +326,7 @@ void for_alignment_in_bam_subregions(
 
     HtsAlignment a(alignment);
 
-    int64_t i_start = 0;
+    size_t i_start = 0;
 
     // Iterate a SORTED bam
     while (sam_itr_next(bam_file, itr, alignment) >= 0) {

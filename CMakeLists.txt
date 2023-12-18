@@ -83,9 +83,9 @@ set(SOURCES
         src/Sequence.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
-        inc/Sequence.hpp
         src/VcfReader.cpp
-)
+        src/windows.cpp
+        )
 
 
 project(sv_merge)

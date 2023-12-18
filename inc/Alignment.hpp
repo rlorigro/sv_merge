@@ -122,7 +122,7 @@ static const array <bool,9> is_ref_move = {
  */
 class CigarTuple{
 public:
-    int64_t length = -1;
+    int32_t length = -1;
     int8_t code = -1;
 
     CigarTuple(int64_t length, int8_t code);
@@ -135,18 +135,18 @@ public:
  */
 class CigarInterval{
 public:
-    int64_t length = -1;
-    int64_t ref_start = -1;
-    int64_t ref_stop = -1;
-    int64_t query_start = -1;
-    int64_t query_stop = -1;
+    int32_t length = -1;
+    int32_t ref_start = -1;
+    int32_t ref_stop = -1;
+    int32_t query_start = -1;
+    int32_t query_stop = -1;
     int8_t code = -1;
     bool is_reverse;
 
-    pair<int64_t,int64_t> get_forward_ref_interval() const;
-    pair<int64_t,int64_t> get_forward_query_interval() const;
-    int64_t get_ref_length() const;
-    int64_t get_query_length() const;
+    interval_t get_forward_ref_interval() const;
+    interval_t get_forward_query_interval() const;
+    int32_t get_ref_length() const;
+    int32_t get_query_length() const;
     void set_ref_interval_forward();
     void set_query_interval_forward();
     void set_ref_interval_reverse();
@@ -179,13 +179,13 @@ public:
      */
     virtual void for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f) = 0;
 
-    virtual int64_t get_query_length() const = 0;
-    virtual void get_query_sequence(string& result, int64_t start, int64_t stop) = 0;
+    virtual int32_t get_query_length() const = 0;
+    virtual void get_query_sequence(string& result, int32_t start, int32_t stop) = 0;
     virtual void get_query_sequence(string& result) = 0;
     virtual void get_query_name(string& result) const = 0;
-    virtual int64_t get_ref_start() const = 0;
-    virtual int64_t get_ref_stop() const = 0;
-    virtual int64_t get_query_start() const = 0;
+    virtual int32_t get_ref_start() const = 0;
+    virtual int32_t get_ref_stop() const = 0;
+    virtual int32_t get_query_start() const = 0;
     virtual bool is_unmapped() const = 0;
     virtual bool is_reverse() const = 0;
     virtual bool is_primary() const = 0;

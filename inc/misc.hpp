@@ -2,6 +2,7 @@
 
 #include "Filesystem.hpp"
 #include <unordered_set>
+#include <set>
 #include <utility>
 #include <chrono>
 #include <string>
@@ -12,6 +13,7 @@ using std::chrono::system_clock;
 using ghc::filesystem::path;
 using std::numeric_limits;
 using std::unordered_set;
+using std::set;
 using std::string;
 using std::array;
 using std::pair;
@@ -19,7 +21,9 @@ using std::pair;
 
 namespace sv_merge{
 
-using interval_t = pair<int64_t,int64_t>;
+using coord_t = pair<int32_t,int32_t>;
+
+using interval_t = pair<int32_t,int32_t>;
 
 using labeled_interval_t = pair <interval_t, unordered_set<string> >;
 

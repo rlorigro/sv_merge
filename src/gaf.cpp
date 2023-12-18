@@ -113,32 +113,32 @@ void GafAlignment::set_ref_name(const string& name){
 }
 
 
-void GafAlignment::set_query_length(int64_t length){
+void GafAlignment::set_query_length(int32_t length){
     query_length = length;
 }
 
 
-void GafAlignment::set_query_start(int64_t start){
+void GafAlignment::set_query_start(int32_t start){
     query_start = start;
 }
 
 
-void GafAlignment::set_query_stop(int64_t stop){
+void GafAlignment::set_query_stop(int32_t stop){
     query_stop = stop;
 }
 
 
-void GafAlignment::set_path_length(int64_t length){
+void GafAlignment::set_path_length(int32_t length){
     path_length = length;
 }
 
 
-void GafAlignment::set_path_start(int64_t start){
+void GafAlignment::set_path_start(int32_t start){
     path_start = start;
 }
 
 
-void GafAlignment::set_path_stop(int64_t stop){
+void GafAlignment::set_path_stop(int32_t stop){
     path_stop = stop;
 }
 
@@ -153,17 +153,17 @@ void GafAlignment::set_is_primary(bool p) {
 }
 
 
-void GafAlignment::set_n_match(int64_t n){
+void GafAlignment::set_n_match(int32_t n){
     n_match = n;
 }
 
 
-void GafAlignment::set_alignment_length(int64_t length){
+void GafAlignment::set_alignment_length(int32_t length){
     alignment_length = length;
 }
 
 
-void GafAlignment::set_map_quality(int64_t q){
+void GafAlignment::set_map_quality(int32_t q){
     map_quality = q;
 }
 
@@ -190,37 +190,37 @@ string GafAlignment::get_ref_name() const{
 }
 
 
-int64_t GafAlignment::get_query_length() const{
+int32_t GafAlignment::get_query_length() const{
     return query_length;
 }
 
 
-int64_t GafAlignment::get_query_start() const{
+int32_t GafAlignment::get_query_start() const{
     return query_start;
 }
 
 
-int64_t GafAlignment::get_query_stop() const{
+int32_t GafAlignment::get_query_stop() const{
     return query_stop;
 }
 
 
-int64_t GafAlignment::get_path_length() const{
+int32_t GafAlignment::get_path_length() const{
     return path_length;
 }
 
 
-int64_t GafAlignment::get_path_start() const{
+int32_t GafAlignment::get_path_start() const{
     return path_start;
 }
 
 
-int64_t GafAlignment::get_path_stop() const{
+int32_t GafAlignment::get_path_stop() const{
     return path_stop;
 }
 
 
-const pair<string,bool>& GafAlignment::get_path_step(int64_t index) const{
+const pair<string,bool>& GafAlignment::get_path_step(int32_t index) const{
     return path[index];
 }
 
@@ -235,17 +235,17 @@ bool GafAlignment::is_primary() const{
 }
 
 
-int64_t GafAlignment::get_n_match() const{
+int32_t GafAlignment::get_n_match() const{
     return n_match;
 }
 
 
-int64_t GafAlignment::get_alignment_length() const{
+int32_t GafAlignment::get_alignment_length() const{
     return alignment_length;
 }
 
 
-int64_t GafAlignment::get_map_quality() const{
+int32_t GafAlignment::get_map_quality() const{
     return map_quality;
 }
 
@@ -314,7 +314,7 @@ void GafAlignment::get_query_sequence(string& result){
 }
 
 
-void GafAlignment::get_query_sequence(string& result, int64_t start, int64_t stop){
+void GafAlignment::get_query_sequence(string& result, int32_t start, int32_t stop){
     throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
 }
 
@@ -325,12 +325,12 @@ void GafAlignment::get_query_name(string& result) const{
 }
 
 
-int64_t GafAlignment::get_ref_start() const{
+int32_t GafAlignment::get_ref_start() const{
     return path_start;
 }
 
 
-int64_t GafAlignment::get_ref_stop() const{
+int32_t GafAlignment::get_ref_stop() const{
     return path_stop;
 }
 

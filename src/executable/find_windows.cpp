@@ -1,7 +1,4 @@
-#include "read_optimizer.hpp"
-#include "TransitiveMap.hpp"
-#include "IntervalGraph.hpp"
-#include "VcfReader.hpp"
+#include "windows.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
@@ -12,7 +9,6 @@
 #include <exception>
 #include <stdexcept>
 #include <iostream>
-#include <fstream>
 #include <thread>
 #include <memory>
 #include <limits>
@@ -83,49 +79,6 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 }
 
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int64_t flank_length, int64_t interval_max_length, vector<Region>& regions){
-    VcfReader vcf_reader(vcf);
-    vcf_reader.min_sv_length = 0;
-
-    pair<uint64_t, uint64_t> coord;
-    unordered_set<uint32_t> sample_ids;
-    unordered_set<string> sample_names;
-
-    unordered_map<string,vector<labeled_interval_t> > contig_intervals;
-
-    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        r.get_samples_with_alt(sample_ids);
-
-        if (sample_ids.empty()){
-            return;
-        }
-
-        r.get_reference_coordinates(true, coord);
-
-        sample_names.clear();
-        for (auto id: sample_ids){
-            sample_names.emplace(vcf_reader.sample_ids[id]);
-        }
-
-        contig_intervals[r.chrom].emplace_back(coord, sample_names);
-    });
-
-    for (auto& [contig, intervals]: contig_intervals){
-        // Iterate the VCF file and construct a vector of labeled intervals for the IntervalGraph
-        // Need to append `interval_padding` onto intervals and then subtract it afterwards (if desired)
-        IntervalGraph<string> g(intervals);
-
-        g.for_each_connected_component_interval([&](interval_t& interval, unordered_set<string>& values){
-            if (interval.second - interval.first > interval_max_length){
-                return;
-            }
-
-            regions.emplace_back(contig, interval.first, interval.second);
-        });
-    }
-}
-
-
 void load_windows_from_bed(path windows_bed, vector<Region>& regions){
     for_region_in_bed_file(windows_bed, [&](const Region &r) {
         regions.push_back(r);
@@ -149,9 +102,9 @@ void find_windows(
         path output_dir,
         path tandem_bed,
         path vcf,
-        int64_t interval_max_length,
-        int64_t flank_length,
-        int64_t chunk_size,
+        int32_t interval_max_length,
+        int32_t flank_length,
+        int32_t chunk_size,
         bool debug
         ){
 
@@ -200,7 +153,6 @@ void find_windows(
     }
 
     cerr << t << "Done" << '\n';
-
 }
 
 

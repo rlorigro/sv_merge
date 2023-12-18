@@ -150,7 +150,7 @@ VcfRecord::VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32
 }
 
 
-void VcfRecord::set(ifstream& stream) {
+void VcfRecord::set_from_stream(ifstream& stream) {
     bool fields_skipped;
     char c;
     uint32_t current_field, upper_bound;
@@ -441,6 +441,19 @@ void VcfRecord::get_samples_with_alt(unordered_set<uint32_t>& out) {
 }
 
 
+void VcfRecord::get_samples_with_alt(set<uint32_t>& out) {
+    uint32_t i;
+    const uint32_t SIZE = genotypes.size();
+
+    out.clear();
+    for (i=0; i<SIZE; i++) {
+        tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
+        ncalls_in_sample(tmp_buffer_1,tmp_pair);
+        if (tmp_pair.second!=0) out.emplace(i);
+    }
+}
+
+
 bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_CHAR_OPEN && alt.at(alt.length()-1)==VcfReader::SYMBOLIC_CHAR_CLOSE; }
 
 
@@ -461,12 +474,12 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
 }
 
 
-uint64_t VcfRecord::get_breakend_pos() {
+uint32_t VcfRecord::get_breakend_pos() {
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
 
-    if (is_alt_symbolic()) return UINT64_MAX;
+    if (is_alt_symbolic()) return UINT32_MAX;
     tmp_buffer_1.clear(); p=UINT16_MAX;
     for (i=0; i<LENGTH; i++) {
         c=alt.at(i);
@@ -556,28 +569,28 @@ void VcfRecord::get_confidence_interval_length(pair<float, float>& out) { get_co
 void VcfRecord::get_confidence_interval_end(pair<float, float>& out) { get_confidence_interval(2,out); }
 
 
-void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out) {
+void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t& out) {
     if (sv_type==VcfReader::TYPE_INSERTION || sv_type==VcfReader::TYPE_BREAKEND) {
         if (use_confidence_intervals) {
             get_confidence_interval_pos(tmp_pair_2);
-            out.first=(uint64_t)floor(pos-1+tmp_pair_2.first);
-            out.second=(uint64_t)ceil(pos-1+tmp_pair_2.second);
+            out.first=floor(pos-1+tmp_pair_2.first);
+            out.second=ceil(pos-1+tmp_pair_2.second);
         }
         else { out.first=pos-1; out.second=out.first; }
     }
     else if (sv_type==VcfReader::TYPE_DELETION || sv_type==VcfReader::TYPE_INVERSION || sv_type==VcfReader::TYPE_DUPLICATION) {
         if (use_confidence_intervals) {
             get_confidence_interval_pos(tmp_pair_2);
-            out.first=(uint64_t)floor(pos+tmp_pair_2.first);
+            out.first=floor(pos+tmp_pair_2.first);
             if (sv_length==UINT32_MAX) out.second=UINT32_MAX;
             else {
                 get_confidence_interval_length(tmp_pair_2);
-                out.second=(uint64_t)ceil(pos+sv_length+tmp_pair_2.second);
+                out.second=ceil(pos+sv_length+tmp_pair_2.second);
             }
         }
         else {
             out.first=pos;
-            out.second=sv_length==UINT32_MAX?UINT64_MAX:pos+sv_length;
+            out.second=sv_length==UINT32_MAX?UINT32_MAX:pos+sv_length;
         }
     }
 }
@@ -632,7 +645,7 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             continue;
         }
         else if (c==EOF) break;
-        record.set(file);
+        record.set_from_stream(file);
         if (record.passes_constraints()) callback(record);
         n_lines++;
         if (progress_n_lines!=0 && n_lines%progress_n_lines==0) cerr << "Scanned " << n_lines << " lines\n";
