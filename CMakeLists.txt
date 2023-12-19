@@ -27,20 +27,13 @@ elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(LIB_SUFFIX "so")
 endif()
 
-# If using gperftools, run cmake with additional args:
-# cmake -DCMAKE_CXX_FLAGS=-pg -DCMAKE_EXE_LINKER_FLAGS=-pg -DCMAKE_SHARED_LINKER_FLAGS=-pg ..
-
-if (debug)
+if (dev)
     message(STATUS "---- Building with debug options ----")
 
-    if (NOT no_asan OR NOT DEFINED no_asan)
-        # Memory debug
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
-        set(ASAN_OPTIONS=check_initialization_order=1)
-        set(ASAN_OPTIONS=detect_leaks=1)
-    else()
-        set(CMAKE_CXX_FLAGS "-fexceptions")
-    endif()
+    # Memory debug
+    set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
+    set(ASAN_OPTIONS=check_initialization_order=1)
+    set(ASAN_OPTIONS=detect_leaks=1)
 
     add_definitions(-ggdb3 -Og -Wall)       # Debugging + minimal optimization
 
@@ -76,15 +69,14 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
+        #src/optimizer.cpp
         src/pair_hash.cpp
-        src/path_optimizer.cpp
-        src/read_optimizer.cpp
         src/Region.cpp
         src/Sequence.cpp
-        src/TransitiveMap.cpp
-        src/Timer.cpp
         inc/Sequence.hpp
+        #inc/TransitiveMap.hpp
         src/VcfReader.cpp
+        #src/VariantGraph.cpp
 )
 
 
@@ -98,6 +90,7 @@ set_target_properties(sv_merge PROPERTIES PREFIX "")
 # Eliminate an extraneous -D during compilation.
 set_target_properties(sv_merge PROPERTIES DEFINE_SYMBOL "")
 
+
 # Need to explicitly enable ExternalProject functionality
 include(ExternalProject)
 
@@ -105,30 +98,33 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
-# ------------------ WFA2 ------------------ #
+# ---------------- ortools ----------------- #
 # ------------------------------------------ #
 ##############################################
 
-
-ExternalProject_Add(project_wfa
-        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
-        TIMEOUT 5
-        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
-        INSTALL_COMMAND make install
-)
-
-add_library(wfa2 SHARED IMPORTED)
-set_property(TARGET wfa2
-        PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/wfa2/lib/libwfa2cpp.${LIB_SUFFIX})
-#                                            /sv_merge/external/wfa2/lib
-
-add_dependencies(wfa2 project_wfa)
-add_dependencies(sv_merge wfa2)
-
-# Specify include dir
-include_directories(
-        ${CMAKE_SOURCE_DIR}/external/wfa2/include/wfa2lib
-)
+#include(FetchContent)
+#FetchContent_Declare(
+#        ortools
+#        GIT_REPOSITORY https://github.com/google/or-tools.git
+#        GIT_TAG        main
+#)
+#set(BUILD_DEPS ON)
+#set(BUILD_DOC OFF)
+#set(BUILD_SAMPLES OFF)
+#set(BUILD_EXAMPLES OFF)
+#FetchContent_MakeAvailable(ortools)
+#
+#include_directories(
+#        ${ortools_SOURCE_DIR}
+#        ${ortools_BINARY_DIR}
+#        ${absl_SOURCE_DIR}
+#        ${protobuf_SOURCE_DIR}/src
+#)
+#
+#message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+#message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+#message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+#message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 
 ##############################################
 # ------------------------------------------ #
@@ -137,24 +133,14 @@ include_directories(
 # ------------------------------------------ #
 ##############################################
 
-find_package( ZLIB REQUIRED )
-
-
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     message(STATUS "Fetching curl")
-
-#    # This is not actually linked but it is required for Ubuntu Curl compilation to use http2
-    find_library(NGHTTP2 REQUIRED NAMES nghttp2 libnghttp2 libnghttp2-dev)
-#    find_package(NGHTTP2 REQUIRED)
-
-#    message(STATUS "------------ found nghttp2 ${NGHTTP2_LIBRARIES}")
-
 
     include(FetchContent)
 
     FetchContent_Declare(
             project_curl
-            URL      https://github.com/curl/curl/releases/download/curl-8_4_0/curl-8.4.0.tar.gz
+            URL      https://github.com/curl/curl/releases/download/curl-8_3_0/curl-8.3.0.tar.gz
     )
 
     FetchContent_MakeAvailable(project_curl)
@@ -179,7 +165,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
                 ALL
                 WORKING_DIRECTORY ${project_curl_SOURCE_DIR}
                 COMMAND pwd
-                COMMAND ./configure --with-openssl --with-nghttp2 --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
+                COMMAND ./configure --with-openssl --disable-ldap --disable-manual --disable-ldaps --disable-dict --disable-telnet --disable-tftp --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-ipv6 --disable-sspi --disable-ntlm-wb --disable-tls-srp --without-libidn2 --without-brotli --prefix=${CMAKE_SOURCE_DIR}/external/curl/
                 COMMAND $(MAKE)
                 COMMAND $(MAKE) install
         )
@@ -190,7 +176,7 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set_property(TARGET curl2
             PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/external/curl/lib/libcurl.${LIB_SUFFIX})
 
-    add_dependencies(curl2 BUILD_CURL zlib)
+    add_dependencies(curl2 BUILD_CURL)
     add_dependencies(sv_merge curl2)
 endif()
 
@@ -203,6 +189,14 @@ endif()
 ##############################################
 
 message(STATUS "Fetching htslib")
+
+find_package(ZLIB REQUIRED)
+
+# Dependencies
+find_library(ZLIB NAMES z)
+if(${ZLIB} STREQUAL "ZLIB-NOTFOUND")
+    message(WARNING "Couldn't find the 'z' library")
+endif()
 
 find_library(BZ2LIB bz2)
 if(${BZ2LIB} STREQUAL "BZ2LIB-NOTFOUND")
@@ -262,9 +256,9 @@ set_property(TARGET htslib
 
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    add_dependencies(htslib BUILD_HTS curl2 zlib)
+    add_dependencies(htslib BUILD_HTS curl2)
 else()
-    add_dependencies(htslib BUILD_HTS zlib)
+    add_dependencies(htslib BUILD_HTS)
 endif()
 add_dependencies(sv_merge htslib)
 
@@ -317,7 +311,8 @@ set(MINIMAP2_SOURCES
         ${project_minimap2_SOURCE_DIR}/splitidx.c
         ${project_minimap2_SOURCE_DIR}/seed.c
         ${project_minimap2_SOURCE_DIR}/misc.c
-        )
+        inc/VariantGraph.hpp
+)
 
 message(STATUS "minimap2_SOURCE_DIR: ${project_minimap2_SOURCE_DIR}")
 
@@ -355,51 +350,103 @@ target_link_libraries(minimap2 pthread bz2 z)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
-# ---------------- ortools ----------------- #
+# ------------------ bdsg ------------------ #
 # ------------------------------------------ #
 ##############################################
 
-include(FetchContent)
-FetchContent_Declare(
-        ortools
-        URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
-)
+#message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
+#message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+#message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+#message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+#
+#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+#    set(BDSG_SUFFIX "-DCMAKE_CXX_COMPILER=/usr/bin/clang++")
+#elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+#    set(BDSG_SUFFIX "")
+#endif()
+#
+#if (dev)
+#    # Download or update library as an external project
+#    ExternalProject_Add(project_bdsg
+#            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+#            DOWNLOAD_COMMAND ""
+#            UPDATE_COMMAND ""
+#            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+#            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
+#            BUILD_IN_SOURCE True
+#            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+#            INSTALL_COMMAND make install
+#    )
+#else()
+#    # Download or update library as an external project
+#    ExternalProject_Add(project_bdsg
+#            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+#            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+#            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
+#            BUILD_IN_SOURCE True
+#            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+#            INSTALL_COMMAND make install
+#    )
+#endif()
+#
+## Define INSTALL_DIR as the install directory for external library
+#ExternalProject_Get_Property(project_bdsg INSTALL_DIR)
+#
+#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+#    set(LIB_SUFFIX "dylib")
+#elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+#    set(LIB_SUFFIX "so")
+#endif()
+#
+#
+## Create new library for external project (so it can be linked with main library)
+#add_library(bdsg SHARED IMPORTED)
+#set_property(TARGET bdsg
+#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libbdsg.${LIB_SUFFIX})
+#
+#add_library(divsufsort SHARED IMPORTED)
+#set_property(TARGET divsufsort
+#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libdivsufsort64.${LIB_SUFFIX})
+#
+#add_library(libhandlegraph SHARED IMPORTED)
+#set_property(TARGET libhandlegraph
+#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libhandlegraph.${LIB_SUFFIX})
+#
+#add_library(libsdsl SHARED IMPORTED)
+#set_property(TARGET libsdsl
+#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libsdsl.${LIB_SUFFIX})
+#
+## Define library as dependent on the downloaded project
+#add_dependencies(bdsg
+#        project_bdsg
+#        libsdsl
+#        libhandlegraph
+#        divsufsort)
+#
+## Define main library as dependent on the downloaded project (transitively)
+#add_dependencies(sv_merge bdsg)
+#
+## Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+#include_directories(external/bdsg/include/
+#        external/bdsg/include/handlegraph/
+#        external/bdsg/include/bdsg/)
+#
+## Add runtime path for main library so it can access external library
+##set_property(TARGET sv_merge PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
+#
+#message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
-set(BUILD_DEPS ON)
-set(BUILD_DOC OFF)
-set(BUILD_SAMPLES OFF)
-set(BUILD_EXAMPLES OFF)
-set(USE_COINOR OFF)
-FetchContent_MakeAvailable(ortools)
 
-include_directories(
-        ${ortools_SOURCE_DIR}
-        ${ortools_BINARY_DIR}
-        ${absl_SOURCE_DIR}
-        ${protobuf_SOURCE_DIR}/src
-)
 
-message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
-message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
-message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
-message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
-
-add_dependencies(sv_merge ortools)
 
 # ------- Misc -------
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-    message(STATUS "using compiled curl")
-else()
-    find_package(CURL REQUIRED)
-endif()
-
-
-#message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
+message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
 
 # -------- TESTS --------
@@ -414,14 +461,11 @@ set(TESTS
         test_heterograph
         test_htslib
         test_hts_gcp
-        test_hts_gcp_speed
         test_interval_graph
         test_minimap2
         test_minimap2_no_io
-        test_ortools
-        test_read_clustering
-        test_transmap
-        test_wfa2
+        #test_ortools
+        #test_transmap
         test_vcfreader
         )
 
@@ -433,24 +477,24 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
-                ${ZLIB_LIBRARIES}
+                ZLIB::ZLIB
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
-                ortools::ortools
-                wfa2
+                #ortools::ortools
+                #bdsg
         )
     else()
         target_link_libraries(${FILENAME_PREFIX}
                 sv_merge
                 Threads::Threads
                 htslib
-                ${ZLIB_LIBRARIES}
+                ZLIB::ZLIB
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
-                ortools::ortools
-                wfa2
+                #ortools::ortools
+                #bdsg
         )
     endif()
 
@@ -471,24 +515,24 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
-                ${ZLIB_LIBRARIES}
+                ZLIB::ZLIB
                 curl2
                 ${OPENSSL_LIBRARIES}
                 minimap2
-                ortools::ortools
-                wfa2
+                #ortools::ortools
+                #bdsg
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
                 sv_merge
                 Threads::Threads
                 htslib
-                ${ZLIB_LIBRARIES}
+                ZLIB::ZLIB
                 curl
                 ${OPENSSL_LIBRARIES}
                 minimap2
-                ortools::ortools
-                wfa2
+                #ortools::ortools
+                #bdsg
         )
     endif()
 

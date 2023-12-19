@@ -10,6 +10,7 @@ using sv_merge::Region;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
 
+#include <algorithm>
 #include <string>
 #include <iterator>
 #include <unordered_map>
@@ -25,6 +26,7 @@ using bdsg::HashGraph;
 using bdsg::handle_t;
 using bdsg::edge_t;
 using bdsg::path_handle_t;
+using bdsg::step_handle_t;
 
 
 namespace sv_merge {
@@ -36,78 +38,60 @@ namespace sv_merge {
 class VariantGraph {
 public:
     /**
-     * Basic chromosome constants
+     * Variant graph. Users are assumed to interact with it directly.
      */
-    static const uint8_t N_CHROMOSOMES;
-    static const string CHR_STR;
-    static const uint8_t CHR_STR_LENGTH;
-    static const string X_STR;
-    static const string X_STR_PRIME;
-    static const string Y_STR;
-    static const string Y_STR_PRIME;
-    static const string M_STR;
-    static const string M_STR_PRIME;
-    static const string MT_STR;
-    static const string MT_STR_PRIME;
+    HashGraph graph;
 
     /**
-     * @param chromosomes chromosome sequences in canonical order.
+     * @param chromosomes map id->sequence
      */
-    VariantGraph(const vector<string>& chromosomes);
+    VariantGraph(const unordered_map<string,string>& chromosomes);
 
     /**
-     * Given an array of VCF records, the procedure builds a corresponding bidirected graph and keeps track of which
+     * Given a list of VCF records, the procedure builds a corresponding bidirected graph and keeps track of which
      * records support each node and edge.
      *
-     * @param records an array of VCF records, not necessarily sorted; we assume that every POS belongs to the same
+     * Remark: the procedure supports replacement VCF records, and breakend VCF records with inserted sequence.
+     * Remark: the procedure can be called multiple times on different instances of `records`.
+     *
+     * @param records a list of VCF records, not necessarily sorted; we assume that every POS belongs to the same
      * chromosome, and that every record is biallelic;
      * @param flank_length maximum amount of sequence before the leftmost breakpoint (after the rightmost breakpoint)
      * of a chromosome;
      * @param deallocate_ins TRUE: the procedure deallocates the ALT sequence of every non-symbolic INS in `records`.
      */
-    void build(vector<VcfRecord>& records, uint16_t flank_length, bool deallocate_ins);  // <-- Add TRF track and compute flanks adaptively for each BND
+    void build(vector<VcfRecord>& records, unordered_map<string,vector<interval_t>>& tandem_track, uint16_t flank_length, bool deallocate_ins);
 
     /**
-     * Removes everything that does not belong to a path
+     * Serializes `graph`. Paths are not saved.
      */
-    void clean();
-
-
-    // create also a VCF replacement allele for every path as a VCF substitution.
-
-    // ^ support VCF substitutions during construction as well, since we will need to repeat this during evaluation with our own substitution paths.
-
+    void to_gfa(const path& gfa_path) const;
 
     /**
-     * Serializes `graph`.
-     */
-    void to_gfa(const path& gfa_path);
-
-    /**
-     * Expresses as a VCF the set of nodes and edges that are supported by at least one path in `paths`.
+     * Consider the set of VCF records that were used to build `graph`. Every such VCF record corresponds to a
+     * sequence of oriented edges. The procedure writes to a file every VCF record R such that: there is a (possibly
+     * circular) path in `graph` that supports all the edges of R in their original orientation, or all of them in their
+     * reverse orientation.
      *
-     * Remark: this needs to keep reference coordinates.
+     * Remark: the output file is in the same order as `vcf_records` and it does not have a header.
+     * Remark: for every two mated breakend records, the procedure outputs just one of them.
      */
     void to_vcf(const path& vcf_path);
 
-
-
-
+    /**
+     * Writes every path in `graph` as a distinct VCF record, of replacement type or of breakend type with inserted
+     * sequence. Circular paths are linearized according to `graph`.
+     *
+     * Remark: the output file is not sorted and it does not have a header.
+     */
+    void to_vcf_paths(const path& vcf_path);
 
 private:
-    /**
-     * Chromosome sequences in canonical order.
-     */
     const unordered_map<string,string>& chromosomes;
-
-    /**
-     * All the new nodes coming from INS, and their corresponding VCF records.
-     *
-     * Remark: the INS sequence of every VCF record is treated as distinct for simplicity, even though it may be
-     * identical to the INS sequence of other VCF records.
-     */
-    vector<handle_t> insertion_handles;
-    unordered_map<handle_t,VcfRecord> insertion_to_vcf_record;
+    const uint8_t n_chromosomes;
+    vector<VcfRecord> vcf_records;
+    uint32_t n_vcf_records;
+    unordered_set<string> bnd_ids;  // ID field of every BND record
 
     /**
      * For every chromosome, every first position of a chunk induced by breakpoints (zero-based).
@@ -116,35 +100,58 @@ private:
     unordered_map<string,vector<handle_t>> node_handles;
 
     /**
-     * Maps every edge of the graph to the VCF records that support it
+     * For every node of the graph, its chromosome and its first position (zero-based).
      */
-    unordered_map<edge_t,vector<VcfRecord>> edge_to_vcf_record;
+    unordered_map<nid_t,pair<string,uint32_t>> node_to_chromosome;    //   <-------------- !!!!!!!!!!!!
 
     /**
-     * Variant graph
+     * All the new nodes coming from INS and REPLACEMENT, and their corresponding VCF records.
+     *
+     * Remark: the ALT sequence of every VCF record is treated as distinct for simplicity, even though it may be
+     * identical to the ALT sequence of other VCF records.
      */
-    HashGraph graph;
+    vector<handle_t> insertion_handles;
+    vector<uint32_t> insertion_to_vcf_record;
 
     /**
-     * @return UINT16_MAX for non-standard chromosomes.
+     * Maps every edge of the graph to the VCF records that support it, if any.
      */
-    static uint16_t chrom2id(const string& chrom);
+    unordered_map<edge_t,vector<uint32_t>> edge_to_vcf_record;
+
+    /**
+     * For every VCF record, its corresponding insertion or replacement nodes, and its edges, in `graph`.
+     */
+    vector<vector<handle_t>> vcf_record_to_insertion;
+    vector<vector<edge_t>> vcf_record_to_edge;
+
+    /**
+     * Temporary space for printing VCFs.
+     */
+    vector<bool> printed;
+    vector<vector<uint8_t>> flags;
 
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
      */
-    uint16_t find_closest(uint8_t chromosome_id, uint32_t position);
+    uint16_t find_closest(const string& chromosome, const uint32_t position) const;
 
     /**
-     * Adds `(from,to)` to `graph` if not already present, and associates a copy of `record` to the edge in
-     * `edge_to_vcf_record`.
+     * Adds `(from,to)` to `graph` if not already present, and adds `record` to the edge in `edge_to_vcf_record`.
      */
-    void add_edge(handle_t from, handle_t to, const VcfRecord& record);
+    void add_edge(const handle_t& from, const handle_t& to, const uint32_t record_id);
 
     /**
      * Removes duplicates
      */
     static void sort_and_compact_positions(vector<uint32_t>& positions);
+
+    /**
+     * Looks for `query` in `edges`, and sets `flags[i]=1` (resp. =2; =3) if `query` equals `edges[i]` in the forward
+     * (resp. reverse; both forward and reverse) orientation.
+     *
+     * Remark: this is implemented as a linear scan, since `edges` is assumed to be short.
+     */
+    void mark_edge(const edge_t& query, const vector<edge_t>& edges, vector<uint8_t>& flags) const;
 };
 
 }
