@@ -192,7 +192,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         min_n_haplotypes_alt=ceil((is_autosomal?2.0:1.0)*min_n_haplotypes_alt_baseline);
         min_n_haplotypes_nonmissing=ceil((is_autosomal?2.0:1.0)*min_n_haplotypes_nonmissing_baseline);
     }
-    else if (field_id==1) pos=stoul(field);
+    else if (field_id==1) pos=stoi(field);
     else if (field_id==2) id+=field;
     else if (field_id==3) ref+=field;
     else if (field_id==4) {
@@ -297,7 +297,7 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) sv_length=(uint32_t)(alt_length-1);
         else if (alt_length==1 && ref_length>alt_length) sv_length=(uint32_t)(ref_length-1);
-        else sv_length=UINT_MAX;
+        else sv_length=ref_length-1;
     }
 }
 
@@ -491,7 +491,7 @@ uint32_t VcfRecord::get_breakend_pos() {
             tmp_buffer_1+=c;
         }
     }
-    return stoull(tmp_buffer_1);
+    return stoul(tmp_buffer_1);
 }
 
 
@@ -570,8 +570,19 @@ void VcfRecord::get_confidence_interval_end(pair<float, float>& out) { get_confi
 
 
 void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t& out) {
-    if (sv_type==VcfReader::TYPE_INSERTION || sv_type==VcfReader::TYPE_BREAKEND) {
+    if (sv_type==VcfReader::TYPE_INSERTION) {
         if (use_confidence_intervals) {
+            get_confidence_interval_pos(tmp_pair_2);
+            out.first=floor(pos+tmp_pair_2.first);
+            out.second=ceil(pos+tmp_pair_2.second);
+        }
+        else { out.first=pos; out.second=out.first; }
+    }
+    else if (sv_type==VcfReader::TYPE_BREAKEND) {
+        if (pos==0) {  // Virtual telomeric breakend
+            out.first=UINT32_MAX; out.second=UINT32_MAX;
+        }
+        else if (use_confidence_intervals) {
             get_confidence_interval_pos(tmp_pair_2);
             out.first=floor(pos-1+tmp_pair_2.first);
             out.second=ceil(pos-1+tmp_pair_2.second);
@@ -593,6 +604,11 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t
             out.second=sv_length==UINT32_MAX?UINT32_MAX:pos+sv_length;
         }
     }
+    else if (sv_type==VcfReader::TYPE_REPLACEMENT) {
+        out.first=pos;
+        out.second=pos+sv_length;
+    }
+    else { out.first=UINT32_MAX; out.second=UINT32_MAX; }
 }
 
 

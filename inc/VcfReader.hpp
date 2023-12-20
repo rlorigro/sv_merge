@@ -53,7 +53,7 @@ public:
      * Remark: `pass_only` means FILTER=PASS or FILTER='.'
      */
     bool pass_only, high_qual_only;
-    uint32_t min_sv_length, n_samples_to_load;
+    int32_t min_sv_length, n_samples_to_load;
     float min_qual, min_af, min_nmf;
 
     /**
@@ -67,7 +67,7 @@ public:
      */
     bool is_autosomal;
     float qual;  // -1 = missing
-    uint64_t pos;
+    int32_t pos;
     string chrom, id, ref, alt, filter, info, format;
     vector<string> genotypes;
 
@@ -76,7 +76,7 @@ public:
      */
     bool is_high_quality, is_pass, is_symbolic;
     int8_t sv_type;  // -1 = unsupported type
-    uint32_t sv_length;  // MAX = the length of the SV could not be inferred
+    int32_t sv_length;  // MAX = the length of the SV could not be inferred
     uint32_t n_alts;  // >1 iff the site is multiallelic
     uint32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
     uint32_t n_haplotypes_ref, n_haplotypes_alt;

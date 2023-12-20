@@ -24,78 +24,12 @@ using std::atomic;
 using std::mutex;
 using std::cerr;
 using std::min;
+using std::max;
 using std::cref;
 using std::ref;
 
 
 using namespace sv_merge;
-
-using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
-
-
-void for_each_sample_bam_path(path bam_csv, const function<void(const string& sample_name, const path& bam_path)>& f){
-    if (not (bam_csv.extension() == ".csv")){
-        throw runtime_error("ERROR: file does not have compatible csv extension: " + bam_csv.string());
-    }
-
-    ifstream file(bam_csv);
-
-    if (not (file.is_open() and file.good())){
-        throw runtime_error("ERROR: could not read file: " + bam_csv.string());
-    }
-
-    char c;
-    string sample_name;
-    string bam_path;
-
-    int64_t n_delimiters = 0;
-    char delimiter = ',';
-
-    while (file.get(c)){
-//        cerr << c << ' ' << sample_name << ' ' << bam_path << '\n';
-        if (c == delimiter){
-            n_delimiters++;
-            continue;
-        }
-        if (c == '\n'){
-            f(sample_name, bam_path);
-
-            sample_name.clear();
-            bam_path.clear();
-            n_delimiters = 0;
-            continue;
-        }
-
-        if (n_delimiters == 0){
-            sample_name += c;
-        }
-        else if (n_delimiters == 1){
-            bam_path += c;
-        }
-        else {
-            throw runtime_error("ERROR: too many delimiters in bam csv");
-        }
-    }
-}
-
-
-void load_windows_from_bed(path windows_bed, vector<Region>& regions){
-    for_region_in_bed_file(windows_bed, [&](const Region &r) {
-        regions.push_back(r);
-    });
-
-    // How to sort regions
-    auto left_comparator = [](const Region& a, const Region& b){
-        if (a.name != b.name) {
-            return a.name < b.name;
-        }
-        else {
-            return a.start < b.start;
-        }
-    };
-
-    sort(regions.begin(), regions.end(), left_comparator);
-}
 
 
 void find_windows(
@@ -104,7 +38,7 @@ void find_windows(
         path vcf,
         int32_t interval_max_length,
         int32_t flank_length,
-        int32_t chunk_size,
+        size_t n_chunks,
         bool debug
         ){
 
@@ -126,29 +60,35 @@ void find_windows(
 
     construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, interval_max_length, regions);
 
-    int64_t n_chunks = 0;
-    int64_t r = 0;
+    size_t r = 0;
     path output_path;
     ofstream file;
 
-    if (chunk_size == 0){
-        chunk_size = numeric_limits<int64_t>::max();
-    }
+    size_t chunk_size = max(1ul,regions.size() / n_chunks);
+    size_t n = 0;
+
+    string prev_contig;
 
     while (r < regions.size()) {
-        if (r % chunk_size == 0){
-            output_path = output_dir / ("windows_" + to_string(n_chunks) + ".bed");
+        auto& region = regions[r];
+
+//        cerr << region.start << ',' << region.stop << '\n';
+
+        // If the number of chunks iterated exceeds the desired chunk size, start a new chunk.
+        // Also, if a new contig is reached, start a new chunk.
+        if (r % chunk_size == 0 or (prev_contig != region.name and not prev_contig.empty())){
+            output_path = output_dir / ("windows_" + to_string(n) + ".bed");
             file.close();
             file.open(output_path);
-            n_chunks++;
+            n++;
         }
 
-        auto& region = regions[r];
         region.start -= flank_length;
         region.stop += flank_length;
 
         file << region.name << '\t' << region.start << '\t' << region.stop << '\n';
 
+        prev_contig = region.name;
         r++;
     }
 
@@ -165,7 +105,7 @@ int main (int argc, char* argv[]){
     path ref;
     int64_t interval_max_length;
     int64_t flank_length;
-    int64_t chunk_size = 0;
+    size_t n_chunks = 1;
     bool debug = false;
 
     CLI::App app{"App description"};
@@ -177,9 +117,9 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
-            "--chunk_size",
-            chunk_size,
-            "How many chunks to produce, for scattering of intervals. Setting to 0 indicates no chunking");
+            "--n_chunks",
+            n_chunks,
+            "How many chunks to produce, for scattering of intervals.");
 
     app.add_option(
             "--vcf",
@@ -214,7 +154,7 @@ int main (int argc, char* argv[]){
         vcf,
         interval_max_length,
         flank_length,
-        chunk_size,
+        n_chunks,
         debug
     );
 

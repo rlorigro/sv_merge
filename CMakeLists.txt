@@ -71,6 +71,7 @@ set(SOURCES
         src/bam.cpp
         src/bed.cpp
         src/fasta.cpp
+        src/fetch.cpp
         src/gaf.cpp
         src/Graph.cpp
         src/HeteroGraph.cpp
