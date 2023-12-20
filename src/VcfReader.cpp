@@ -45,6 +45,7 @@ const string VcfReader::STDEV_END_STR = "STDEV_END";
 const uint16_t VcfReader::STDEV_END_STR_LENGTH = STDEV_END_STR.length();
 const string VcfReader::PRECISE_STR = "PRECISE";
 const string VcfReader::IMPRECISE_STR = "IMPRECISE";
+const string VcfReader::MATEID_STR = "MATEID";
 
 const uint8_t VcfReader::TYPE_INSERTION = 1;
 const uint8_t VcfReader::TYPE_DELETION = 2;
@@ -316,14 +317,14 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
         const uint64_t end = stoi(tmp_buffer);
         sv_length=end-pos;
     }
-    else if (alt.starts_with('<') && alt.ends_with('>')) sv_length=UINT_MAX;
-    else if (alt.starts_with('[') || alt.starts_with(']') || alt.ends_with('[') || alt.ends_with(']')) sv_length=UINT_MAX;
+    else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=UINT_MAX;
+    else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_length=UINT_MAX;
     else {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
-        if (ref_length==1 && alt_length>ref_length) sv_length=(uint32_t)(alt_length-1);
-        else if (alt_length==1 && ref_length>alt_length) sv_length=(uint32_t)(ref_length-1);
-        else sv_length=UINT_MAX;
+        if (ref_length==1 && alt_length>ref_length) sv_length=(uint32_t)(alt_length-1);  // INS
+        else if (alt_length==1 && ref_length>alt_length) sv_length=(uint32_t)(ref_length-1);  // DEL
+        else sv_length=ref_length-1;  // Replacement
     }
 }
 
@@ -483,14 +484,28 @@ void VcfRecord::get_samples_with_alt(vector<string>& out) {
 bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_CHAR_OPEN && alt.at(alt.length()-1)==VcfReader::SYMBOLIC_CHAR_CLOSE; }
 
 
+bool VcfRecord::is_breakend_single() const {
+    if (is_alt_symbolic()) return false;
+    return alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(alt.length()-1)==VcfReader::VCF_MISSING_CHAR;
+}
+
+
+bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
+    if (is_alt_symbolic()) return false;
+    const uint32_t CHROMOSOME_LENGTH = chromosomes.at(chrom).length();
+    if (pos==0 || pos==CHROMOSOME_LENGTH+1) return true;
+    uint32_t p = get_breakend_pos();
+    return (p==0 || p==CHROMOSOME_LENGTH+1);
+}
+
+
 void VcfRecord::get_breakend_chromosome(string& out) const {
+    if (is_alt_symbolic()) { out.clear(); return; }
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
 
-    out.clear();
-    if (is_alt_symbolic()) return;
-    p=UINT16_MAX;
+    out.clear(); p=UINT16_MAX;
     for (i=0; i<LENGTH; i++) {
         c=alt.at(i);
         if (p==UINT16_MAX && (c==VcfReader::BREAKEND_CHAR_OPEN || c==VcfReader::BREAKEND_CHAR_CLOSE)) p=i;
@@ -501,11 +516,11 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
 
 
 uint32_t VcfRecord::get_breakend_pos() {
+    if (is_alt_symbolic()) return UINT32_MAX;
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
 
-    if (is_alt_symbolic()) return UINT64_MAX;
     tmp_buffer_1.clear(); p=UINT16_MAX;
     for (i=0; i<LENGTH; i++) {
         c=alt.at(i);
@@ -539,6 +554,25 @@ uint8_t VcfRecord::get_breakend_orientation_trans() const {
     if (c==VcfReader::BREAKEND_CHAR_OPEN) return 2;
     else if (c==VcfReader::BREAKEND_CHAR_CLOSE) return 1;
     return 0;
+}
+
+
+void VcfRecord::get_breakend_inserted_sequence(string& out) const {
+    if (is_alt_symbolic()) { out.clear(); return; }
+    const uint16_t LENGTH = alt.length();
+    char c;
+    uint16_t p;
+
+    out.clear(); p=UINT16_MAX;
+    for (uint16_t i=0; i<LENGTH; i++) {
+        c=alt.at(i);
+        if (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE) continue;
+        if (p==UINT16_MAX) {
+            if (i>1) { out.append(alt.substr(1,i-1)); return; }
+            p=i;
+        }
+        else if (i<LENGTH-2) { out.append(i+1,LENGTH-i-2); return; }
+    }
 }
 
 
@@ -629,6 +663,10 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<ui
             out.first=pos;
             out.second=sv_length==UINT32_MAX?UINT32_MAX:pos+sv_length;
         }
+    }
+    else if (sv_type==VcfReader::TYPE_REPLACEMENT) {
+        out.first=pos;
+        out.second=pos+sv_length;
     }
     else { out.first=UINT32_MAX; out.second=UINT32_MAX; }
 }

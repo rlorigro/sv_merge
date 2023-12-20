@@ -354,87 +354,87 @@ target_link_libraries(minimap2 pthread bz2 z)
 # ------------------------------------------ #
 ##############################################
 
-#message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
-#message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
-#message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
-#message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
-#
-#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-#    set(BDSG_SUFFIX "-DCMAKE_CXX_COMPILER=/usr/bin/clang++")
-#elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-#    set(BDSG_SUFFIX "")
-#endif()
-#
-#if (dev)
-#    # Download or update library as an external project
-#    ExternalProject_Add(project_bdsg
-#            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
-#            DOWNLOAD_COMMAND ""
-#            UPDATE_COMMAND ""
-#            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
-#            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
-#            BUILD_IN_SOURCE True
-#            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
-#            INSTALL_COMMAND make install
-#    )
-#else()
-#    # Download or update library as an external project
-#    ExternalProject_Add(project_bdsg
-#            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
-#            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
-#            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
-#            BUILD_IN_SOURCE True
-#            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
-#            INSTALL_COMMAND make install
-#    )
-#endif()
-#
-## Define INSTALL_DIR as the install directory for external library
-#ExternalProject_Get_Property(project_bdsg INSTALL_DIR)
-#
-#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-#    set(LIB_SUFFIX "dylib")
-#elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-#    set(LIB_SUFFIX "so")
-#endif()
-#
-#
-## Create new library for external project (so it can be linked with main library)
-#add_library(bdsg SHARED IMPORTED)
-#set_property(TARGET bdsg
-#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libbdsg.${LIB_SUFFIX})
-#
-#add_library(divsufsort SHARED IMPORTED)
-#set_property(TARGET divsufsort
-#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libdivsufsort64.${LIB_SUFFIX})
-#
-#add_library(libhandlegraph SHARED IMPORTED)
-#set_property(TARGET libhandlegraph
-#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libhandlegraph.${LIB_SUFFIX})
-#
-#add_library(libsdsl SHARED IMPORTED)
-#set_property(TARGET libsdsl
-#        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libsdsl.${LIB_SUFFIX})
-#
-## Define library as dependent on the downloaded project
-#add_dependencies(bdsg
-#        project_bdsg
-#        libsdsl
-#        libhandlegraph
-#        divsufsort)
-#
-## Define main library as dependent on the downloaded project (transitively)
-#add_dependencies(sv_merge bdsg)
-#
-## Ensure that main library has access to primary dependencies' and secondary dependencies' headers
-#include_directories(external/bdsg/include/
-#        external/bdsg/include/handlegraph/
-#        external/bdsg/include/bdsg/)
-#
-## Add runtime path for main library so it can access external library
-##set_property(TARGET sv_merge PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
-#
-#message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
+message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
+message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(BDSG_SUFFIX "-DCMAKE_CXX_COMPILER=/usr/bin/clang++")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    set(BDSG_SUFFIX "")
+endif()
+
+if (dev)
+    # Download or update library as an external project
+    ExternalProject_Add(project_bdsg
+            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            DOWNLOAD_COMMAND ""
+            UPDATE_COMMAND ""
+            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
+            BUILD_IN_SOURCE True
+            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+            INSTALL_COMMAND make install
+    )
+else()
+    # Download or update library as an external project
+    ExternalProject_Add(project_bdsg
+            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF ${BDSG_SUFFIX}
+            BUILD_IN_SOURCE True
+            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+            INSTALL_COMMAND make install
+    )
+endif()
+
+# Define INSTALL_DIR as the install directory for external library
+ExternalProject_Get_Property(project_bdsg INSTALL_DIR)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(LIB_SUFFIX "dylib")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    set(LIB_SUFFIX "so")
+endif()
+
+
+# Create new library for external project (so it can be linked with main library)
+add_library(bdsg SHARED IMPORTED)
+set_property(TARGET bdsg
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libbdsg.${LIB_SUFFIX})
+
+add_library(divsufsort SHARED IMPORTED)
+set_property(TARGET divsufsort
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libdivsufsort64.${LIB_SUFFIX})
+
+add_library(libhandlegraph SHARED IMPORTED)
+set_property(TARGET libhandlegraph
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libhandlegraph.${LIB_SUFFIX})
+
+add_library(libsdsl SHARED IMPORTED)
+set_property(TARGET libsdsl
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libsdsl.${LIB_SUFFIX})
+
+# Define library as dependent on the downloaded project
+add_dependencies(bdsg
+        project_bdsg
+        libsdsl
+        libhandlegraph
+        divsufsort)
+
+# Define main library as dependent on the downloaded project (transitively)
+add_dependencies(sv_merge bdsg)
+
+# Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+include_directories(external/bdsg/include/
+        external/bdsg/include/handlegraph/
+        external/bdsg/include/bdsg/)
+
+# Add runtime path for main library so it can access external library
+#set_property(TARGET sv_merge PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
+
+message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
 
 
@@ -482,7 +482,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 #ortools::ortools
-                #bdsg
+                bdsg
         )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -494,7 +494,7 @@ foreach(FILENAME_PREFIX ${TESTS})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 #ortools::ortools
-                #bdsg
+                bdsg
         )
     endif()
 
@@ -520,7 +520,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 #ortools::ortools
-                #bdsg
+                bdsg
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -532,7 +532,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 ${OPENSSL_LIBRARIES}
                 minimap2
                 #ortools::ortools
-                #bdsg
+                bdsg
         )
     endif()
 

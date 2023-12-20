@@ -169,6 +169,16 @@ public:
     bool is_alt_symbolic() const;
 
     /**
+     * Single breakends are not part of any non-reference adjacency.
+     */
+    bool is_breakend_single() const;
+
+    /**
+     * Virtual telomeric breakends are artificial records that carry no information.
+     */
+    bool is_breakend_virtual(const unordered_map<string,string>& chromosomes) const;
+
+    /**
      * Remark: `out` is set to an empty string if the chromosome could not be determined.
      */
     void get_breakend_chromosome(string& out) const;
@@ -193,6 +203,12 @@ public:
     * 2 if the breakend continues the the right of the position in `alt`.
     */
     uint8_t get_breakend_orientation_trans() const;
+
+    /**
+     * Stores in `out` all bases inserted between the breakend position and its mate. I.e. if REF=`T` and
+     * ALT=`]chr13:123456]AGTNNNNNCAT`, the procedure returns `AGTNNNNNCA`.
+     */
+    void get_breakend_inserted_sequence(string& out) const;
 
     /**
      * Checks the IMPRECISE tag and the confidence intervals fields.
@@ -244,6 +260,8 @@ private:
      * - INFO.END if it exists;
      * - non-symbolic ALT if it exists.
      *
+     * Remark: the length of a replacement record is arbitrarily set to the length of the substring of the reference
+     * that is to be replaced.
      * Remark: `ref`, `alt` and `info` are assumed to be already set.
      *
      * @param tmp_buffer reused temporary space.
@@ -312,6 +330,7 @@ public:
     static const uint16_t STDEV_END_STR_LENGTH;
     static const string PRECISE_STR;
     static const string IMPRECISE_STR;
+    static const string MATEID_STR;
 
     /**
      * Supported SV types
