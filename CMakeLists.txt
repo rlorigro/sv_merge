@@ -71,6 +71,7 @@ set(SOURCES
         src/bam.cpp
         src/bed.cpp
         src/fasta.cpp
+        src/fetch.cpp
         src/gaf.cpp
         src/Graph.cpp
         src/HeteroGraph.cpp
@@ -78,14 +79,15 @@ set(SOURCES
         src/misc.cpp
         src/pair_hash.cpp
         src/path_optimizer.cpp
-        src/read_optimizer.cpp
+        src/read_centroid_optimizer.cpp
+        src/read_cluster_optimizer.cpp
         src/Region.cpp
         src/Sequence.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
-        inc/Sequence.hpp
         src/VcfReader.cpp
-)
+        src/windows.cpp
+        )
 
 
 project(sv_merge)
@@ -111,7 +113,9 @@ include(ExternalProject)
 
 
 ExternalProject_Add(project_wfa
-        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
+        GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
+        GIT_TAG 4d0b9238857554b958ffa20048b155d29be92e04
+#        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
         TIMEOUT 5
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
         INSTALL_COMMAND make install
@@ -209,6 +213,8 @@ if(${BZ2LIB} STREQUAL "BZ2LIB-NOTFOUND")
     message(WARNING "Couldn't find the 'bz2' library")
 endif()
 
+find_package( LibLZMA REQUIRED )
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -275,81 +281,81 @@ add_dependencies(sv_merge htslib)
 # --------------- minimap2 ----------------- #
 # ------------------------------------------ #
 ##############################################
-
-
-message(STATUS "Fetching minimap2")
-
-
-# https://github.com/lh3/minimap2/archive/refs/tags/v2.24.tar.gz
-
-include(FetchContent)
-
-FetchContent_Declare(
-        project_minimap2
-        GIT_REPOSITORY https://github.com/lh3/minimap2.git
-        GIT_TAG v2.24
-)
-
-FetchContent_MakeAvailable(project_minimap2)
-
-set(MINIMAP2_SOURCES
-        ${project_minimap2_SOURCE_DIR}/ksw2_dispatch.c
-        ${project_minimap2_SOURCE_DIR}/lchain.c
-        ${project_minimap2_SOURCE_DIR}/format.c
-#        ${project_minimap2_SOURCE_DIR}/example.c
-        ${project_minimap2_SOURCE_DIR}/ksw2_extz2_sse.c
-        ${project_minimap2_SOURCE_DIR}/ksw2_extd2_sse.c
-        ${project_minimap2_SOURCE_DIR}/kalloc.c
-        ${project_minimap2_SOURCE_DIR}/kthread.c
-        ${project_minimap2_SOURCE_DIR}/hit.c
-        ${project_minimap2_SOURCE_DIR}/ksw2_ll_sse.c
-        ${project_minimap2_SOURCE_DIR}/index.c
-        ${project_minimap2_SOURCE_DIR}/ksw2_exts2_sse.c
-        ${project_minimap2_SOURCE_DIR}/align.c
-        ${project_minimap2_SOURCE_DIR}/esterr.c
-        ${project_minimap2_SOURCE_DIR}/bseq.c
-        ${project_minimap2_SOURCE_DIR}/main.c
-        ${project_minimap2_SOURCE_DIR}/map.c
-        ${project_minimap2_SOURCE_DIR}/options.c
-        ${project_minimap2_SOURCE_DIR}/pe.c
-        ${project_minimap2_SOURCE_DIR}/sdust.c
-        ${project_minimap2_SOURCE_DIR}/sketch.c
-        ${project_minimap2_SOURCE_DIR}/splitidx.c
-        ${project_minimap2_SOURCE_DIR}/seed.c
-        ${project_minimap2_SOURCE_DIR}/misc.c
-        )
-
-message(STATUS "minimap2_SOURCE_DIR: ${project_minimap2_SOURCE_DIR}")
-
-
-set(MINIMAP2_DIR _deps/project_minimap2-src)
-
-add_custom_target(
-        BUILD_MINIMAP2
-        ALL
-        WORKING_DIRECTORY ${MINIMAP2_DIR}
-        COMMAND ""
-)
-
-# Ensure that main library has access to primary dependencies' and secondary dependencies' headers
-include_directories(
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/
-        #        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/sse2neon/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/arm/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/arm/neon/
-        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/x86/
-)
-
-#add_custom_target(HTSLIB_CONFIGURED DEPENDS "${CMAKE_BINARY_DIR}/_deps/project_htslib-src/config.h")
-
-add_library(minimap2 ${MINIMAP2_SOURCES})
-add_dependencies(minimap2 BUILD_MINIMAP2)
-add_dependencies(sv_merge minimap2)
-
-target_link_libraries(minimap2 pthread bz2 z)
+#
+#
+#message(STATUS "Fetching minimap2")
+#
+#
+## https://github.com/lh3/minimap2/archive/refs/tags/v2.24.tar.gz
+#
+#include(FetchContent)
+#
+#FetchContent_Declare(
+#        project_minimap2
+#        GIT_REPOSITORY https://github.com/lh3/minimap2.git
+#        GIT_TAG v2.24
+#)
+#
+#FetchContent_MakeAvailable(project_minimap2)
+#
+#set(MINIMAP2_SOURCES
+#        ${project_minimap2_SOURCE_DIR}/ksw2_dispatch.c
+#        ${project_minimap2_SOURCE_DIR}/lchain.c
+#        ${project_minimap2_SOURCE_DIR}/format.c
+##        ${project_minimap2_SOURCE_DIR}/example.c
+#        ${project_minimap2_SOURCE_DIR}/ksw2_extz2_sse.c
+#        ${project_minimap2_SOURCE_DIR}/ksw2_extd2_sse.c
+#        ${project_minimap2_SOURCE_DIR}/kalloc.c
+#        ${project_minimap2_SOURCE_DIR}/kthread.c
+#        ${project_minimap2_SOURCE_DIR}/hit.c
+#        ${project_minimap2_SOURCE_DIR}/ksw2_ll_sse.c
+#        ${project_minimap2_SOURCE_DIR}/index.c
+#        ${project_minimap2_SOURCE_DIR}/ksw2_exts2_sse.c
+#        ${project_minimap2_SOURCE_DIR}/align.c
+#        ${project_minimap2_SOURCE_DIR}/esterr.c
+#        ${project_minimap2_SOURCE_DIR}/bseq.c
+#        ${project_minimap2_SOURCE_DIR}/main.c
+#        ${project_minimap2_SOURCE_DIR}/map.c
+#        ${project_minimap2_SOURCE_DIR}/options.c
+#        ${project_minimap2_SOURCE_DIR}/pe.c
+#        ${project_minimap2_SOURCE_DIR}/sdust.c
+#        ${project_minimap2_SOURCE_DIR}/sketch.c
+#        ${project_minimap2_SOURCE_DIR}/splitidx.c
+#        ${project_minimap2_SOURCE_DIR}/seed.c
+#        ${project_minimap2_SOURCE_DIR}/misc.c
+#        )
+#
+#message(STATUS "minimap2_SOURCE_DIR: ${project_minimap2_SOURCE_DIR}")
+#
+#
+#set(MINIMAP2_DIR _deps/project_minimap2-src)
+#
+#add_custom_target(
+#        BUILD_MINIMAP2
+#        ALL
+#        WORKING_DIRECTORY ${MINIMAP2_DIR}
+#        COMMAND ""
+#)
+#
+## Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+#include_directories(
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/
+#        #        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/sse2neon/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/arm/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/arm/neon/
+#        ${CMAKE_BINARY_DIR}/_deps/project_minimap2-src/lib/simde/simde/x86/
+#)
+#
+##add_custom_target(HTSLIB_CONFIGURED DEPENDS "${CMAKE_BINARY_DIR}/_deps/project_htslib-src/config.h")
+#
+#add_library(minimap2 ${MINIMAP2_SOURCES})
+#add_dependencies(minimap2 BUILD_MINIMAP2)
+#add_dependencies(sv_merge minimap2)
+#
+#target_link_libraries(minimap2 pthread bz2 z)
 
 
 ##############################################
@@ -386,6 +392,89 @@ message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
 
 add_dependencies(sv_merge ortools)
 
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ------------------ bdsg ------------------ #
+# ------------------------------------------ #
+##############################################
+
+message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
+message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+if (dev)
+    # Download or update library as an external project
+    ExternalProject_Add(project_bdsg
+            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            DOWNLOAD_COMMAND ""
+            UPDATE_COMMAND ""
+            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF
+            BUILD_IN_SOURCE True
+            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+            INSTALL_COMMAND make install
+    )
+else()
+    # Download or update library as an external project
+    ExternalProject_Add(project_bdsg
+            GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+            CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF
+            BUILD_IN_SOURCE True
+            INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
+            INSTALL_COMMAND make install
+    )
+endif()
+
+# Define INSTALL_DIR as the install directory for external library
+ExternalProject_Get_Property(project_bdsg INSTALL_DIR)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(LIB_SUFFIX "dylib")
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    set(LIB_SUFFIX "so")
+endif()
+
+
+# Create new library for external project (so it can be linked with main library)
+add_library(bdsg SHARED IMPORTED)
+set_property(TARGET bdsg
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libbdsg.${LIB_SUFFIX})
+
+add_library(divsufsort SHARED IMPORTED)
+set_property(TARGET divsufsort
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libdivsufsort64.${LIB_SUFFIX})
+
+add_library(libhandlegraph SHARED IMPORTED)
+set_property(TARGET libhandlegraph
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libhandlegraph.${LIB_SUFFIX})
+
+add_library(libsdsl SHARED IMPORTED)
+set_property(TARGET libsdsl
+        PROPERTY IMPORTED_LOCATION ${INSTALL_DIR}/lib/libsdsl.${LIB_SUFFIX})
+
+# Define library as dependent on the downloaded project
+add_dependencies(bdsg
+        project_bdsg
+        libsdsl
+        libhandlegraph
+        divsufsort)
+
+# Define main library as dependent on the downloaded project (transitively)
+add_dependencies(sv_merge bdsg)
+
+# Ensure that main library has access to primary dependencies' and secondary dependencies' headers
+include_directories(external/bdsg/include/
+        external/bdsg/include/handlegraph/
+        external/bdsg/include/bdsg/)
+
+# Add runtime path for main library so it can access external library
+#set_property(TARGET GFAse PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
+
+message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
+
 # ------- Misc -------
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -416,11 +505,12 @@ set(TESTS
         test_hts_gcp
         test_hts_gcp_speed
         test_interval_graph
-        test_minimap2
-        test_minimap2_no_io
+#        test_minimap2
+#        test_minimap2_no_io
         test_ortools
         test_read_clustering
         test_transmap
+        test_triangle_inequality
         test_wfa2
         test_vcfreader
         )
@@ -433,10 +523,13 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
+                bdsg
                 ${ZLIB_LIBRARIES}
                 curl2
                 ${OPENSSL_LIBRARIES}
-                minimap2
+                bz2
+                lzma
+#                minimap2
                 ortools::ortools
                 wfa2
         )
@@ -445,10 +538,13 @@ foreach(FILENAME_PREFIX ${TESTS})
                 sv_merge
                 Threads::Threads
                 htslib
+                bdsg
                 ${ZLIB_LIBRARIES}
                 curl
                 ${OPENSSL_LIBRARIES}
-                minimap2
+                bz2
+                lzma
+#                minimap2
                 ortools::ortools
                 wfa2
         )
@@ -462,6 +558,7 @@ endforeach()
 set(EXECUTABLES
         a
         hapestry
+        find_windows
 )
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
@@ -471,10 +568,13 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
+                bdsg
                 ${ZLIB_LIBRARIES}
                 curl2
                 ${OPENSSL_LIBRARIES}
-                minimap2
+                bz2
+                lzma
+#                minimap2
                 ortools::ortools
                 wfa2
                 )
@@ -483,10 +583,13 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
                 sv_merge
                 Threads::Threads
                 htslib
+                bdsg
                 ${ZLIB_LIBRARIES}
                 curl
                 ${OPENSSL_LIBRARIES}
-                minimap2
+                bz2
+                lzma
+#                minimap2
                 ortools::ortools
                 wfa2
         )

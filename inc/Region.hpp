@@ -19,14 +19,14 @@ namespace sv_merge {
 class Region {
 public:
     string name;
-    int64_t start{};
-    int64_t stop{};
+    int32_t start{};
+    int32_t stop{};
 
     string to_string(char sep=':') const;
 
     explicit Region(string &region_string);
-    Region(string& name, int64_t start, int64_t stop);
-    Region(const string& name, int64_t start, int64_t stop);
+    Region(string& name, int32_t start, int32_t stop);
+    Region(const string& name, int32_t start, int32_t stop);
     Region()=default;
     bool operator==(const Region& other) const;
 };

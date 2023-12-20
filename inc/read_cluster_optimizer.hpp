@@ -37,11 +37,10 @@ namespace sv_merge {
 
 
 /// Data class to contain the variables of the ILP, int64_t IDs intended to be reused from the TransMap
-class ReadVariables{
+class ReadClusterVariables{
 public:
     // Edges where the left node is the parent
     unordered_map <pair<int64_t,int64_t>, BoolVar> edges;
-    unordered_map <int64_t, BoolVar> is_parent;
 
     // Cost of all edges assigned
     LinearExpr cost_d;
@@ -51,24 +50,22 @@ public:
 };
 
 
-void construct_read_model(
+void construct_cluster_model(
         const TransMap& transmap,
         int64_t sample_id,
         CpModelBuilder& model,
-        ReadVariables& vars,
-        vector<int64_t>& representatives);
+        ReadClusterVariables& vars,
+        vector <vector<int64_t> >& clusters
+);
 
 
-void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
-
-
-void optimize_reads_with_d_and_n(
+void cluster_reads(
         TransMap& transmap,
         int64_t sample_id,
         int64_t d_weight,
         int64_t n_weight,
-        vector<int64_t>& representatives
-        );
+        vector <vector<int64_t> >& clusters
+);
 
 
 }

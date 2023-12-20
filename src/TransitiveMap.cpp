@@ -7,9 +7,10 @@ TransMap::TransMap():
         read_node_name("read_node"),
         path_node_name("path_node")
 {
-    graph.add_node(sample_node_name, 'S');
-    graph.add_node(read_node_name, 'R');
-    graph.add_node(path_node_name, 'P');
+    // Source nodes use lower case types to avoid being confused with the types they point to
+    graph.add_node(sample_node_name, 's');
+    graph.add_node(read_node_name, 'r');
+    graph.add_node(path_node_name, 'p');
 }
 
 
@@ -216,9 +217,6 @@ void TransMap::for_each_sample(const function<void(const string& name, int64_t i
 
 void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(id, type, [&](int64_t id){
-        if (id < min_usable_id){
-            return;
-        }
         f(id);
     });
 }
@@ -297,6 +295,16 @@ void TransMap::for_each_read_to_path_edge(const function<void(int64_t read_id, i
         });
     });
 }
+
+
+void TransMap::for_node_in_bfs(
+        const string& start_name,
+        float min_edge_weight,
+        const function<bool(const HeteroNode& node)>& criteria,
+        const function<void(const HeteroNode& node, int64_t id)>& f) const{
+    graph.for_node_in_bfs(start_name,min_edge_weight,criteria,f);
+}
+
 
 
 }

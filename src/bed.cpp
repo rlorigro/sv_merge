@@ -67,4 +67,22 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
 }
 
 
+void load_windows_from_bed(path windows_bed, vector<Region>& regions){
+    for_region_in_bed_file(windows_bed, [&](const Region &r) {
+        regions.push_back(r);
+    });
+
+    // How to sort regions
+    auto left_comparator = [](const Region& a, const Region& b){
+        if (a.name != b.name) {
+            return a.name < b.name;
+        }
+        else {
+            return a.start < b.start;
+        }
+    };
+
+    sort(regions.begin(), regions.end(), left_comparator);
+}
+
 }

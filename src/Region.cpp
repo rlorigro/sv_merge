@@ -8,14 +8,14 @@ using std::cerr;
 namespace sv_merge {
 
 
-Region::Region(string& name, int64_t start, int64_t stop):
+Region::Region(string& name, int32_t start, int32_t stop):
     name(name),
     start(start),
     stop(stop)
 {}
 
 
-Region::Region(const string& name, int64_t start, int64_t stop):
+Region::Region(const string& name, int32_t start, int32_t stop):
     name(name),
     start(start),
     stop(stop)

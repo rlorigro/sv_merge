@@ -15,15 +15,16 @@ using sv_merge::VcfReader;
 
 
 ofstream outstream;
-vector<uint32_t> tmp_vector;
+unordered_set<uint32_t> tmp_set;
 pair<float, float> tmp_pair;
 string tmp_string;
 
 void test_callback(VcfRecord& record) { record.print(outstream); outstream << '\n'; }
 
+// TODO: implement proper test
 void test_callback_2(VcfRecord& record) {
-    record.get_samples_with_alt(tmp_vector);
-    for (auto& id: tmp_vector) { outstream << id << ","; }
+    record.get_samples_with_alt(tmp_set);
+    for (auto& id: tmp_set) { outstream << id << ","; }
     outstream << "\n";
 }
 

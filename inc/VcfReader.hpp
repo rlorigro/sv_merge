@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Filesystem.hpp"
+#include "misc.hpp"
 
 using ghc::filesystem::path;
 
@@ -11,6 +12,8 @@ using ghc::filesystem::path;
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
+#include <set>
 #include <fstream>
 #include <functional>
 #include <ostream>
@@ -21,6 +24,8 @@ using std::string;
 using std::string_view;
 using std::vector;
 using std::unordered_map;
+using std::unordered_set;
+using std::set;
 using std::function;
 using std::ifstream;
 using std::ostream;
@@ -48,7 +53,7 @@ public:
      * Remark: `pass_only` means FILTER=PASS or FILTER='.'
      */
     bool pass_only, high_qual_only;
-    uint32_t min_sv_length, n_samples_to_load;
+    int32_t min_sv_length, n_samples_to_load;
     float min_qual, min_af, min_nmf;
 
     /**
@@ -62,7 +67,7 @@ public:
      */
     bool is_autosomal;
     float qual;  // -1 = missing
-    uint64_t pos;
+    int32_t pos;
     string chrom, id, ref, alt, filter, info, format;
     vector<string> genotypes;
 
@@ -71,7 +76,7 @@ public:
      */
     bool is_high_quality, is_pass, is_symbolic;
     int8_t sv_type;  // -1 = unsupported type
-    uint32_t sv_length;  // MAX = the length of the SV could not be inferred
+    int32_t sv_length;  // MAX = the length of the SV could not be inferred
     uint32_t n_alts;  // >1 iff the site is multiallelic
     uint32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
     uint32_t n_haplotypes_ref, n_haplotypes_alt;
@@ -97,7 +102,7 @@ public:
      * - If the call is shorter than `min_sv_length`, no field after INFO is loaded.
      * - If there are more samples than `n_samples_to_load`, no sample after the maximum is loaded.
      */
-    void set(ifstream& stream);
+    void set_from_stream(ifstream& stream);
 
     /**
      * @return TRUE iff the record passes all the user constraints set at construction time.
@@ -152,13 +157,15 @@ public:
 
     /**
      * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
+     * ID must be used in conjunction with VcfReader to find the
      */
-    void get_samples_with_alt(vector<uint32_t>& out);
+    void get_samples_with_alt(unordered_set<uint32_t>& out);
 
     /**
-     * Same as above, but returns just the string ID of each sample.
+     * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
+     * ID must be used in conjunction with VcfReader to find the
      */
-    void get_samples_with_alt(vector<string>& out);
+    void get_samples_with_alt(set<uint32_t>& out);
 
     bool is_alt_symbolic() const;
 
@@ -170,7 +177,7 @@ public:
     /**
      * @return UINT64_MAX if the position could not be determined.
      */
-    uint64_t get_breakend_pos();
+    uint32_t get_breakend_pos();
 
     /**
      * @return
@@ -213,7 +220,7 @@ public:
      * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
      * `sv_length`, if available.
      */
-    void get_reference_coordinates(bool use_confidence_intervals, pair<uint64_t, uint64_t>& out);
+    void get_reference_coordinates(bool use_confidence_intervals, coord_t& out);
 
 private:
     /**
@@ -350,12 +357,15 @@ public:
 
     /**
      * @param path a VCF file that contains only calls in `chromosome`;
-     * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
     VcfReader(const path& vcf_path, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
     VcfReader(const path& vcf_path);
 
+    /**
+     *
+     * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
+     */
     void for_record_in_vcf(const function<void(VcfRecord& record)>& callback);
 
 private:
@@ -363,7 +373,6 @@ private:
      * Internal state of VcfReader
      */
     string vcf_path;
-    function<void(VcfRecord& record)> callback;
 };
 
 }

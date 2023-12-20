@@ -26,7 +26,7 @@ CigarTuple::CigarTuple(int64_t length, int8_t code):
  * first
  * @return a pair of integers representing the interval
  */
-pair<int64_t,int64_t> CigarInterval::get_forward_ref_interval() const{
+interval_t CigarInterval::get_forward_ref_interval() const{
     if (ref_start > ref_stop){
         return {ref_stop,ref_start};
     }
@@ -36,12 +36,12 @@ pair<int64_t,int64_t> CigarInterval::get_forward_ref_interval() const{
 }
 
 
-int64_t CigarInterval::get_ref_length() const{
+int32_t CigarInterval::get_ref_length() const{
     return labs(ref_stop-ref_start);
 }
 
 
-int64_t CigarInterval::get_query_length() const{
+int32_t CigarInterval::get_query_length() const{
     return labs(query_stop-query_start);
 }
 
@@ -73,7 +73,7 @@ void CigarInterval::set_ref_interval_reverse(){
  * first
  * @return a pair of integers representing the interval
  */
-pair<int64_t,int64_t> CigarInterval::get_forward_query_interval() const{
+interval_t CigarInterval::get_forward_query_interval() const{
     if (query_start > query_stop){
         return {query_stop,query_start};
     }

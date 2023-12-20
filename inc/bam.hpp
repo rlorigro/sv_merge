@@ -53,13 +53,13 @@ public:
 
     // For the htslib bam implementation of this, we can lazily evaluate, only decompress and store the sequence as
     // needed. Unfortunately this makes the getter non-const...
-    void get_query_sequence(string& result, int64_t start, int64_t stop) override;
+    void get_query_sequence(string& result, int32_t start, int32_t stop) override;
     void get_query_sequence(string& result) override;
     void get_query_name(string& result) const override;
-    [[nodiscard]] int64_t get_query_length() const override;
-    [[nodiscard]] int64_t get_ref_start() const override;
-    [[nodiscard]] int64_t get_ref_stop() const override;
-    [[nodiscard]] int64_t get_query_start() const override;
+    [[nodiscard]] int32_t get_query_length() const override;
+    [[nodiscard]] int32_t get_ref_start() const override;
+    [[nodiscard]] int32_t get_ref_stop() const override;
+    [[nodiscard]] int32_t get_query_start() const override;
     [[nodiscard]] bool is_unmapped() const override;
     [[nodiscard]] bool is_reverse() const override;
     [[nodiscard]] bool is_primary() const override;
@@ -93,7 +93,7 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence);
  * @param start - start index, in the F orientation of the sequence
  * @param stop - stop index, in the F orientation of the sequence
  */
-void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int64_t start, int64_t stop);
+void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int32_t start, int32_t stop);
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar);
 
