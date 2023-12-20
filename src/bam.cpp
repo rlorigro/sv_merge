@@ -340,8 +340,11 @@ void for_alignment_in_bam_subregions(
 
         a = HtsAlignment(alignment);
 
+        auto alignment_start = a.get_ref_start();
+        auto alignment_stop = a.get_ref_stop();
+
         // Set the iterator beyond regions that have been passed by the alignments already
-        while (a.get_ref_start() > subregions[i_start].start){
+        while (alignment_start > subregions[i_start].stop){
             i_start++;
 
             if (i_start >= subregions.size()){
@@ -350,10 +353,9 @@ void for_alignment_in_bam_subregions(
         }
 
         auto i_stop = i_start;
-        auto alignment_stop = a.get_ref_stop();
 
-        // Iterate all the subregions that start before/at the alignment end
-        while (i_stop < subregions.size() and alignment_stop >= subregions[i_stop].start){
+        // Iterate all the subregions that intersect the alignment
+        while (i_stop < subregions.size() and min(subregions[i_stop].stop, alignment_stop) - max(subregions[i_stop].start, alignment_start) > 0){
             i_stop++;
         }
 

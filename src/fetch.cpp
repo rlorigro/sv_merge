@@ -107,7 +107,7 @@ void extract_subregions_from_sample(
             string name;
             alignment.get_query_name(name);
 
-//        cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
 //        for (const auto& item: overlapping_regions){
 //            cerr << item.start << ',' << item.stop << '\n';
 //        }
@@ -147,37 +147,28 @@ void extract_subregions_from_sample(
             // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
             for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
                 [&](const CigarInterval& intersection, const interval_t& interval) {
-//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
+                    // A single alignment may span multiple regions
                     for (auto& region: overlapping_regions){
                         auto& coord = query_coords_per_region.at(region).at(name);
 
-                        // If the alignment touches the START of the ref region, record the query position
-                        if (intersection.ref_start == region.start){
+                        // If the alignment is within the ref region, record the query position
+                        if (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop){
                             auto [start,stop] = intersection.get_forward_query_interval();
 
                             if (alignment.is_reverse()){
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
                                 }
-                            }
-                            else{
-                                if (start < coord.query_start){
-                                    coord.query_start = start;
-                                }
-                            }
-                        }
-
-                        // If the alignment touches the END of the region, record the query position
-                        if (intersection.ref_stop == region.stop){
-                            auto [start,stop] = intersection.get_forward_query_interval();
-
-                            if (intersection.is_reverse){
                                 if (start < coord.query_start){
                                     coord.query_start = start;
                                 }
                             }
                             else{
+                                if (start < coord.query_start){
+                                    coord.query_start = start;
+                                }
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
                                 }
