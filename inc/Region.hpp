@@ -10,7 +10,7 @@ using std::string;
 using std::array;
 
 #include "Filesystem.hpp"
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 using ghc::filesystem::path;
 

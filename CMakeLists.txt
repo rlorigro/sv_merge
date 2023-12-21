@@ -76,7 +76,7 @@ set(SOURCES
         inc/Sequence.hpp
         #inc/TransitiveMap.hpp
         src/VcfReader.cpp
-        #src/VariantGraph.cpp
+        src/VariantGraph.cpp
 )
 
 
@@ -360,7 +360,7 @@ message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    set(BDSG_SUFFIX "-DCMAKE_CXX_COMPILER=/usr/bin/clang++")
+    set(BDSG_SUFFIX "-DCMAKE_CXX_COMPILER=/usr/local/bin/g++-13")
 elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(BDSG_SUFFIX "")
 endif()
@@ -432,7 +432,7 @@ include_directories(external/bdsg/include/
         external/bdsg/include/bdsg/)
 
 # Add runtime path for main library so it can access external library
-#set_property(TARGET sv_merge PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
+#set_property(TARGET GFAse PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
 
 message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 

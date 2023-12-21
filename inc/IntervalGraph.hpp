@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "misc.hpp"
 
 #include <unordered_map>

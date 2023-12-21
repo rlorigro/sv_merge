@@ -4,6 +4,7 @@
 #include "Region.hpp"
 #include "VcfReader.hpp"
 #include "bdsg/hash_graph.hpp"
+#include "misc.hpp"
 
 using ghc::filesystem::path;
 using sv_merge::Region;

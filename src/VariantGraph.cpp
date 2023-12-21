@@ -134,6 +134,7 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
     uint8_t orientation_cis, orientation_trans;
     uint16_t n_positions, n_handles;
     uint32_t i, j, p, q, first_pos, last_pos, trans_pos;
+    size_t r;
     string tmp_buffer;
     pair<uint32_t, uint32_t> tmp_pair;
 
@@ -160,8 +161,8 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
             }
             else if (record.sv_type==VcfReader::TYPE_BREAKEND && !record.is_breakend_single() && !record.is_breakend_virtual(chromosomes)) {
                 // Virtual telomeric breakends and single breakends carry no information.
-                p=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
-                if (p!=string::npos && bnd_ids.contains(tmp_buffer)) {
+                r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
+                if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
                     // NOP: the breakend was already processed at its mate record.
                 }
                 else {
@@ -256,8 +257,8 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
             }
             else if (record.sv_type==VcfReader::TYPE_BREAKEND && !record.is_breakend_single() && !record.is_breakend_virtual(chromosomes)) {
                 // Virtual telomeric breakends and single breakends carry no information.
-                p=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
-                if (p!=string::npos && bnd_ids.contains(tmp_buffer)) {
+                r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
+                if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
                     // NOP: the breakend was already processed at its mate record.
                 }
                 else {
@@ -290,7 +291,7 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
     graph.optimize(true);
 
     // Clearing temporary space
-    chunk_first.clear(); node_handles.clear(); insertion_handles.clear(); bnd_ids.clear();
+    chunk_first={}; node_handles={}; insertion_handles.clear(); bnd_ids.clear();
 }
 
 

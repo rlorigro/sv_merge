@@ -176,7 +176,7 @@ public:
     /**
      * Virtual telomeric breakends are artificial records that carry no information.
      */
-    bool is_breakend_virtual(const unordered_map<string,string>& chromosomes) const;
+    bool is_breakend_virtual(const unordered_map<string,string>& chromosomes);
 
     /**
      * Remark: `out` is set to an empty string if the chromosome could not be determined.
