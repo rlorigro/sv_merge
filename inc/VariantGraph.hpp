@@ -55,8 +55,11 @@ public:
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
      * keeps track of which records support each node and edge.
      *
-     * Remark: if a complex SV consists of multiple BND records in multiple chromosomes, only the BNDs in one chromosome
-     * are represented in the graph.
+     * Remark: if a complex SV consists of multiple BND records in multiple chromosomes, only the BNDs with one end in
+     * the chromosome of the CHROM field are represented in the graph.
+     *
+     * Remark: every BND is loaded, even though it might be part of an event that affects fewer bases than those
+     * conventionally assigned to SVs.
      *
      * Remark: the procedure can be called multiple times on different instances of `records`.
      *
@@ -99,8 +102,26 @@ public:
     /**
      * Resets `out` to the set of all IDs of nodes that have edges only on one side.
      */
-    void get_ids_of_dangling_nodes(unordered_set<nid_t> out) const;
+    void get_ids_of_dangling_nodes(unordered_set<nid_t>& out) const;
 
+    uint32_t get_n_dangling_nodes() const;
+
+    /**
+     * @return the number of edges between two reference nodes that belong to different chromosomes.
+     */
+    uint32_t get_n_interchromosomal_edges() const;
+
+    /**
+     * Prints to STDOUT the number of non-reference edges supported by X VCF records, and the number of VCF records
+     * creating X non-reference edges.
+     */
+    void print_edge_histograms() const;
+
+    /**
+     * Prints the sorted sequence of all distinct INS, DEL, and INV lengths (binned) in `vcf_records`, and the number of
+     * their occurrences.
+     */
+    void print_vcf_records_stats(uint8_t bin_size) const;
 
 private:
     const unordered_map<string,string>& chromosomes;
@@ -130,12 +151,12 @@ private:
     vector<handle_t> insertion_handles;
 
     /**
-     * Maps every edge in the graph to the VCF records that support it.
+     * Maps every non-reference edge in the graph to the VCF records that support it.
      */
     unordered_map<edge_t,vector<uint32_t>> edge_to_vcf_record;
 
     /**
-     * For every VCF record, its sequence of edges in `graph`.
+     * For every VCF record, its sequence of non-reference edges in `graph`.
      */
     vector<vector<edge_t>> vcf_record_to_edge;
 
@@ -154,7 +175,7 @@ private:
     /**
      * Adds `(from,to)` to `graph` if not already present, and adds `record` to the edge in `edge_to_vcf_record`.
      */
-    void add_edge(const handle_t& from, const handle_t& to, uint32_t record_id);
+    void add_nonreference_edge(const handle_t& from, const handle_t& to, uint32_t record_id);
 
     /**
      * Removes duplicates
@@ -193,6 +214,8 @@ private:
      * @param interval1,interval2 with format [x..y).
      */
     static bool intersect(const interval_t& interval1, const interval_t& interval2);
+
+    void print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) const;
 };
 
 }

@@ -1,4 +1,8 @@
 #include "VcfReader.hpp"
+#include "misc.hpp"
+
+using sv_merge::equal_ignore_case;
+using sv_merge::lowercase_string;
 
 using std::min;
 using std::numeric_limits;
@@ -53,6 +57,7 @@ const uint8_t VcfReader::TYPE_INVERSION = 3;
 const uint8_t VcfReader::TYPE_DUPLICATION = 4;
 const uint8_t VcfReader::TYPE_BREAKEND = 5;
 const uint8_t VcfReader::TYPE_REPLACEMENT = 6;
+const uint8_t VcfReader::TYPE_CNV = 7;
 
 const string VcfReader::DEL_STR = "DEL";
 const string VcfReader::DEL_ME_STR = "DEL:ME";
@@ -64,6 +69,7 @@ const string VcfReader::DUP_TANDEM_STR = "DUP:TANDEM";
 const string VcfReader::DUP_INT_STR = "DUP:INT";
 const string VcfReader::INV_STR = "INV";
 const string VcfReader::BND_STR = "BND";
+const string VcfReader::CNV_STR = "CNV";
 
 const uint64_t VcfRecord::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
@@ -104,11 +110,12 @@ VcfReader::VcfReader(const path& vcf_path) {
  */
 int8_t string_to_svtype_info(const string& type) {
     if (type.length()==0) return -1;
-    if (type==VcfReader::DEL_STR || type==VcfReader::DEL_ME_STR) return VcfReader::TYPE_DELETION;
-    else if (type==VcfReader::INS_STR || type==VcfReader::INS_ME_STR || type==VcfReader::INS_NOVEL_STR) return VcfReader::TYPE_INSERTION;
-    else if (type==VcfReader::DUP_STR || type==VcfReader::DUP_TANDEM_STR || type==VcfReader::DUP_INT_STR) return VcfReader::TYPE_DUPLICATION;
-    else if (type==VcfReader::INV_STR) return VcfReader::TYPE_INVERSION;
-    else if (type==VcfReader::BND_STR) return VcfReader::TYPE_BREAKEND;
+    if (equal_ignore_case(type,VcfReader::DEL_STR) || equal_ignore_case(type,VcfReader::DEL_ME_STR)) return VcfReader::TYPE_DELETION;
+    else if (equal_ignore_case(type,VcfReader::INS_STR) || equal_ignore_case(type,VcfReader::INS_ME_STR) || equal_ignore_case(type,VcfReader::INS_NOVEL_STR)) return VcfReader::TYPE_INSERTION;
+    else if (equal_ignore_case(type,VcfReader::DUP_STR) || equal_ignore_case(type,VcfReader::DUP_TANDEM_STR) || equal_ignore_case(type,VcfReader::DUP_INT_STR)) return VcfReader::TYPE_DUPLICATION;
+    else if (equal_ignore_case(type,VcfReader::INV_STR)) return VcfReader::TYPE_INVERSION;
+    else if (equal_ignore_case(type,VcfReader::BND_STR)) return VcfReader::TYPE_BREAKEND;
+    else if (equal_ignore_case(type,VcfReader::CNV_STR)) return VcfReader::TYPE_CNV;
     else return -1;
 }
 
@@ -119,11 +126,12 @@ int8_t string_to_svtype_info(const string& type) {
  */
 int8_t string_to_svtype_alt(const string& type) {
     if (type.length()==0) return -1;
-    if (type.starts_with('[') || type.starts_with(']') || type.ends_with('[') || type.ends_with(']') || type=="<"+VcfReader::BND_STR+">") return VcfReader::TYPE_BREAKEND;
-    else if (type=="<"+VcfReader::DEL_STR+">" || type=="<"+VcfReader::DEL_ME_STR+">") return VcfReader::TYPE_DELETION;
-    else if (type=="<"+VcfReader::INS_STR+">" || type=="<"+VcfReader::INS_ME_STR+">" || type=="<"+VcfReader::INS_NOVEL_STR+">") return VcfReader::TYPE_INSERTION;
-    else if (type=="<"+VcfReader::DUP_STR+">" || type=="<"+VcfReader::DUP_TANDEM_STR+">" || type=="<"+VcfReader::DUP_INT_STR+">") return VcfReader::TYPE_DUPLICATION;
-    else if (type=="<"+VcfReader::INV_STR+">") return VcfReader::TYPE_INVERSION;
+    if (type.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || type.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || type.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || type.ends_with(VcfReader::BREAKEND_CHAR_CLOSE) || type==VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::BND_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) return VcfReader::TYPE_BREAKEND;
+    else if (equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::DEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::DEL_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) return VcfReader::TYPE_DELETION;
+    else if (equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_NOVEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) return VcfReader::TYPE_INSERTION;
+    else if (equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::DUP_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::DUP_TANDEM_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::DUP_INT_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) return VcfReader::TYPE_DUPLICATION;
+    else if (equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INV_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) return VcfReader::TYPE_INVERSION;
+    else if (equal_ignore_case(type,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::CNV_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) return VcfReader::TYPE_CNV;
     else return -1;
 }
 
@@ -225,7 +233,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
     else if (field_id==4) {
         alt+=field;
         is_symbolic=field.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN);
-        if (field.starts_with(VcfReader::VCF_MISSING_CHAR) || n_alts>1 || field=="<"+VcfReader::INS_STR+">" || field=="<"+VcfReader::INS_ME_STR+">" || field=="<"+VcfReader::INS_NOVEL_STR+">") {
+        if (field.starts_with(VcfReader::VCF_MISSING_CHAR) || n_alts>1 || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_NOVEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -294,8 +302,8 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
     tmp_buffer.clear();
     const bool found = get_info_field(VcfReader::SVTYPE_STR,0,tmp_buffer)!=string::npos;
     if (found) sv_type=string_to_svtype_info(tmp_buffer);
-    else if (alt.starts_with('<') && alt.ends_with('>')) sv_type=string_to_svtype_alt(alt);
-    else if (alt.starts_with('[') || alt.starts_with(']') || alt.ends_with('[') || alt.ends_with(']')) sv_type=string_to_svtype_alt(alt);
+    else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
+    else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
     else {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
@@ -378,8 +386,13 @@ size_t VcfRecord::get_info_field(const string &key, const size_t from, string &o
     size_t i, p, q;
 
     p=info.find(key,from);
+    if (p==string::npos) {
+        string lower = key;
+        lowercase_string(lower);
+        p=info.find(lower,from);
+    }
     if (p==string::npos) return string::npos;
-    if (key==VcfReader::END_STR && p>=2 && info.at(p-2)=='C' && info.at(p-1)=='I') {
+    if (key==VcfReader::END_STR && p>=2 && toupper(info.at(p-2))=='C' && toupper(info.at(p-1))=='I') {
         p=info.find(key,p+KEY_LENGTH);
         if (p==string::npos) return string::npos;
     }
@@ -464,19 +477,6 @@ void VcfRecord::get_samples_with_alt(vector<uint32_t>& out) {
         tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
         ncalls_in_sample(tmp_buffer_1,tmp_pair);
         if (tmp_pair.second!=0) out.push_back(i);
-    }
-}
-
-
-void VcfRecord::get_samples_with_alt(vector<string>& out) {
-    uint32_t i;
-    const uint32_t SIZE = genotypes.size();
-
-    out.clear();
-    for (i=0; i<SIZE; i++) {
-        tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
-        ncalls_in_sample(tmp_buffer_1,tmp_pair);
-        if (tmp_pair.second!=0) out.push_back(genotypes.at(i));
     }
 }
 
@@ -622,6 +622,7 @@ void VcfRecord::get_confidence_interval(uint8_t which, pair<float, float>& out) 
     }
 }
 
+
 void VcfRecord::get_confidence_interval_pos(pair<float, float>& out) { get_confidence_interval(0,out); }
 
 void VcfRecord::get_confidence_interval_length(pair<float, float>& out) { get_confidence_interval(1,out); }
@@ -649,7 +650,7 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<ui
         }
         else { out.first=pos-1; out.second=out.first; }
     }
-    else if (sv_type==VcfReader::TYPE_DELETION || sv_type==VcfReader::TYPE_INVERSION || sv_type==VcfReader::TYPE_DUPLICATION) {
+    else if (sv_type==VcfReader::TYPE_DELETION || sv_type==VcfReader::TYPE_INVERSION || sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV) {
         if (use_confidence_intervals) {
             get_confidence_interval_pos(tmp_pair_2);
             out.first=(uint64_t)floor(pos+tmp_pair_2.first);
@@ -691,7 +692,7 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             is_header=true;
             for (i=0; i<VCF_HEADER_PREFIX_LENGTH; i++) {
                 file.get(c);
-                if (c!=VCF_HEADER_PREFIX.at(i)) { is_header=false; break; }
+                if (toupper(c)!=VCF_HEADER_PREFIX.at(i)) { is_header=false; break; }
             }
             if (!is_header) {
                 file.ignore(VcfRecord::STREAMSIZE_MAX,LINE_END);

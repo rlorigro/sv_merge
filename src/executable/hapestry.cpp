@@ -497,7 +497,7 @@ void hapestry(
 
             for (auto& s: sequences) {
                 transmap.add_read_with_move(s.name, s.sequence);
-                transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
+                transmap.add_nonreference_edge(sample_id, transmap.get_id(s.name), 0);
             }
         }
     }

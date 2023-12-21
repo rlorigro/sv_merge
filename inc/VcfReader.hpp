@@ -341,6 +341,7 @@ public:
     static const uint8_t TYPE_DUPLICATION;
     static const uint8_t TYPE_BREAKEND;
     static const uint8_t TYPE_REPLACEMENT;
+    static const uint8_t TYPE_CNV;
 
     /**
      * Supported SV types: labels used by the callers.
@@ -355,6 +356,7 @@ public:
     static const string DUP_INT_STR;
     static const string INV_STR;
     static const string BND_STR;
+    static const string CNV_STR;
 
     /**
      * Configuration parameters. See `VcfRecord` for details.
