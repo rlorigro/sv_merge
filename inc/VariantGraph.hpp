@@ -177,7 +177,7 @@ private:
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
      */
-    uint16_t find_closest(const string& chromosome, uint32_t position) const;
+    inline uint16_t find_closest(const string& chromosome, uint32_t position) const;
 
     /**
      * Adds `(from,to)` to `graph` if not already present, and adds `record` to the edge in `edge_to_vcf_record`.
@@ -187,7 +187,7 @@ private:
     /**
      * Removes duplicates
      */
-    static void sort_and_compact_positions(vector<uint32_t>& positions);
+    static inline void sort_and_compact_positions(vector<uint32_t>& positions);
 
     /**
      * Looks for `query` in `edges`, and sets `flags[i]=1` (resp. =2; =3) if `query` equals `edges[i]` in the forward
@@ -220,7 +220,7 @@ private:
     /**
      * @param interval1,interval2 with format [x..y).
      */
-    static bool intersect(const interval_t& interval1, const interval_t& interval2);
+    static inline bool intersect(const interval_t& interval1, const interval_t& interval2);
 
     static void print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) ;
 

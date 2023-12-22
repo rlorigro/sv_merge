@@ -228,10 +228,10 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         min_n_haplotypes_nonmissing=ceil((is_autosomal?2.0:1.0)*min_n_haplotypes_nonmissing_baseline);
     }
     else if (field_id==1) pos=stoul(field);
-    else if (field_id==2) id+=field;
-    else if (field_id==3) ref+=field;
+    else if (field_id==2) id.append(field);
+    else if (field_id==3) ref.append(field);
     else if (field_id==4) {
-        alt+=field;
+        alt.append(field);
         is_symbolic=field.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN);
         if (field.starts_with(VcfReader::VCF_MISSING_CHAR) || n_alts>1 || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_NOVEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
@@ -250,7 +250,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         }
     }
     else if (field_id==6) {
-        filter+=field;
+        filter.append(field);
         if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) is_pass=false;
         else {
             is_pass=filter==VcfReader::PASS_STR;
@@ -261,7 +261,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         }
     }
     else if (field_id==7) {
-        info+=field;
+        info.append(field);
         if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) {
             set_sv_type(tmp_buffer);
             sv_length=UINT_MAX;
@@ -276,7 +276,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         }
     }
     else if (field_id==8) {
-        format+=field;
+        format.append(field);
         if (n_samples_to_load==0) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
@@ -290,7 +290,7 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
         }
         else {
             genotypes[n_samples-1].clear();
-            genotypes[n_samples-1]+=field;
+            genotypes[n_samples-1].append(field);
             ncalls_in_sample(field,tmp_pair);
             n_haplotypes_ref+=tmp_pair.first; n_haplotypes_alt+=tmp_pair.second;
         }

@@ -108,7 +108,7 @@ public:
     /**
      * @return TRUE iff the record passes all the user constraints set at construction time.
      */
-    bool passes_constraints() const;
+    inline bool passes_constraints() const;
 
     /**
      * Appends to `stream` a string representation of the object. No terminator is added at the end.
@@ -149,7 +149,7 @@ public:
      *
      * @param buffer the content of a VCF sample field (can contain just one haplotype).
      */
-    static bool is_phased(const string& buffer);
+    static inline bool is_phased(const string& buffer);
 
     /**
      * Stores in `map` the set of all and only the key->value relationships in `info`.
@@ -166,17 +166,17 @@ public:
      */
     void get_samples_with_alt(vector<string>& out);
 
-    bool is_alt_symbolic() const;
+    inline bool is_alt_symbolic() const;
 
     /**
      * @return 0=single breakend without inserted sequence; 1=with inserted sequence; 2=not a single breakend.
      */
-    uint8_t is_breakend_single() const;
+    inline uint8_t is_breakend_single() const;
 
     /**
      * Virtual telomeric breakends are artificial records that carry no information.
      */
-    bool is_breakend_virtual(const unordered_map<string,string>& chromosomes);
+    inline bool is_breakend_virtual(const unordered_map<string,string>& chromosomes);
 
     /**
      * Remark: `out` is set to an empty string if the chromosome could not be determined.
@@ -196,7 +196,7 @@ public:
      * 1 if the CIS side of the breakend extends to the left of `pos`;
      * 2 if the CIS side of the breakend extends the the right of `pos`.
      */
-    uint8_t get_breakend_orientation_cis() const;
+    inline uint8_t get_breakend_orientation_cis() const;
 
     /**
     * @return
@@ -204,7 +204,7 @@ public:
     * 1 if the TRANS side of the breakend extends to the left of the position in `alt`;
     * 2 if the TRANS side of the breakend extends the the right of the position in `alt`.
     */
-    uint8_t get_breakend_orientation_trans() const;
+    inline uint8_t get_breakend_orientation_trans() const;
 
     /**
      * Stores in `out` all bases inserted between the breakend position and its mate. I.e. if REF=`T` and
@@ -224,9 +224,9 @@ public:
      * (typically <=0); `second`: quantity to be added to `pos` to get the last position of the confidence interval
      * (typically >=0).
 	 */
-    void get_confidence_interval_pos(pair<float, float>& out);
-    void get_confidence_interval_end(pair<float, float>& out);
-    void get_confidence_interval_length(pair<float, float>& out);
+    inline void get_confidence_interval_pos(pair<float, float>& out);
+    inline void get_confidence_interval_end(pair<float, float>& out);
+    inline void get_confidence_interval_length(pair<float, float>& out);
 
     /**
      * Stores in `out` the zero-based coordinates of the SV in the reference.
