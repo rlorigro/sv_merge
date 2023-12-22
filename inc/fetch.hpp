@@ -47,6 +47,7 @@ void fetch_reads(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
+        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps
 );
 

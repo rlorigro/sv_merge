@@ -122,7 +122,9 @@ void hapestry(
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
-    fetch_reads(t, regions, bam_csv, n_threads, region_transmaps);
+    fetch_reads(t, regions, bam_csv, n_threads, false, region_transmaps);
+
+//    throw runtime_error("DEBUG");
 
     cerr << t << "Processing windows" << '\n';
 
@@ -182,8 +184,6 @@ void hapestry(
 
                     c++;
                 }
-
-                throw runtime_error("DEBUG EARLY EXIT");
 
 //                for (auto a: representatives){
 //                    cerr << transmap.get_node(a).name << '\n';

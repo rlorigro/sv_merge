@@ -59,6 +59,7 @@ void extract_subregions_from_sample(
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const vector<Region>& subregions,
+        bool require_spanning,
         path bam_path
 ){
     if (subregions.empty()){
@@ -147,14 +148,24 @@ void extract_subregions_from_sample(
             // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
             for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
                 [&](const CigarInterval& intersection, const interval_t& interval) {
-                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                     // A single alignment may span multiple regions
                     for (auto& region: overlapping_regions){
                         auto& coord = query_coords_per_region.at(region).at(name);
 
+                        bool pass = false;
+
+                        // Optionally only track coords that intersect the boundaries
+                        if (require_spanning) {
+                            pass = (intersection.ref_start == region.start or intersection.ref_stop == region.stop);
+                        }
+                        else{
+                            pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
+                        }
+
                         // If the alignment is within the ref region, record the query position
-                        if (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop){
+                        if (pass){
                             auto [start,stop] = intersection.get_forward_query_interval();
 
                             if (alignment.is_reverse()){
@@ -187,7 +198,7 @@ void extract_subregions_from_sample(
                 auto i = coords.query_start;
                 auto l = coords.query_stop - coords.query_start;
 
-//                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
                 if (coords.is_reverse) {
                     auto s = query_sequences[name].substr(i, l);
@@ -210,6 +221,7 @@ void extract_subsequences_from_sample_thread_fn(
         sample_region_read_map_t & sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
+        bool require_spanning,
         atomic<size_t>& job_index
 ){
 
@@ -226,6 +238,7 @@ void extract_subsequences_from_sample_thread_fn(
                 sample_to_region_reads,
                 sample_name,
                 regions,
+                require_spanning,
                 bam_path
         );
 
@@ -242,7 +255,8 @@ void get_reads_for_each_bam_subregion(
         GoogleAuthenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         path bam_csv,
-        int64_t n_threads
+        int64_t n_threads,
+        bool require_spanning
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -281,6 +295,7 @@ void get_reads_for_each_bam_subregion(
                     std::ref(sample_to_region_reads),
                     std::cref(sample_bams),
                     std::cref(regions),
+                    std::ref(require_spanning),
                     std::ref(job_index)
             );
         } catch (const exception& e) {
@@ -301,6 +316,7 @@ void fetch_reads(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
+        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps
 ){
     GoogleAuthenticator authenticator;
@@ -310,7 +326,15 @@ void fetch_reads(
     sample_region_read_map_t sample_to_region_reads;
 
     // Get a nested map of sample -> region -> vector<Sequence>
-    get_reads_for_each_bam_subregion(t, regions, authenticator, sample_to_region_reads, bam_csv, n_threads);
+    get_reads_for_each_bam_subregion(
+            t,
+            regions,
+            authenticator,
+            sample_to_region_reads,
+            bam_csv,
+            n_threads,
+            require_spanning
+    );
 
     // Construct template transmap with only samples
     for (const auto& [sample_name,item]: sample_to_region_reads){

@@ -24,6 +24,7 @@ using std::max;
 
 
 #include "htslib/include/htslib/hts.h"
+#include "htslib/include/htslib/sam.h"
 
 
 namespace sv_merge {
@@ -312,8 +313,11 @@ void for_alignment_in_bam_subregions(
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
     }
 
+    auto index_path = bam_path.string() + ".bai";
+    bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
+
     // bam index
-    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+    if (bam_index == nullptr) {
         throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
     }
 
