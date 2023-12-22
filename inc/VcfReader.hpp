@@ -169,9 +169,9 @@ public:
     bool is_alt_symbolic() const;
 
     /**
-     * Single breakends are not part of any non-reference adjacency.
+     * @return 0=single breakend without inserted sequence; 1=with inserted sequence; 2=not a single breakend.
      */
-    bool is_breakend_single() const;
+    uint8_t is_breakend_single() const;
 
     /**
      * Virtual telomeric breakends are artificial records that carry no information.
@@ -189,24 +189,28 @@ public:
     uint32_t get_breakend_pos();
 
     /**
+     * Remark: the procedure works also for single breakends.
+     *
      * @return
      * 0 if the orientation could not be determined;
-     * 1 if the breakend continues to the left of `pos`;
-     * 2 if the breakend continues the the right of `pos`.
+     * 1 if the CIS side of the breakend extends to the left of `pos`;
+     * 2 if the CIS side of the breakend extends the the right of `pos`.
      */
     uint8_t get_breakend_orientation_cis() const;
 
     /**
     * @return
     * 0 if the orientation could not be determined;
-    * 1 if the breakend continues to the left of the position in `alt`;
-    * 2 if the breakend continues the the right of the position in `alt`.
+    * 1 if the TRANS side of the breakend extends to the left of the position in `alt`;
+    * 2 if the TRANS side of the breakend extends the the right of the position in `alt`.
     */
     uint8_t get_breakend_orientation_trans() const;
 
     /**
      * Stores in `out` all bases inserted between the breakend position and its mate. I.e. if REF=`T` and
      * ALT=`]chr13:123456]AGTNNNNNCAT`, the procedure returns `AGTNNNNNCA`.
+     *
+     * Remark: the procedure works also for single breakends.
      */
     void get_breakend_inserted_sequence(string& out) const;
 

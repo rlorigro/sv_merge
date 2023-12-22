@@ -117,7 +117,7 @@ uint32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, uint
 }
 
 
-void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool deallocate_ins) {
+void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool deallocate_ins, const vector<string>& callers) {
     graph.clear();
     this->vcf_records=std::move(records);
     n_vcf_records=vcf_records.size();
@@ -127,14 +127,11 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
     node_to_chromosome.clear(); node_to_chromosome.reserve(n_vcf_records);
     insertion_handles.clear(); insertion_handles.reserve(n_vcf_records);
     edge_to_vcf_record.clear(); edge_to_vcf_record.reserve(n_vcf_records);
-    if (vcf_records.empty()) {
-        vcf_record_to_edge.clear();
-        return;
-    }
+    if (vcf_records.empty()) { vcf_record_to_edge.clear(); return; }
 
     const string CHROMOSOME_ID = vcf_records.at(0).chrom;
-    const uint8_t BIN_SIZE = 50;  // Arbitrary
-    uint8_t orientation_cis, orientation_trans;
+    const uint8_t BIN_SIZE = 50;  // Arbitrary, just for stats.
+    uint8_t orientation_cis, orientation_trans, is_bnd_single;
     uint16_t n_positions, n_handles;
     uint32_t i, j, p, q, first_pos, last_pos, trans_pos;
     size_t r;
@@ -143,8 +140,7 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
 
     // Collecting every distinct first position of a reference node, and building all non-reference nodes.
     cerr << "VCF records: " << n_vcf_records << '\n';
-    cerr << "Histogram: SV type | SV length (binned by " << BIN_SIZE << "bp) | Number of occurrences\n";
-    print_sv_lengths(BIN_SIZE);  // Arbitrary
+    print_vcf_records_stats(BIN_SIZE,callers);
     vector<uint32_t>& first_positions = chunk_first.at(CHROMOSOME_ID);
     for (i=0; i<n_vcf_records; i++) {
         VcfRecord& record = vcf_records.at(i);
@@ -165,28 +161,31 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
                 insertion_handles.emplace_back(handle_ins);
                 if (deallocate_ins) record.alt.clear();
             }
-            else if (record.sv_type==VcfReader::TYPE_BREAKEND && !record.is_breakend_single() && !record.is_breakend_virtual(chromosomes)) {
-                // Virtual telomeric breakends and single breakends carry no information.
-                r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
-                if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
-                    // NOP: the breakend was already processed at its mate record.
-                }
-                else {
-                    bnd_ids.emplace(tmp_buffer);
-                    orientation_cis=record.get_breakend_orientation_cis();
-                    if (orientation_cis==1) first_positions.emplace_back(tmp_pair.first+1);
-                    else if (orientation_cis==2) first_positions.emplace_back(tmp_pair.first);
-                    trans_pos=record.get_breakend_pos();
-                    trans_pos--; // Zero-based
-                    orientation_trans=record.get_breakend_orientation_trans();
-                    record.get_breakend_chromosome(tmp_buffer);
-                    if (orientation_trans==1) chunk_first[tmp_buffer].emplace_back(trans_pos+1);
-                    else if (orientation_trans==2) chunk_first[tmp_buffer].emplace_back(trans_pos);
-                    record.get_breakend_inserted_sequence(tmp_buffer);
-                    if (!tmp_buffer.empty()) {
-                        const handle_t handle_ins = graph.create_handle(tmp_buffer);
-                        insertion_handles.emplace_back(handle_ins);
-                        if (deallocate_ins) record.alt.clear();
+            else {
+                is_bnd_single=record.is_breakend_single();
+                if (record.sv_type==VcfReader::TYPE_BREAKEND && is_bnd_single>=1 && !record.is_breakend_virtual(chromosomes)) {
+                    // Virtual telomeric breakends, and single breakends with no inserted sequence, carry no information.
+                    r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
+                    if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
+                        // NOP: the breakend was already processed at its mate record.
+                    }
+                    else {
+                        bnd_ids.emplace(tmp_buffer);
+                        orientation_cis=record.get_breakend_orientation_cis();
+                        if (orientation_cis==1) first_positions.emplace_back(tmp_pair.first+1);
+                        else if (orientation_cis==2) first_positions.emplace_back(tmp_pair.first);
+                        trans_pos=record.get_breakend_pos();
+                        trans_pos--; // Zero-based
+                        orientation_trans=record.get_breakend_orientation_trans();
+                        record.get_breakend_chromosome(tmp_buffer);
+                        if (orientation_trans==1) chunk_first[tmp_buffer].emplace_back(trans_pos+1);
+                        else if (orientation_trans==2) chunk_first[tmp_buffer].emplace_back(trans_pos);
+                        record.get_breakend_inserted_sequence(tmp_buffer);
+                        if (!tmp_buffer.empty()) {
+                            const handle_t handle_ins = graph.create_handle(tmp_buffer);
+                            insertion_handles.emplace_back(handle_ins);
+                            if (deallocate_ins) record.alt.clear();
+                        }
                     }
                 }
             }
@@ -275,33 +274,44 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
                 add_nonreference_edge(handles.at(p),insertion_handle,i);
                 add_nonreference_edge(insertion_handle,handles.at(p+1),i);
             }
-            else if (record.sv_type==VcfReader::TYPE_BREAKEND && !record.is_breakend_single() && !record.is_breakend_virtual(chromosomes)) {
-                // Virtual telomeric breakends and single breakends carry no information.
-                r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
-                if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
-                    // NOP: the breakend was already processed at its mate record.
-                }
-                else {
-                    bnd_ids.emplace(tmp_buffer);
-                    trans_pos=record.get_breakend_pos();
-                    orientation_cis=record.get_breakend_orientation_cis();
-                    orientation_trans=record.get_breakend_orientation_trans();
-                    if (orientation_cis==0 || orientation_trans==0) {
-                        // NOP: orientation could not be determined.
+            else {
+                is_bnd_single=record.is_breakend_single();
+                if (record.sv_type==VcfReader::TYPE_BREAKEND && is_bnd_single>=1 && !record.is_breakend_virtual(chromosomes)) {
+                    // Virtual telomeric breakends, and single breakends with no inserted sequence, carry no information.
+                    r=record.get_info_field(VcfReader::MATEID_STR,0,tmp_buffer);
+                    if (r!=string::npos && bnd_ids.contains(tmp_buffer)) {
+                        // NOP: the breakend was already processed at its mate record.
                     }
                     else {
-                        p=find_closest(CHROMOSOME_ID,tmp_pair.first);
-                        handle_t handle_from = orientation_cis==1?handles.at(p):graph.flip(handles.at(p+1));
-                        record.get_breakend_chromosome(tmp_buffer);
-                        p=find_closest(tmp_buffer,trans_pos-1);
-                        handle_t handle_to = orientation_trans==1?graph.flip(node_handles.at(tmp_buffer).at(p)):node_handles.at(tmp_buffer).at(p+1);
-                        record.get_breakend_inserted_sequence(tmp_buffer);
-                        if (tmp_buffer.empty()) add_nonreference_edge(handle_from,handle_to,i);
+                        bnd_ids.emplace(tmp_buffer);
+                        trans_pos=record.get_breakend_pos();
+                        orientation_cis=record.get_breakend_orientation_cis();
+                        orientation_trans=record.get_breakend_orientation_trans();
+                        if (orientation_cis==0 || (is_bnd_single==2 && orientation_trans==0)) {
+                            // NOP: orientations could not be determined.
+                        }
                         else {
-                            handle_t handle_ins = insertion_handles.at(i);
-                            if (orientation_cis==2) graph.flip(handle_ins);
-                            add_nonreference_edge(handle_from,handle_ins,i);
-                            add_nonreference_edge(handle_ins,handle_to,i);
+                            p=find_closest(CHROMOSOME_ID,tmp_pair.first);
+                            handle_t handle_from = orientation_cis==1?handles.at(p):graph.flip(handles.at(p+1));
+                            if (is_bnd_single==2) {
+                                record.get_breakend_chromosome(tmp_buffer);
+                                p=find_closest(tmp_buffer,trans_pos-1);
+                                handle_t handle_to = orientation_trans==1?graph.flip(node_handles.at(tmp_buffer).at(p)):node_handles.at(tmp_buffer).at(p+1);
+                                record.get_breakend_inserted_sequence(tmp_buffer);
+                                if (tmp_buffer.empty()) add_nonreference_edge(handle_from,handle_to,i);
+                                else {
+                                    handle_t handle_ins = insertion_handles.at(i);
+                                    if (orientation_cis==2) graph.flip(handle_ins);
+                                    add_nonreference_edge(handle_from,handle_ins,i);
+                                    add_nonreference_edge(handle_ins,handle_to,i);
+                                }
+                            }
+                            else {
+                                record.get_breakend_inserted_sequence(tmp_buffer);
+                                handle_t handle_ins = insertion_handles.at(i);
+                                if (orientation_cis==2) graph.flip(handle_ins);
+                                add_nonreference_edge(handle_from,handle_ins,i);
+                            }
                         }
                     }
                 }
@@ -321,10 +331,28 @@ void VariantGraph::build(vector<VcfRecord>& records, uint16_t flank_length, bool
 void VariantGraph::to_gfa(const path& gfa_path) const {
     const char GFA_SEPARATOR = '\t';
     const char OVERLAP_FIELD = '*';
+    const char PATH_SEPARATOR = ',';
+    const char FWD_CHAR = '+';
+    const char REV_CHAR = '-';
     ofstream outstream;
+
     outstream.open(gfa_path);
-    graph.for_each_handle([&](handle_t handle) { outstream << "S" << GFA_SEPARATOR << graph.get_id(handle) << GFA_SEPARATOR << graph.get_sequence(handle) << "\n"; });
-    graph.for_each_edge([&](edge_t edge) { outstream << "L" << GFA_SEPARATOR << graph.get_id(edge.first) << GFA_SEPARATOR << (graph.get_is_reverse(edge.first)?'-':'+') << GFA_SEPARATOR << graph.get_id(edge.second) << GFA_SEPARATOR << (graph.get_is_reverse(edge.second)?'-':'+') << OVERLAP_FIELD << '\n'; });
+    graph.for_each_handle([&](handle_t handle) { outstream << 'S' << GFA_SEPARATOR << graph.get_id(handle) << GFA_SEPARATOR << graph.get_sequence(handle) << '\n'; });
+    graph.for_each_edge([&](edge_t edge) { outstream << 'L' << GFA_SEPARATOR << graph.get_id(edge.first) << GFA_SEPARATOR << (graph.get_is_reverse(edge.first)?REV_CHAR:FWD_CHAR) << GFA_SEPARATOR << graph.get_id(edge.second) << GFA_SEPARATOR << (graph.get_is_reverse(edge.second)?REV_CHAR:FWD_CHAR) << OVERLAP_FIELD << '\n'; });
+    graph.for_each_path_handle([&](path_handle_t path) {
+        outstream << 'P' << GFA_SEPARATOR << graph.get_path_name(path) << GFA_SEPARATOR;
+        step_handle_t source = graph.path_begin(path);
+        step_handle_t destination = graph.path_back(path);
+        outstream << graph.get_id(graph.get_handle_of_step(source)) << (graph.get_is_reverse(graph.get_handle_of_step(source))?REV_CHAR:FWD_CHAR);
+        step_handle_t from = source;
+        while (graph.has_next_step(from)) {
+            const step_handle_t to = graph.get_next_step(from);
+            if (to==destination) break;
+            outstream << PATH_SEPARATOR << graph.get_id(graph.get_handle_of_step(from)) << (graph.get_is_reverse(graph.get_handle_of_step(from))?REV_CHAR:FWD_CHAR);
+            from=to;
+        }
+        outstream << GFA_SEPARATOR << OVERLAP_FIELD << '\n';
+    });
     outstream.close();
 }
 
@@ -349,10 +377,11 @@ void VariantGraph::mark_edge(const edge_t& query, const vector<edge_t>& edges, v
 }
 
 
-void VariantGraph::to_vcf(const path& vcf_path) {
+void VariantGraph::to_vcf(const path& vcf_path, const vector<string>& callers={}) {
     uint32_t i;
     uint8_t j, n_edges, n_forward, n_reverse, n_both;
     ofstream outstream;
+    vector<vector<uint32_t>> caller_count;
 
     printed.reserve(n_vcf_records); printed.clear();
     flags.reserve(n_vcf_records);
@@ -390,11 +419,28 @@ void VariantGraph::to_vcf(const path& vcf_path) {
             if (n_forward+n_both==n_edges || n_reverse+n_both==n_edges) printed.at(i)=true;
         }
     });
+    for (auto& caller: callers) caller_count.emplace_back(vector<uint32_t> {0,0,0,0});
     outstream.open(vcf_path);
     for (i=0; i<n_vcf_records; i++) {
-        if (printed.at(i)) { vcf_records.at(i).print(outstream); outstream << '\n'; }
+        if (!printed.at(i)) continue;
+        VcfRecord& record = vcf_records.at(i);
+        record.print(outstream); outstream << '\n';
+        if (!callers.empty()) {
+            if (record.sv_type==VcfReader::TYPE_INSERTION || record.sv_type==VcfReader::TYPE_DUPLICATION) increment_caller_count(record,callers,caller_count,0);
+            else if (record.sv_type==VcfReader::TYPE_DELETION) increment_caller_count(record,callers,caller_count,1);
+            else if (record.sv_type==VcfReader::TYPE_INVERSION) increment_caller_count(record,callers,caller_count,2);
+            else if (record.sv_type==VcfReader::TYPE_BREAKEND) increment_caller_count(record,callers,caller_count,3);
+        }
     }
     outstream.close();
+    if (!callers.empty()) {
+        cerr << "Histogram: Caller | #INS printed | #DEL printed | #INV printed | #BND printed\n";
+        for (uint8_t i=0; i<callers.size(); i++) {
+            cerr << callers.at(i);
+            for (uint8_t j=0; j<callers.at(i).size(); j++) cerr << ',' << callers.at(i).at(j);
+            cerr << '\n';
+        }
+    }
 }
 
 
@@ -567,57 +613,93 @@ void VariantGraph::print_edge_histograms() const {
 }
 
 
-void VariantGraph::print_vcf_records_stats(uint8_t bin_size) const {
+void VariantGraph::print_vcf_records_stats(uint8_t bin_size, const vector<string>& callers) const {
     vector<uint32_t> lengths_ins, lengths_del, lengths_inv;
+    vector<vector<uint32_t>> caller_count;
     vector<pair<string,string>> bnds;
     string buffer;
 
+    for (auto& caller: callers) caller_count.emplace_back(vector<uint32_t> {0,0,0,0});
     for (auto& record: vcf_records) {
-        if (record.sv_type==VcfReader::TYPE_INSERTION || record.sv_type==VcfReader::TYPE_DUPLICATION) lengths_ins.emplace_back(record.sv_length/bin_size);
-        else if (record.sv_type==VcfReader::TYPE_DELETION) lengths_del.emplace_back(record.sv_length/bin_size);
-        else if (record.sv_type==VcfReader::TYPE_INVERSION) lengths_inv.emplace_back(record.sv_length/bin_size);
+        if (record.sv_type==VcfReader::TYPE_INSERTION || record.sv_type==VcfReader::TYPE_DUPLICATION) {
+            lengths_ins.emplace_back(record.sv_length/bin_size);
+            if (!callers.empty()) increment_caller_count(record,callers,caller_count,0);
+        }
+        else if (record.sv_type==VcfReader::TYPE_DELETION) {
+            lengths_del.emplace_back(record.sv_length/bin_size);
+            if (!callers.empty()) increment_caller_count(record,callers,caller_count,1);
+        }
+        else if (record.sv_type==VcfReader::TYPE_INVERSION) {
+            lengths_inv.emplace_back(record.sv_length/bin_size);
+            if (!callers.empty()) increment_caller_count(record,callers,caller_count,2);
+        }
         else if (record.sv_type==VcfReader::TYPE_BREAKEND) {
             record.get_breakend_chromosome(buffer);
             if (record.chrom<buffer) bnds.emplace_back(record.chrom,buffer);
             else bnds.emplace_back(buffer,record.chrom);
+            if (!callers.empty()) increment_caller_count(record,callers,caller_count,3);
         }
     }
+    cerr << "Histogram: SV type | SV length (binned by " << bin_size << "bp) | Number of occurrences\n";
     print_sv_lengths(lengths_ins,bin_size,VcfReader::INS_STR);
     print_sv_lengths(lengths_del,bin_size,VcfReader::DEL_STR);
     print_sv_lengths(lengths_inv,bin_size,VcfReader::INV_STR);
+    cerr << "Histogram: BND | chrA | chrB | Number of occurrences\n";
+    print_bnds(bnds);
+    if (!callers.empty()) {
+        cerr << "Histogram: Caller | #INS | #DEL | #INV | #BND\n";
+        for (uint8_t i=0; i<callers.size(); i++) {
+            cerr << callers.at(i);
+            for (uint8_t j=0; j<callers.at(i).size(); j++) cerr << ',' << callers.at(i).at(j);
+            cerr << '\n';
+        }
+    }
 }
 
 
-void VariantGraph::print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) const {
+void VariantGraph::print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) {
     uint32_t i, previous, previous_count;
     const uint32_t SIZE = lengths.size();
 
-    if (lengths.size()>1) sort(lengths.begin(),lengths.end());
+    if (SIZE>1) sort(lengths.begin(),lengths.end());
     previous=lengths.at(0); previous_count=1;
     for (i=1; i<SIZE; i++) {
         if (lengths.at(i)!=previous) {
             cerr << prefix << ',' << (previous*bin_size) << ',' << previous_count << '\n';
             previous=lengths.at(i); previous_count=1;
         }
+        else previous_count++;
     }
     cerr << prefix << ',' << (previous*bin_size) << ',' << previous_count << '\n';
 }
 
 
--------------->
-void VariantGraph::print_bnds(vector<pair<string,string>>& bnds) const {
-    uint32_t i, previous, previous_count;
-    const uint32_t SIZE = lengths.size();
+void VariantGraph::print_bnds(vector<pair<string,string>>& bnds) {
+    const uint32_t SIZE = bnds.size();
+    uint32_t i, previous_count;
 
-    if (lengths.size()>1) sort(lengths.begin(),lengths.end());
-    previous=lengths.at(0); previous_count=1;
+    if (SIZE>1) sort(bnds.begin(),bnds.end());
+    pair<string,string>& previous = bnds.at(0);
+    previous_count=1;
     for (i=1; i<SIZE; i++) {
-        if (lengths.at(i)!=previous) {
-            cerr << prefix << ',' << (previous*bin_size) << ',' << previous_count << '\n';
-            previous=lengths.at(i); previous_count=1;
+        if (bnds.at(i)!=previous) {
+            cerr << "BND," << previous.first << ',' << previous.second << ',' << previous_count << '\n';
+            previous=bnds.at(i); previous_count=1;
         }
+        else previous_count++;
     }
-    cerr << prefix << ',' << (previous*bin_size) << ',' << previous_count << '\n';
+    cerr << "BND," << previous.first << ',' << previous.second << ',' << previous_count << '\n';
+}
+
+
+void VariantGraph::increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<uint32_t>>& caller_count, uint8_t column) {
+    const uint8_t N_CALLERS = callers.size();
+    for (uint8_t i=0; i<N_CALLERS; i++) {
+        if (record.id.find(callers.at(i))!=string::npos) { caller_count.at(i).at(column)++; return; }
+        string lower = record.id;
+        lowercase_string(lower);
+        if (record.id.find(lower)!=string::npos) { caller_count.at(i).at(column)++; return; }
+    }
 }
 
 

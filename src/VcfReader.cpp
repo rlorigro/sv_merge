@@ -263,7 +263,8 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
     else if (field_id==7) {
         info+=field;
         if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) {
-            sv_type=-1; sv_length=UINT_MAX;
+            set_sv_type(tmp_buffer);
+            sv_length=UINT_MAX;
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -304,14 +305,14 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
     if (found) sv_type=string_to_svtype_info(tmp_buffer);
     else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
-    else {
+    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) sv_type=VcfReader::TYPE_INSERTION;
         else if (alt_length==1 && ref_length>alt_length) sv_type=VcfReader::TYPE_DELETION;
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
-        else sv_type=-1;
     }
+    sv_type=-1;
 }
 
 
@@ -484,9 +485,13 @@ void VcfRecord::get_samples_with_alt(vector<uint32_t>& out) {
 bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_CHAR_OPEN && alt.at(alt.length()-1)==VcfReader::SYMBOLIC_CHAR_CLOSE; }
 
 
-bool VcfRecord::is_breakend_single() const {
-    if (is_alt_symbolic()) return false;
-    return alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(alt.length()-1)==VcfReader::VCF_MISSING_CHAR;
+uint8_t VcfRecord::is_breakend_single() const {
+    if (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(alt.length()-1)==VcfReader::VCF_MISSING_CHAR) {
+        const uint32_t length = alt.length();
+        if (length==2) return 0;
+        else if (length>2) return 1;
+    }
+    return 2;
 }
 
 
@@ -539,12 +544,12 @@ uint32_t VcfRecord::get_breakend_pos() {
 uint8_t VcfRecord::get_breakend_orientation_cis() const {
     if (is_alt_symbolic()) return 0;
     const char c = alt.at(0);
-    return (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE)?2:1;
+    return (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE && c!=VcfReader::VCF_MISSING_CHAR)?1:2;
 }
 
 
 uint8_t VcfRecord::get_breakend_orientation_trans() const {
-    if (is_alt_symbolic()) return 0;
+    if (is_alt_symbolic() || is_breakend_single()) return 0;
     char c;
 
     c=alt.at(0);
@@ -563,7 +568,12 @@ void VcfRecord::get_breakend_inserted_sequence(string& out) const {
     char c;
     uint16_t p;
 
-    out.clear(); p=UINT16_MAX;
+    out.clear();
+    if (is_alt_symbolic()) {
+        out.append(alt.substr(1,alt.length()-2));
+        return;
+    }
+    p=UINT16_MAX;
     for (uint16_t i=0; i<LENGTH; i++) {
         c=alt.at(i);
         if (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE) continue;

@@ -53,7 +53,11 @@ public:
 
     /**
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
-     * keeps track of which records support each node and edge.
+     * keeps track of which records support each non-reference edge.
+     *
+     * Remark: CNVs are modeled as DUPs even though they are abundance claims, not adjacency claims (i.e. the copies can
+     * be anywhere in the genome). We discard the copy number estimate in the GT fields, and we let this be rediscovered
+     * by the candidate construction step.
      *
      * Remark: if a complex SV consists of multiple BND records in multiple chromosomes, only the BNDs with one end in
      * the chromosome of the CHROM field are represented in the graph.
@@ -67,9 +71,10 @@ public:
      * chromosome, and that every record is biallelic;
      * @param flank_length ensure that an interval of this length, with no overlap to the tandem track, is present
      * before the leftmost breakpoint (after the rightmost breakpoint) of every chromosome in the graph;
-     * @param deallocate_ins TRUE: the procedure deallocates the ALT sequence of every non-symbolic INS in `records`.
+     * @param deallocate_ins TRUE: the procedure deallocates the ALT sequence of every non-symbolic INS in `records`;
+     * @oaram callers caller names, used just for printing stats.
      */
-    void build(vector<VcfRecord>& records, uint16_t flank_length, bool deallocate_ins);
+    void build(vector<VcfRecord>& records, uint16_t flank_length, bool deallocate_ins, const vector<string>& callers={});
 
     /**
      * Serializes the bidirected graph. Paths, if any, are not saved.
@@ -84,8 +89,10 @@ public:
      *
      * Remark: the output file is in the same order as `vcf_records` and it does not have a header.
      * Remark: for every two mated BND records, the procedure outputs just one of them.
+     *
+     * @param callers names of callers; used only for computing statistics.
      */
-    void to_vcf(const path& vcf_path);
+    void to_vcf(const path& vcf_path, const vector<string>& callers);
 
     /**
      * Writes every path in the graph as a distinct VCF record, of replacement type or of BND type with inserted
@@ -121,7 +128,7 @@ public:
      * Prints the sorted sequence of all distinct INS, DEL, and INV lengths (binned) in `vcf_records`, and the number of
      * their occurrences.
      */
-    void print_vcf_records_stats(uint8_t bin_size) const;
+    void print_vcf_records_stats(uint8_t bin_size, const vector<string>& callers={}) const;
 
 private:
     const unordered_map<string,string>& chromosomes;
@@ -215,7 +222,11 @@ private:
      */
     static bool intersect(const interval_t& interval1, const interval_t& interval2);
 
-    void print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) const;
+    static void print_sv_lengths(vector<uint32_t>& lengths, uint8_t bin_size, const string& prefix) ;
+
+    static void print_bnds(vector<pair<string,string>>& bnds) ;
+
+    static void increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<uint32_t>>& caller_count, uint8_t column) ;
 };
 
 }
