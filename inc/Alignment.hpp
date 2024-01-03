@@ -170,7 +170,7 @@ public:
      * The purpose is to factor out the boilerplate code associated with unrolling cigars.
      * @param f - lambda function to operate on each cigar interval
      */
-    virtual void for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f) = 0;
+    virtual void for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f) = 0;
 
 
     /**
@@ -196,6 +196,7 @@ public:
 /**
  * Iterate cigar intervals and return cigar intervals that are clipped to match the bounds of each window provided by
  * the user as a vector of interval_t. Useful for parsing cigars over a region of interest.
+ * @param unclip_coords - re-interpret hardclips as softclips. Intended to fetch coords for native/unclipped sequence
  * @param alignment - pointer to htslib alignment struct
  * @param ref_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
  * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
@@ -205,6 +206,7 @@ public:
  * @param f_query lambda function to operate on query intervals
  */
 void for_cigar_interval_in_alignment(
+        bool unclip_coords,
         Alignment& alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,

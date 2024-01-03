@@ -82,7 +82,7 @@ public:
     void load_cigar(const string& cigar_string);
 
     /// Iterators and Alignment API fulfillment
-    void for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f) override;
+    void for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f) override;
     void for_each_cigar_tuple(const function<void(const CigarTuple& cigar)>& f) override;
     void get_query_sequence(string& result) override;
     void get_query_sequence(string& result, int32_t start, int32_t stop) override;

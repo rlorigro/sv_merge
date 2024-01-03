@@ -151,6 +151,7 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
             sample_name,
             subregions,
             true,
+            true,
             bam_path
     );
 
@@ -307,6 +308,8 @@ void test_cigar_interval_iterator(path data_directory){
 
     unordered_map<string,int> counter;
 
+    bool unclip_coords = false;
+
     for_alignment_in_bam_region(bam_path, region_string, [&](Alignment& alignment){
         string name;
         alignment.get_query_name(name);
@@ -317,7 +320,7 @@ void test_cigar_interval_iterator(path data_directory){
         string alignment_name = name + "_" + to_string(counter[name]);
         counter[name]++;
 
-        alignment.for_each_cigar_interval([&](const CigarInterval& cigar){
+        alignment.for_each_cigar_interval(unclip_coords, [&](const CigarInterval& cigar){
             auto result = string(1,cigar_code_to_char[cigar.code]) + " " + to_string(cigar.length) + \
             '\t' + "r:" + to_string(cigar.ref_start) + "," + to_string(cigar.ref_stop) + \
             '\t' + "q:" + to_string(cigar.query_start) + "," + to_string(cigar.query_stop) + '\n';
@@ -476,12 +479,14 @@ void test_windowed_cigar_interval_iterator(path data_directory){
 
         cerr << alignment_name << '\n';
 
+        bool unclip_coords = false;
+
         int64_t length;
 
         interval_t prev_ref_interval = {-1,-1};
         interval_t prev_query_interval = {-1,-1};
 
-        for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
         [&](const CigarInterval& intersection, const interval_t& interval){
             if (is_ref_move[intersection.code]){
                 length = intersection.ref_stop - intersection.ref_start;

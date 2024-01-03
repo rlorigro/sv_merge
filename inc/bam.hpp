@@ -48,7 +48,7 @@ public:
     HtsAlignment(bam1_t* a);
 
     /// Iterating
-    void for_each_cigar_interval(const function<void(const CigarInterval&)>& f) override;
+    void for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval&)>& f) override;
     void for_each_cigar_tuple(const function<void(const CigarTuple&)>& f) override;
 
     /// Accessing

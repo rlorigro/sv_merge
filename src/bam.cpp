@@ -99,7 +99,7 @@ void HtsAlignment::get_query_sequence(string& result){
 }
 
 
-void HtsAlignment::for_each_cigar_interval(const function<void(const CigarInterval&)>& f) {
+void HtsAlignment::for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval&)>& f) {
     auto cigar_bytes = bam_get_cigar(hts_alignment);
     CigarInterval c;
 
@@ -114,6 +114,11 @@ void HtsAlignment::for_each_cigar_interval(const function<void(const CigarInterv
 
     for (uint32_t i=0; i < hts_alignment->core.n_cigar; i++) {
         decompress_cigar_bytes(cigar_bytes[i], c);
+
+        // Optionally advance the query coord for hardclip (H/5) operations if native/unclipped coords are desired
+        if (unclip_coords and c.is_hardclip()){
+            c.code = 4;
+        }
 
         // Update interval bounds for this cigar interval
         if (c.is_reverse) {

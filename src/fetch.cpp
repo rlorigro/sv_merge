@@ -61,7 +61,7 @@ void null_fn(const CigarInterval &intersection, const interval_t &interval){}
  * @param sample_to_region_reads : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name
  * @param subregions
- * @param require_spanning
+ * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
  * @param bam_path
  */
 void extract_subregions_from_sample(
@@ -104,6 +104,10 @@ void extract_subregions_from_sample(
     authenticator_mutex.lock();
     authenticator.update();
     authenticator_mutex.unlock();
+
+    // For this application of directly fetching sequence from the BAM, it doesn't make sense to reinterpret the coords
+    // in native/unclipped query sequence space. An error will be thrown if a hardclip is found (see below)
+    bool unclip_coords = false;
 
     // Iterate each alignment in the ref region
     for_alignment_in_bam_subregions(
@@ -157,8 +161,21 @@ void extract_subregions_from_sample(
             }
 
             // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-            for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+            for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
                 [&](const CigarInterval& intersection, const interval_t& interval) {
+
+                    // This will not catch every instance of a hardclip, but if there is one in the window it will throw
+                    if (intersection.is_hardclip()){
+                        throw runtime_error("ERROR: query-oriented direct-from-BAM read fetching cannot be accomplished"
+                                            " on hardclipped sequences, use pre-fetched sequences instead");
+                    }
+
+                    // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
+                    // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
+                    if (intersection.is_softclip()){
+                        return;
+                    }
+
 //                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                     // A single alignment may span multiple regions
@@ -233,7 +250,8 @@ void extract_subregions_from_sample(
  * @param sample_to_region_coords : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name
  * @param subregions
- * @param require_spanning
+ * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param unclip_coords : reinterpret hardclips as softclips so that query coords are in the native/unclipped sequence
  * @param bam_path
  */
 void extract_subregion_coords_from_sample(
@@ -243,6 +261,7 @@ void extract_subregion_coords_from_sample(
         const string& sample_name,
         const vector<Region>& subregions,
         bool require_spanning,
+        bool unclip_coords,
         path bam_path
 ){
     if (subregions.empty()){
@@ -315,8 +334,14 @@ void extract_subregion_coords_from_sample(
             }
 
             // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-            for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+            for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
                 [&](const CigarInterval& intersection, const interval_t& interval) {
+                    // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
+                    // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
+                    if (intersection.is_clip()){
+                        return;
+                    }
+
 //                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                     // A single alignment may span multiple regions
@@ -468,6 +493,77 @@ void get_reads_for_each_bam_subregion(
 
 
 void fetch_reads(
+        Timer& t,
+        vector<Region>& regions,
+        path bam_csv,
+        int64_t n_threads,
+        bool require_spanning,
+        unordered_map<Region,TransMap>& region_transmaps
+){
+    GoogleAuthenticator authenticator;
+    TransMap template_transmap;
+
+    // Intermediate object to store results of multithreaded sample read fetching
+    sample_region_read_map_t sample_to_region_reads;
+
+    // Get a nested map of sample -> region -> vector<Sequence>
+    get_reads_for_each_bam_subregion(
+            t,
+            regions,
+            authenticator,
+            sample_to_region_reads,
+            bam_csv,
+            n_threads,
+            require_spanning
+    );
+
+    // Construct template transmap with only samples
+    for (const auto& [sample_name,item]: sample_to_region_reads){
+        template_transmap.add_sample(sample_name);
+    }
+
+    // Compute coverages for regions
+    unordered_map<Region, size_t> region_coverage;
+    for (const auto& [sample_name,item]: sample_to_region_reads) {
+        for (const auto& [region,sequences]: item) {
+            region_coverage[region] += sequences.size();
+        }
+    }
+
+    // Copy the template transmap into every region and reserve approximate space for nodes/edges/sequences
+    region_transmaps.reserve(regions.size());
+    for (const auto& r: regions){
+        auto item = region_transmaps.emplace(r, template_transmap).first->second;
+        auto n_reads = region_coverage[r];
+        auto n_samples = sample_to_region_reads.size();
+
+        // Number of reads is known exactly
+        item.reserve_sequences(n_reads + 2);
+
+        // An approximate upper limit that assumes every sample has 1 unique haplotype
+        item.reserve_nodes(n_reads + n_samples*2);
+
+        // An approximate upper limit that assumes every sample has 1 unique haplotype, fully connected in read->hap
+        item.reserve_edges(n_reads * n_samples);
+    }
+
+    // Move the downloaded data into a transmap, construct edges for sample->read
+    for (auto& [sample_name,item]: sample_to_region_reads){
+        for (auto& [region,sequences]: item){
+            auto& transmap = region_transmaps.at(region);
+
+            auto sample_id = transmap.get_id(sample_name);
+
+            for (auto& s: sequences) {
+                transmap.add_read_with_move(s.name, s.sequence);
+                transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
+            }
+        }
+    }
+}
+
+
+void fetch_clipped_reads(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,

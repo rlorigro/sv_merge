@@ -272,7 +272,7 @@ bool GafAlignment::parse_path_reversal_token(char c) const{
 }
 
 
-void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f){
+void GafAlignment::for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f){
     CigarInterval c;
 
     // Initialize the cigar interval

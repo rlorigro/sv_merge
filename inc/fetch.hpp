@@ -54,6 +54,16 @@ void fetch_reads(
         unordered_map<Region,TransMap>& region_transmaps
 );
 
+
+void fetch_clipped_reads(
+        Timer& t,
+        vector<Region>& regions,
+        path bam_csv,
+        int64_t n_threads,
+        bool require_spanning,
+        unordered_map<Region,TransMap>& region_transmaps
+);
+
 void extract_subregion_coords_from_sample(
         GoogleAuthenticator& authenticator,
         mutex& authenticator_mutex,
@@ -61,6 +71,7 @@ void extract_subregion_coords_from_sample(
         const string& sample_name,
         const vector<Region>& subregions,
         bool require_spanning,
+        bool unclip_coords,
         path bam_path
 );
 

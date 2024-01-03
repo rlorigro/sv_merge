@@ -89,6 +89,8 @@ void test_windowed_cigar_interval_iterator(path data_directory){
             {7000-40,7000}          // out of range
     };
 
+    bool unclip_coords = false;
+
     string s_ref;
     string s_query;
     string s_crossref;
@@ -120,7 +122,7 @@ void test_windowed_cigar_interval_iterator(path data_directory){
         interval_t prev_query_interval = {-1,-1};
         CigarInterval intersection;
 
-        for_cigar_interval_in_alignment(alignment, ref_intervals, query_intervals,
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
             [&](const CigarInterval& i, const interval_t& interval){
                 // BAM stores query sequences in reverse, and always aligns reads in ref F orientation.
                 // GAF does not store any query sequences in reverse, and in general, the path involves reversed "ref" sequences

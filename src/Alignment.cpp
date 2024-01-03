@@ -158,6 +158,7 @@ bool CigarInterval::is_clip() const{
 // Cigar      [-----)
 // Window     [-----)
 void for_cigar_interval_in_alignment(
+        bool unclip_coords,
         Alignment& alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,
@@ -190,7 +191,7 @@ void for_cigar_interval_in_alignment(
     // Make sure to transfer the reversal status
     intersection.is_reverse = alignment.is_reverse();
 
-    alignment.for_each_cigar_interval([&](const sv_merge::CigarInterval& c) {
+    alignment.for_each_cigar_interval(unclip_coords, [&](const sv_merge::CigarInterval& c) {
 //        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
         while (ref_iter != ref_intervals.end()) {
