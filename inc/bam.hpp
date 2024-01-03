@@ -1,3 +1,5 @@
+#pragma once
+
 #include <functional>
 #include <cstdlib>
 #include <utility>
@@ -63,6 +65,7 @@ public:
     [[nodiscard]] bool is_unmapped() const override;
     [[nodiscard]] bool is_reverse() const override;
     [[nodiscard]] bool is_primary() const override;
+    [[nodiscard]] bool is_supplementary() const override;
     [[nodiscard]] bool is_not_primary() const;
 };
 
@@ -97,7 +100,11 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int32_t 
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar);
 
+void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignment)>& f);
+
 void for_alignment_in_bam_region(path bam_path, string region, const function<void(Alignment& alignment)>& f);
+
+void for_read_in_bam(path bam_path, const function<void(Sequence& sequence)>& f);
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f);
 

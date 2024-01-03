@@ -23,6 +23,8 @@ namespace sv_merge{
 
 using coord_t = pair<int32_t,int32_t>;
 
+using named_coord_t = pair <string, coord_t>;
+
 using interval_t = pair<int32_t,int32_t>;
 
 using labeled_interval_t = pair <interval_t, unordered_set<string> >;

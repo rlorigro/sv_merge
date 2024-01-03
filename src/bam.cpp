@@ -163,6 +163,11 @@ bool HtsAlignment::is_primary() const {
 }
 
 
+bool HtsAlignment::is_supplementary() const {
+    return ((hts_alignment->core.flag&BAM_FSUPPLEMENTARY) != 0);
+}
+
+
 bool HtsAlignment::is_reverse() const {
     return reverse;
 }
@@ -233,6 +238,66 @@ void for_read_in_bam_region(path bam_path, string region, const function<void(Se
 
         f(s);
     });
+}
+
+
+void for_read_in_bam(path bam_path, const function<void(Sequence& sequence)>& f) {
+    for_alignment_in_bam(bam_path, [&](Alignment& alignment){
+        // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
+        if ((not alignment.is_primary()) or alignment.is_supplementary()) {
+            return;
+        }
+
+        Sequence s;
+
+        alignment.get_query_name(s.name);
+        alignment.get_query_sequence(s.sequence);
+
+        f(s);
+    });
+}
+
+
+void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignment)>& f) {
+    samFile *bam_file;
+    bam_hdr_t *bam_header;
+    hts_idx_t *bam_index;
+    bam1_t *alignment;
+
+    bam_file = nullptr;
+    bam_index = nullptr;
+    alignment = bam_init1();
+
+    if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
+        throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
+    }
+
+    // bam index
+    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+    }
+
+    // bam header
+    if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {
+        throw runtime_error("ERROR: Cannot open header for bam file: " + bam_path.string() + "\n");
+    }
+
+    HtsAlignment a(alignment);
+
+    while (sam_read1(bam_file, bam_header, alignment) >= 0) {
+        if (alignment->core.tid < 0) {
+            continue;
+        }
+
+        a = HtsAlignment(alignment);
+
+        f(a);
+    }
+
+    bam_destroy1(alignment);
+    bam_hdr_destroy(bam_header);
+    hts_close(bam_file);
+    hts_idx_destroy(bam_index);
 }
 
 

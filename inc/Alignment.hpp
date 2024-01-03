@@ -189,6 +189,7 @@ public:
     virtual bool is_unmapped() const = 0;
     virtual bool is_reverse() const = 0;
     virtual bool is_primary() const = 0;
+    virtual bool is_supplementary() const = 0;
 };
 
 

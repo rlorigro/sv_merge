@@ -73,7 +73,8 @@ public:
     [[nodiscard]] int32_t get_n_match() const;
     [[nodiscard]] int32_t get_alignment_length() const;
     [[nodiscard]] int32_t get_map_quality() const;
-    [[nodiscard]] bool is_primary() const;
+    [[nodiscard]] bool is_primary() const override;
+    [[nodiscard]] bool is_supplementary() const override;
     [[nodiscard]] bool is_reverse() const override;
 
     /// Helper

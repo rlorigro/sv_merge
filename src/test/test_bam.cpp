@@ -1,31 +1,14 @@
-#include "IntervalGraph.hpp"
+#include "Authenticator.hpp"
 #include "Filesystem.hpp"
 #include "Alignment.hpp"
 #include "Region.hpp"
 #include "fasta.hpp"
+#include "fetch.hpp"
 #include "misc.hpp"
 #include "bam.hpp"
 
 using ghc::filesystem::path;
-using sv_merge::for_alignment_in_bam_subregions;
-using sv_merge::for_cigar_interval_in_alignment;
-using sv_merge::for_alignment_in_bam_region;
-using sv_merge::for_sequence_in_fasta_file;
-using sv_merge::decompress_bam_sequence;
-using sv_merge::for_read_in_bam_region;
-using sv_merge::reverse_complement;
-using sv_merge::cigar_code_to_format_char;
-using sv_merge::cigar_code_to_char;
-using sv_merge::is_query_move;
-using sv_merge::is_ref_move;
-using sv_merge::run_command;
-using sv_merge::files_equal;
-using sv_merge::CigarInterval;
-using sv_merge::CigarTuple;
-using sv_merge::interval_t;
-using sv_merge::Alignment;
-using sv_merge::Sequence;
-using sv_merge::Region;
+using namespace sv_merge;
 
 #include <unordered_map>
 #include <stdexcept>
@@ -110,6 +93,92 @@ void test_bam_sequence_extraction(path data_directory){
 }
 
 
+void test_bam_prefetched_subsequence_extraction(path data_directory) {
+    string region_string = "a:0-5000";
+
+    Region r(region_string);
+
+    cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+
+    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
+    path output_path = data_directory / "test_alignment_hardclipped_sorted.fasta";
+
+    ofstream file(output_path);
+    if (not file.good() or not file.is_open()){
+        throw runtime_error("ERROR: file could not be written: " + output_path.string());
+    }
+
+    cerr << "pre-fetching sequences..." << '\n';
+    map<string, string> sequences;
+    for_read_in_bam(bam_path, [&](Sequence& sequence){
+        file << ">" << sequence.name << '\n';
+        file << sequence.sequence << '\n';
+        sequences.emplace(sequence.name, sequence.sequence);
+    });
+
+    vector<Region> subregions = {
+            {"a",2000,2010},
+            {"a",3090,4000},
+            {"a",4990,5000},
+            {"a",60000,6010},
+            {"a",0,10}
+    };
+
+    // How to sort intervals
+    auto left_comparator = [](const Region& a, const Region& b){
+        return a.start < b.start;
+    };
+
+    sort(subregions.begin(), subregions.end(), left_comparator);
+
+    GoogleAuthenticator authenticator;
+    mutex auth_mutex;
+    sample_region_coord_map_t sample_to_region_coords;
+
+    cerr << "computing coordinates..." << '\n';
+
+    string sample_name = "A";
+
+    // Initialize every combo of sample,region with an empty vector
+    for (const auto& region: subregions){
+        sample_to_region_coords[sample_name][region] = {};
+    }
+
+    extract_subregion_coords_from_sample(
+            authenticator,
+            auth_mutex,
+            sample_to_region_coords,
+            sample_name,
+            subregions,
+            true,
+            bam_path
+    );
+
+    for (const auto& region: subregions){
+        cerr << sample_name << ' ' << region.to_string() << '\n';
+
+        for (const auto& [name,coord]: sample_to_region_coords.at(sample_name).at(region)){
+            cerr << '\t' << name << ' ' << coord.query_start << ',' << coord.query_stop << '\n';
+            auto i = coord.query_start;
+            auto l = coord.query_stop - coord.query_start;
+
+            string s;
+            if (coord.is_reverse) {
+                s = sequences.at(name).substr(i, l);
+                reverse_complement(s);
+            }
+            else{
+                s = sequences[name].substr(i, l);
+            }
+
+            cerr << '\t' << s << '\n';
+            cerr << '\n';
+        }
+    }
+
+}
+
+
 void test_bam_subsequence_extraction(path data_directory){
     string region_string = "a:0-5000";
 
@@ -117,7 +186,7 @@ void test_bam_subsequence_extraction(path data_directory){
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
 
     map<string,string> result_sequences;
     for_alignment_in_bam_region(bam_path, region_string, [&](Alignment& alignment){
@@ -518,6 +587,9 @@ int main(){
 
     cerr << "TESTING: test_bam_subsequence_extraction\n\n";
     test_bam_subsequence_extraction(data_directory);
+
+    cerr << "TESTING: test_bam_prefetched_subsequence_extraction\n\n";
+    test_bam_prefetched_subsequence_extraction(data_directory);
 
     cerr << "TESTING: cigar iterator\n\n";
     test_cigar_iterator(data_directory);

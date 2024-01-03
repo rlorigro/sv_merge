@@ -235,6 +235,11 @@ bool GafAlignment::is_primary() const{
 }
 
 
+bool GafAlignment::is_supplementary() const{
+    throw runtime_error("ERROR: is_supplementary not implemented for GafAlignment");
+}
+
+
 int32_t GafAlignment::get_n_match() const{
     return n_match;
 }
