@@ -14,6 +14,7 @@ C++ implementation of rlorigro/hapslap
 - libssl-dev
 - pkg-config
 - libnghttp2-dev (For Ubuntu22 curl http2 support)
+- liblzma-dev
 
 <!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
 ### GraphAligner
