@@ -7,13 +7,14 @@ C++ implementation of rlorigro/hapslap
 - c++17
 - gcc
 - cmake
-- zlib1g-dev
-- libbz2-dev
 - autoconf
 - automake
-- libssl-dev
 - pkg-config
+- zlib1g-dev
+- libbz2-dev
+- libssl-dev
 - liblzma-dev
+- libjansson-dev
 
 **contextual:**
 - libnghttp2-dev (For curl http2 support, **only required for Ubuntu22**)
