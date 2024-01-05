@@ -300,7 +300,7 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
     unordered_map<Region,TransMap> region_transmaps;
 
-    fetch_clipped_reads(
+    fetch_reads_from_clipped_bam(
             t,
             regions,
             bam_csv,

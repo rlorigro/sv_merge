@@ -166,8 +166,8 @@ void extract_subregions_from_sample(
 
                     // This will not catch every instance of a hardclip, but if there is one in the window it will throw
                     if (intersection.is_hardclip()){
-                        throw runtime_error("ERROR: query-oriented direct-from-BAM read fetching cannot be accomplished"
-                                            " on hardclipped sequences, use pre-fetched sequences instead");
+                        throw runtime_error("ERROR: query-oriented direct-from-alignment read fetching cannot be accomplished"
+                                            " on hardclipped sequences, use whole-BAM coordinate based fetching instead");
                     }
 
                     // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
@@ -439,8 +439,6 @@ void extract_subregion_coords_from_sample_thread_fn(
         bool require_spanning,
         atomic<size_t>& job_index
 ){
-    cerr << "thread fn" << '\n';
-
     size_t i = job_index.fetch_add(1);
 
     while (i < sample_bams.size()){
@@ -716,7 +714,6 @@ void fetch_query_seqs_for_each_sample(
 
     // Load BAM paths as a map with sample->bam
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
-        cerr << "loaded: " << sample_name << ' ' << bam_path << '\n';
         sample_bams.emplace_back(sample_name, bam_path);
     });
 
@@ -752,7 +749,7 @@ void fetch_query_seqs_for_each_sample(
 }
 
 
-void fetch_clipped_reads(
+void fetch_reads_from_clipped_bam(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
@@ -849,7 +846,7 @@ void fetch_clipped_reads(
                 const auto& seq = sample_queries.at(sample_name).at(name);
 
                 if (seq.empty() or (i > seq.size() - 1) or (i + l > seq.size())){
-                    throw runtime_error("ERROR: fetch_clipped_reads coord slice attempted on empty or undersized sequence: \n" +
+                    throw runtime_error("ERROR: fetch_reads_from_clipped_bam coord slice attempted on empty or undersized sequence: \n" +
                                         sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
                 }
 

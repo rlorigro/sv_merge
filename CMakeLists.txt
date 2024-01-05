@@ -107,6 +107,40 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- bitmagic ---------------- #
+# ------------------------------------------ #
+##############################################
+
+
+ExternalProject_Add(project_bitmagic
+        GIT_REPOSITORY https://github.com/tlk00/BitMagic.git
+        TIMEOUT 5
+        PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND ""
+        INSTALL_COMMAND "" # Disable install step, is a header only lib!
+)
+
+add_dependencies(sv_merge project_bitmagic)
+
+# Specify include dir
+ExternalProject_Get_Property(project_bitmagic SOURCE_DIR)
+
+message(STATUS "SOURCE_DIR/src: " ${SOURCE_DIR}/src)
+
+
+add_custom_target(copy_bitmagic_headers
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/external/bitmagic/inc
+)
+
+add_dependencies(sv_merge copy_bitmagic_headers)
+add_dependencies(copy_bitmagic_headers project_bitmagic)
+
+include_directories(${CMAKE_SOURCE_DIR}/external/bitmagic/inc)
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ------------------ WFA2 ------------------ #
 # ------------------------------------------ #
 ##############################################
@@ -496,6 +530,7 @@ endif()
 set(TESTS
         test_bam
         test_bed
+        test_bitmagic
         test_fasta
         test_gaf
         test_graph

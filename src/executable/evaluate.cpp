@@ -70,7 +70,7 @@ void evaluate(
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
-    fetch_reads(t, regions, bam_csv, n_threads, true, region_transmaps);
+    fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, true, region_transmaps);
 
     cerr << t << "Processing windows" << '\n';
 

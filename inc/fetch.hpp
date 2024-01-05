@@ -55,7 +55,7 @@ void fetch_reads(
 );
 
 
-void fetch_clipped_reads(
+void fetch_reads_from_clipped_bam(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
