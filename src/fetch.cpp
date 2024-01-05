@@ -797,15 +797,15 @@ void fetch_reads_from_clipped_bam(
             sample_queries
     );
 
-    for (const auto& [sample_name,item]: sample_to_region_coords) {
-        for (const auto& [region,named_coords]: item) {
-            for (const auto& [name,coord]: named_coords){
-
-                cerr << ">" << name << '\n';
-                cerr << sample_queries.at(sample_name).at(name) << '\n';
-            }
-        }
-    }
+//    for (const auto& [sample_name,item]: sample_to_region_coords) {
+//        for (const auto& [region,named_coords]: item) {
+//            for (const auto& [name,coord]: named_coords){
+//
+//                cerr << ">" << name << '\n';
+//                cerr << sample_queries.at(sample_name).at(name) << '\n';
+//            }
+//        }
+//    }
 
     // Compute coverages for regions
     unordered_map<Region, size_t> region_coverage;
