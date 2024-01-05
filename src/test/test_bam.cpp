@@ -187,7 +187,7 @@ void test_bam_subsequence_extraction(path data_directory){
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
 
     map<string,string> result_sequences;
     for_alignment_in_bam_region(bam_path, region_string, [&](Alignment& alignment){
@@ -256,6 +256,76 @@ void test_bam_subsequence_extraction(path data_directory){
     }
 
     cerr << '\n';
+}
+
+
+void test_clipped_bam_subsequence_extraction(path data_directory){
+    string region_string = "a:0-5000";
+
+    Region r(region_string);
+
+    cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
+
+    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
+
+    Timer t;
+
+    vector<Region> regions = {
+            {"a",2000,2010},
+            {"a",3090,4000},
+            {"a",4990,5000},
+            {"a",60000,6010},
+            {"a",0,10}
+    };
+
+    // How to sort intervals
+    auto left_comparator = [](const Region& a, const Region& b){
+        return a.start < b.start;
+    };
+
+    sort(regions.begin(), regions.end(), left_comparator);
+
+    path bam_csv = data_directory / "test_bams.csv";
+
+    ofstream file(bam_csv);
+
+    if (not file.good() or not file.is_open()){
+        throw runtime_error("ERROR: file could not be written: " + bam_csv.string());
+    }
+
+    file << "A," << bam_path.string() << '\n';
+    file.close();
+
+    int64_t n_threads = 4;
+
+    unordered_map<Region,TransMap> region_transmaps;
+
+    fetch_clipped_reads(
+            t,
+            regions,
+            bam_csv,
+            n_threads,
+            true,
+            region_transmaps);
+
+    cerr << '\n';
+
+    // Iterate sample reads
+    for (const auto& region: regions){
+        // Get the sample-read-path transitive mapping for this region
+        auto& transmap = region_transmaps.at(region);
+
+        // Iterate samples within this region and cluster reads
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+            cerr << '\n';
+            cerr << sample_name << ' ' << region.to_string() << '\n';
+
+            transmap.for_each_read_of_sample(sample_name, [&](const string &name, int64_t id) {
+                cerr << '>' << name << '\n';
+                cerr << transmap.get_sequence(id) << '\n';
+            });
+        });
+    }
 }
 
 
@@ -595,6 +665,9 @@ int main(){
 
     cerr << "TESTING: test_bam_prefetched_subsequence_extraction\n\n";
     test_bam_prefetched_subsequence_extraction(data_directory);
+
+    cerr << "TESTING: test_clipped_bam_subsequence_extraction\n\n";
+    test_clipped_bam_subsequence_extraction(data_directory);
 
     cerr << "TESTING: cigar iterator\n\n";
     test_cigar_iterator(data_directory);

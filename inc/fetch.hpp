@@ -64,6 +64,7 @@ void fetch_clipped_reads(
         unordered_map<Region,TransMap>& region_transmaps
 );
 
+
 void extract_subregion_coords_from_sample(
         GoogleAuthenticator& authenticator,
         mutex& authenticator_mutex,

@@ -123,7 +123,7 @@ void extract_subregions_from_sample(
             string name;
             alignment.get_query_name(name);
 
-            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+//            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
 //        for (const auto& item: overlapping_regions){
 //            cerr << item.start << ',' << item.stop << '\n';
 //        }
@@ -430,6 +430,42 @@ void extract_subsequences_from_sample_thread_fn(
 }
 
 
+void extract_subregion_coords_from_sample_thread_fn(
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        sample_region_coord_map_t& sample_to_region_coords,
+        const vector <pair <string,path> >& sample_bams,
+        const vector<Region>& regions,
+        bool require_spanning,
+        atomic<size_t>& job_index
+){
+    cerr << "thread fn" << '\n';
+
+    size_t i = job_index.fetch_add(1);
+
+    while (i < sample_bams.size()){
+        const auto& [sample_name, bam_path] = sample_bams[i];
+
+        Timer t;
+
+        extract_subregion_coords_from_sample(
+                authenticator,
+                authenticator_mutex,
+                sample_to_region_coords,
+                sample_name,
+                regions,
+                require_spanning,
+                true,
+                bam_path
+        );
+
+        cerr << t << "Elapsed for: " << sample_name << '\n';
+
+        i = job_index.fetch_add(1);
+    }
+}
+
+
 void get_reads_for_each_bam_subregion(
         Timer& t,
         vector<Region>& regions,
@@ -474,6 +510,68 @@ void get_reads_for_each_bam_subregion(
                     std::ref(authenticator),
                     std::ref(authenticator_mutex),
                     std::ref(sample_to_region_reads),
+                    std::cref(sample_bams),
+                    std::cref(regions),
+                    std::ref(require_spanning),
+                    std::ref(job_index)
+            );
+        } catch (const exception& e) {
+            throw e;
+        }
+    }
+
+    // Wait for threads to finish
+    for (auto& n: threads){
+        n.join();
+    }
+
+}
+
+
+void get_read_coords_for_each_bam_subregion(
+        Timer& t,
+        vector<Region>& regions,
+        GoogleAuthenticator& authenticator,
+        sample_region_coord_map_t& sample_to_region_coords,
+        path bam_csv,
+        int64_t n_threads,
+        bool require_spanning
+){
+    // Intermediate objects
+    vector <pair <string, path> > sample_bams;
+    TransMap sample_only_transmap;
+
+    cerr << t << "Loading CSV: " << bam_csv.string() << '\n';
+
+    // Load BAM paths as a map with sample->bam
+    for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
+        sample_only_transmap.add_sample(sample_name);
+        sample_bams.emplace_back(sample_name, bam_path);
+
+        // Initialize every combo of sample,region with an empty vector
+        for (const auto& region: regions){
+            sample_to_region_coords[sample_name][region] = {};
+        }
+    });
+
+    cerr << t << "Processing windows" << '\n';
+
+    // Thread-related variables
+    atomic<size_t> job_index = 0;
+    vector<thread> threads;
+    mutex authenticator_mutex;
+
+    threads.reserve(n_threads);
+
+    // Launch threads
+    for (uint64_t n=0; n<n_threads; n++){
+        try {
+            cerr << "launching: " << n << '\n';
+            threads.emplace_back(
+                    std::ref(extract_subregion_coords_from_sample_thread_fn),
+                    std::ref(authenticator),
+                    std::ref(authenticator_mutex),
+                    std::ref(sample_to_region_coords),
                     std::cref(sample_bams),
                     std::cref(regions),
                     std::ref(require_spanning),
@@ -563,6 +661,97 @@ void fetch_reads(
 }
 
 
+void fetch_query_seqs_for_each_sample_thread_fn(
+        const vector <pair <string,path> >& sample_bams,
+        unordered_map<string, unordered_map<string,string> >& sample_queries,
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        atomic<size_t>& job_index
+){
+
+    size_t i = job_index.fetch_add(1);
+
+    while (i < sample_bams.size()){
+        // Fetch the next sample in the job list and break out some vars for that sample
+        const auto& [sample_name, bam_path] = sample_bams.at(i);
+        auto& queries = sample_queries.at(sample_name);
+
+        // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
+        authenticator_mutex.lock();
+        authenticator.update();
+        authenticator_mutex.unlock();
+
+        for_alignment_in_bam(bam_path, [&](Alignment& alignment){
+            // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
+            if ((not alignment.is_primary()) or alignment.is_supplementary()){
+                return;
+            }
+
+            string name;
+            alignment.get_query_name(name);
+
+            auto result = queries.find(name);
+            if (result == queries.end()){
+                return;
+            }
+
+            // Fetch the sequence, filling it in directly to the `queries` result object which has been pre-allocated for
+            // thread safety
+            alignment.get_query_sequence(result->second);
+
+        });
+
+        i = job_index.fetch_add(1);
+    }
+}
+
+
+void fetch_query_seqs_for_each_sample(
+        path bam_csv,
+        int64_t n_threads,
+        GoogleAuthenticator& authenticator,
+        unordered_map<string, unordered_map<string,string> >& sample_queries
+){
+    vector <pair <string,path> > sample_bams;
+
+    // Load BAM paths as a map with sample->bam
+    for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
+        cerr << "loaded: " << sample_name << ' ' << bam_path << '\n';
+        sample_bams.emplace_back(sample_name, bam_path);
+    });
+
+    // Thread-related variables
+    atomic<size_t> job_index = 0;
+    vector<thread> threads;
+    mutex authenticator_mutex;
+
+    threads.reserve(n_threads);
+
+    // Launch threads
+    for (uint64_t n=0; n<n_threads; n++){
+        try {
+            cerr << "launching: " << n << '\n';
+            threads.emplace_back(
+                    std::ref(fetch_query_seqs_for_each_sample_thread_fn),
+                    std::cref(sample_bams),
+                    std::ref(sample_queries),
+                    std::ref(authenticator),
+                    std::ref(authenticator_mutex),
+                    std::ref(job_index)
+            );
+        } catch (const exception& e) {
+            throw e;
+        }
+    }
+
+    // Wait for threads to finish
+    for (auto& n: threads){
+        n.join();
+    }
+
+}
+
+
 void fetch_clipped_reads(
         Timer& t,
         vector<Region>& regions,
@@ -575,29 +764,57 @@ void fetch_clipped_reads(
     TransMap template_transmap;
 
     // Intermediate object to store results of multithreaded sample read fetching
-    sample_region_read_map_t sample_to_region_reads;
+    sample_region_coord_map_t sample_to_region_coords;
 
     // Get a nested map of sample -> region -> vector<Sequence>
-    get_reads_for_each_bam_subregion(
+    get_read_coords_for_each_bam_subregion(
             t,
             regions,
             authenticator,
-            sample_to_region_reads,
+            sample_to_region_coords,
             bam_csv,
             n_threads,
             require_spanning
     );
 
     // Construct template transmap with only samples
-    for (const auto& [sample_name,item]: sample_to_region_reads){
+    for (const auto& [sample_name,item]: sample_to_region_coords){
         template_transmap.add_sample(sample_name);
+    }
+
+    // TODO: now that coords are fetched, need to iterate entire BAM once to fetch primary alignments for each sequence
+    // Collect all query names in one place and construct thread-safe container for results of fetching
+    unordered_map<string, unordered_map<string,string> > sample_queries;
+    for (const auto& [sample_name,item]: sample_to_region_coords) {
+        for (const auto& [region,named_coords]: item) {
+            for (const auto& [name,coord]: named_coords){
+                sample_queries[sample_name].emplace(name,"");
+            }
+        }
+    }
+
+    fetch_query_seqs_for_each_sample(
+            bam_csv,
+            n_threads,
+            authenticator,
+            sample_queries
+    );
+
+    for (const auto& [sample_name,item]: sample_to_region_coords) {
+        for (const auto& [region,named_coords]: item) {
+            for (const auto& [name,coord]: named_coords){
+
+                cerr << ">" << name << '\n';
+                cerr << sample_queries.at(sample_name).at(name) << '\n';
+            }
+        }
     }
 
     // Compute coverages for regions
     unordered_map<Region, size_t> region_coverage;
-    for (const auto& [sample_name,item]: sample_to_region_reads) {
-        for (const auto& [region,sequences]: item) {
-            region_coverage[region] += sequences.size();
+    for (const auto& [sample_name,item]: sample_to_region_coords) {
+        for (const auto& [region,coords]: item) {
+            region_coverage[region] += coords.size();
         }
     }
 
@@ -606,7 +823,7 @@ void fetch_clipped_reads(
     for (const auto& r: regions){
         auto item = region_transmaps.emplace(r, template_transmap).first->second;
         auto n_reads = region_coverage[r];
-        auto n_samples = sample_to_region_reads.size();
+        auto n_samples = sample_to_region_coords.size();
 
         // Number of reads is known exactly
         item.reserve_sequences(n_reads + 2);
@@ -619,15 +836,31 @@ void fetch_clipped_reads(
     }
 
     // Move the downloaded data into a transmap, construct edges for sample->read
-    for (auto& [sample_name,item]: sample_to_region_reads){
-        for (auto& [region,sequences]: item){
+    for (auto& [sample_name,item]: sample_to_region_coords){
+        for (auto& [region,named_coords]: item){
             auto& transmap = region_transmaps.at(region);
 
             auto sample_id = transmap.get_id(sample_name);
 
-            for (auto& s: sequences) {
-                transmap.add_read_with_move(s.name, s.sequence);
-                transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
+            for (auto& [name,coord]: named_coords) {
+                auto i = size_t(coord.query_start);
+                auto l = size_t(coord.query_stop - coord.query_start);
+
+                const auto& seq = sample_queries.at(sample_name).at(name);
+
+                if (seq.empty() or (i > seq.size() - 1) or (i + l > seq.size())){
+                    throw runtime_error("ERROR: fetch_clipped_reads coord slice attempted on empty or undersized sequence: \n" +
+                                        sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
+                }
+
+                string s = seq.substr(i, l);;
+
+                if (coord.is_reverse) {
+                    reverse_complement(s);
+                }
+
+                transmap.add_read_with_move(name, s);
+                transmap.add_edge(sample_id, transmap.get_id(name), 0);
             }
         }
     }
