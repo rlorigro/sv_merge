@@ -117,8 +117,6 @@ void HtsAlignment::for_each_cigar_interval(bool unclip_coords, const function<vo
 
                 c.query_start += is_query_move[c2.code] * c2.length;
             });
-
-            cerr << "USING computed query length: " << c.query_start << '\n';
         }
         else {
             c.query_start = get_query_length();
