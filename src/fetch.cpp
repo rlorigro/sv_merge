@@ -20,6 +20,8 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
     string bam_path;
 
     int64_t n_delimiters = 0;
+    int64_t n_lines = 0;
+    int64_t n_char_in_line = 0;
     char delimiter = ',';
 
     while (file.get(c)){
@@ -29,11 +31,21 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
             continue;
         }
         if (c == '\n'){
+            if (n_char_in_line == 0){
+                continue;
+            }
+
+            if (n_delimiters != 1){
+                throw runtime_error("ERROR: incorrect number of delimiters on line: " + to_string(n_lines) + " of file " + bam_csv.string());
+            }
+
             f(sample_name, bam_path);
 
             sample_name.clear();
             bam_path.clear();
             n_delimiters = 0;
+            n_char_in_line = 0;
+            n_lines++;
             continue;
         }
 
@@ -46,6 +58,8 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
         else {
             throw runtime_error("ERROR: too many delimiters in bam csv");
         }
+
+        n_char_in_line++;
     }
 }
 
@@ -309,7 +323,7 @@ void extract_subregion_coords_from_sample(
             string name;
             alignment.get_query_name(name);
 
-            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+//            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
 //        for (const auto& item: overlapping_regions){
 //            cerr << item.start << ',' << item.stop << '\n';
 //        }
@@ -342,7 +356,7 @@ void extract_subregion_coords_from_sample(
                         return;
                     }
 
-//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+//                    cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                     // A single alignment may span multiple regions
                     for (auto& region: overlapping_regions){
@@ -545,6 +559,8 @@ void get_read_coords_for_each_bam_subregion(
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         sample_only_transmap.add_sample(sample_name);
         sample_bams.emplace_back(sample_name, bam_path);
+
+        cerr << "LOADED: " << sample_name << ',' << bam_path << '\n';
 
         // Initialize every combo of sample,region with an empty vector
         for (const auto& region: regions){

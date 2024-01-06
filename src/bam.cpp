@@ -109,7 +109,20 @@ void HtsAlignment::for_each_cigar_interval(bool unclip_coords, const function<vo
     c.is_reverse = is_reverse();
 
     if (c.is_reverse){
-        c.query_start = get_query_length();
+        if (unclip_coords) {
+            for_each_cigar_tuple([&](const CigarTuple& c2){
+                if (c2.code == 5){
+                    c.query_start += c2.length;
+                }
+
+                c.query_start += is_query_move[c2.code] * c2.length;
+            });
+
+            cerr << "USING computed query length: " << c.query_start << '\n';
+        }
+        else {
+            c.query_start = get_query_length();
+        }
     }
 
     for (uint32_t i=0; i < hts_alignment->core.n_cigar; i++) {

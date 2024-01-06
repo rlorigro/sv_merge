@@ -192,7 +192,7 @@ void for_cigar_interval_in_alignment(
     intersection.is_reverse = alignment.is_reverse();
 
     alignment.for_each_cigar_interval(unclip_coords, [&](const sv_merge::CigarInterval& c) {
-//        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
+//        cerr << "(" << cigar_code_to_char[c.code] << "," << c.length << ") " << c.is_reverse << " -- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
         while (ref_iter != ref_intervals.end()) {
             intersection.code = c.code;
