@@ -206,24 +206,28 @@ void extract_subregions_from_sample(
                             pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
                         }
 
-                        // If the alignment is within the ref region, record the query position
+                        // If the alignment is within the ref region, record the query position and ref position
                         if (pass){
                             auto [start,stop] = intersection.get_forward_query_interval();
 
                             if (alignment.is_reverse()){
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
+                                    coord.ref_start = intersection.ref_start;
                                 }
                                 if (start < coord.query_start){
                                     coord.query_start = start;
+                                    coord.ref_stop = intersection.ref_stop;
                                 }
                             }
                             else{
                                 if (start < coord.query_start){
                                     coord.query_start = start;
+                                    coord.ref_start = intersection.ref_start;
                                 }
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
+                                    coord.ref_stop = intersection.ref_stop;
                                 }
                             }
                         }
@@ -236,7 +240,16 @@ void extract_subregions_from_sample(
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
     for (const auto& [region, query_coords]: query_coords_per_region){
         for (const auto& [name, coords]: query_coords){
-            if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
+            bool pass = false;
+
+            if (require_spanning){
+                pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
+            }
+            else {
+                pass = (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop);
+            }
+
+            if (pass) {
                 auto i = coords.query_start;
                 auto l = coords.query_stop - coords.query_start;
 
@@ -323,7 +336,7 @@ void extract_subregion_coords_from_sample(
             string name;
             alignment.get_query_name(name);
 
-//            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+//            cerr << '\n' << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
 //        for (const auto& item: overlapping_regions){
 //            cerr << item.start << ',' << item.stop << '\n';
 //        }
@@ -379,17 +392,21 @@ void extract_subregion_coords_from_sample(
                             if (alignment.is_reverse()){
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
+                                    coord.ref_start = intersection.ref_start;
                                 }
                                 if (start < coord.query_start){
                                     coord.query_start = start;
+                                    coord.ref_stop = intersection.ref_stop;
                                 }
                             }
                             else{
                                 if (start < coord.query_start){
                                     coord.query_start = start;
+                                    coord.ref_start = intersection.ref_start;
                                 }
                                 if (stop > coord.query_stop){
                                     coord.query_stop = stop;
+                                    coord.ref_stop = intersection.ref_stop;
                                 }
                             }
                         }
@@ -402,7 +419,16 @@ void extract_subregion_coords_from_sample(
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
     for (const auto& [region, query_coords]: query_coords_per_region){
         for (const auto& [name, coords]: query_coords){
-            if (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop){
+            bool pass = false;
+
+            if (require_spanning){
+                pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
+            }
+            else {
+                pass = (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop);
+            }
+
+            if (pass) {
                 sample_to_region_coords.at(sample_name).at(region).emplace_back(name, coords);
             }
         }
@@ -560,8 +586,6 @@ void get_read_coords_for_each_bam_subregion(
         sample_only_transmap.add_sample(sample_name);
         sample_bams.emplace_back(sample_name, bam_path);
 
-        cerr << "LOADED: " << sample_name << ',' << bam_path << '\n';
-
         // Initialize every combo of sample,region with an empty vector
         for (const auto& region: regions){
             sample_to_region_coords[sample_name][region] = {};
@@ -686,6 +710,8 @@ void fetch_query_seqs_for_each_sample_thread_fn(
     size_t i = job_index.fetch_add(1);
 
     while (i < sample_bams.size()){
+        Timer t;
+
         // Fetch the next sample in the job list and break out some vars for that sample
         const auto& [sample_name, bam_path] = sample_bams.at(i);
         auto& queries = sample_queries.at(sample_name);
@@ -716,6 +742,8 @@ void fetch_query_seqs_for_each_sample_thread_fn(
         });
 
         i = job_index.fetch_add(1);
+
+        cerr << t << "Elapsed for: " << sample_name << '\n';
     }
 }
 
@@ -795,10 +823,12 @@ void fetch_reads_from_clipped_bam(
         template_transmap.add_sample(sample_name);
     }
 
-    // TODO: now that coords are fetched, need to iterate entire BAM once to fetch primary alignments for each sequence
     // Collect all query names in one place and construct thread-safe container for results of fetching
     unordered_map<string, unordered_map<string,string> > sample_queries;
     for (const auto& [sample_name,item]: sample_to_region_coords) {
+        // Make sure there is at least a placeholder for samples, so there is no error later. They can be empty.
+        sample_queries[sample_name] = {};
+
         for (const auto& [region,named_coords]: item) {
             for (const auto& [name,coord]: named_coords){
                 sample_queries[sample_name].emplace(name,"");
