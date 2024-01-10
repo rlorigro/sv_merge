@@ -32,11 +32,26 @@ using std::ref;
 using namespace sv_merge;
 
 
+// TODO: replace this with proper implementation when it exists
+void generate_gfas_with_script(const path& vcf, const path& ref_fasta, const path& bed, const path& output_dir){
+    path vcf_to_gfa_script = "/home/ryan/code/hapslap/scripts/vcf_to_gfa.py";
+
+    string command = "python3 " + vcf_to_gfa_script.string() +
+                     " --vcf " + vcf.string() +
+                     " --ref " + ref_fasta.string() +
+                     " --output_dir " + output_dir.string() +
+                     " --bed " + bed.string();
+
+    run_command(command, true);
+}
+
+
 void evaluate(
         vector<path>& vcfs,
         path output_dir,
         path windows_bed,               // Override the interval graph if this is provided
         path bam_csv,
+        path ref_fasta,
         int32_t flank_length,
         int32_t n_threads,
         bool debug
@@ -74,6 +89,21 @@ void evaluate(
 
     cerr << t << "Processing windows" << '\n';
 
+    // Generate GFAs and folder structure for every VCF * every region
+    // - GFAs should be stored for easy access/debugging later
+    // - GAFs should also be stored
+    // - FASTA files for extracted truth haplotypes should be optional
+    // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
+    // TODO: create option to NOT use /dev/shm/ as staging dir
+    // Absolutely must delete the /dev/shm/ copy before terminating
+    //
+    path staging_dir = "/dev/shm/hapestry_staging_area/";
+    for (const auto& vcf: vcfs){
+        generate_gfas_with_script(vcf, ref_fasta, windows_bed, staging_dir);
+    }
+
+    ghc::filesystem::remove_all(staging_dir);
+
     // Iterate sample reads
     for (const auto& region: regions){
         // Per-region output and logging directory
@@ -88,10 +118,9 @@ void evaluate(
 
         // Iterate samples within this region
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
-            if (debug) {
-                cerr << '\n';
-                cerr << sample_name << '\n';
 
+
+            if (debug) {
                 path p = output_subdir / (sample_name + "_extracted_reads.fasta");
                 ofstream file(p);
 
@@ -111,6 +140,7 @@ int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
     path bam_csv;
+    path ref_fasta;
     vector<path> vcfs;
     int32_t flank_length;
     int32_t n_threads = 1;
@@ -147,6 +177,12 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
+            "--ref",
+            ref_fasta,
+            "Path to reference sequence FASTA file that corresponds to VCF")
+            ->required();
+
+    app.add_option(
             "--flank_length",
             flank_length,
             "How much flanking sequence to use when fetching and aligning reads")
@@ -156,7 +192,7 @@ int main (int argc, char* argv[]){
 
     CLI11_PARSE(app, argc, argv);
 
-    evaluate(vcfs, output_dir, windows_bed, bam_csv, flank_length, n_threads, debug);
+    evaluate(vcfs, output_dir, windows_bed, bam_csv, ref_fasta, flank_length, n_threads, debug);
 
     return 0;
 }
