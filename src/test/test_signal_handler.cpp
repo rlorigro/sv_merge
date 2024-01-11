@@ -37,9 +37,7 @@ extern "C" void signal_handler(int signal) {
             break;
     }
 
-
-
-    exit(signal);
+    _exit(signal);
 }
 
 
