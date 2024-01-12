@@ -1,7 +1,11 @@
 #include "gaf.hpp"
 
+#include <unordered_map>
+#include <functional>
 #include <iostream>
 
+using std::unordered_map;
+using std::function;
 using std::cerr;
 
 
@@ -222,6 +226,13 @@ int32_t GafAlignment::get_path_stop() const{
 
 const pair<string,bool>& GafAlignment::get_path_step(int32_t index) const{
     return path[index];
+}
+
+
+void GafAlignment::for_step_in_path(const string& path_name, const function<void(const string& step_name, bool is_reverse)>& f) const{
+    for (const auto& [name, r]: path){
+        f(name, r);
+    }
 }
 
 

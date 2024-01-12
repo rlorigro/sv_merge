@@ -76,6 +76,7 @@ public:
     [[nodiscard]] bool is_primary() const override;
     [[nodiscard]] bool is_supplementary() const override;
     [[nodiscard]] bool is_reverse() const override;
+    void for_step_in_path(const string& path_name, const function<void(const string& step_name, bool is_reverse)>& f) const;
 
     /// Helper
     [[nodiscard]] bool parse_path_reversal_token(char c) const;

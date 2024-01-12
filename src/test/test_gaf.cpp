@@ -109,7 +109,7 @@ void test_windowed_cigar_interval_iterator(path data_directory){
 
         // In practice, this will need to be fetched according to which interval on the path is active.
         // For the purpose of this test there is only one ref node, as with a linear alignment
-        const string& query_sequence = query_sequences[name];
+        const string& query_sequence = query_sequences.at(name);
 
         string alignment_name = name + "_" + to_string(counter[name]);
         counter[name]++;

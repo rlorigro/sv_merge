@@ -351,7 +351,7 @@ void get_formatted_sequence_of_cigar_interval(
         auto l_ref = b_ref - a_ref;
         auto l = max(l_ref,l_query);
 
-//        cerr << l_query << ',' << l_ref << '\n';
+//        cerr << l_query << ',' << l_ref << ',' << a_query << ',' << a_query + l_ref << '\n';
 
         s_query = query_sequence.substr(a_query, l_query);
         s_ref = ref_sequence.substr(a_ref, l_ref);
