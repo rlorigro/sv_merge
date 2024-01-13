@@ -15,13 +15,13 @@ const char VcfReader::VCF_COMMENT = '#';
 const string VcfReader::VCF_HEADER_PREFIX = "#CHROM";
 const uint8_t VcfReader::VCF_HEADER_PREFIX_LENGTH = VCF_HEADER_PREFIX.length();
 const uint8_t VcfReader::N_NONSAMPLE_FIELDS_VCF = 9;
-const char VcfReader::LINE_END = '\n';  // Change to '\r\n' for CR+LF.
+const char VcfReader::LINE_END = '\n';
 const char VcfReader::VCF_SEPARATOR = '\t';
 const char VcfReader::VCF_MISSING_CHAR = '.';
 const char VcfReader::SYMBOLIC_CHAR_OPEN = '<';
 const char VcfReader::SYMBOLIC_CHAR_CLOSE = '>';
-const char VcfReader::BREAKEND_CHAR_OPEN = '<';
-const char VcfReader::BREAKEND_CHAR_CLOSE = '>';
+const char VcfReader::BREAKEND_CHAR_OPEN = '[';
+const char VcfReader::BREAKEND_CHAR_CLOSE = ']';
 const string VcfReader::PASS_STR = "PASS";
 const char VcfReader::ALT_SEPARATOR = ',';
 const char VcfReader::GT_SEPARATOR = ':';
@@ -232,8 +232,16 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
     else if (field_id==3) ref.append(field);
     else if (field_id==4) {
         alt.append(field);
-        is_symbolic=field.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN);
-        if (field.starts_with(VcfReader::VCF_MISSING_CHAR) || n_alts>1 || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) || equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_NOVEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)) {
+        is_symbolic=is_alt_symbolic();
+        if (n_alts>1) {
+            stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
+            return true;
+        }
+        if ( equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) ||
+             equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_ME_STR+VcfReader::SYMBOLIC_CHAR_CLOSE) ||
+             equal_ignore_case(field,VcfReader::SYMBOLIC_CHAR_OPEN+VcfReader::INS_NOVEL_STR+VcfReader::SYMBOLIC_CHAR_CLOSE)
+             ) {
+            sv_type=VcfReader::TYPE_INSERTION;
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -262,12 +270,6 @@ bool VcfRecord::set_field(const string& field, uint32_t field_id, bool high_qual
     }
     else if (field_id==7) {
         info.append(field);
-        if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) {
-            set_sv_type(tmp_buffer);
-            sv_length=UINT_MAX;
-            stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
-            return true;
-        }
         set_sv_type(tmp_buffer);
         set_sv_length(tmp_buffer);
         if (sv_type==-1 || sv_length<min_sv_length) {
@@ -311,8 +313,9 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
         if (ref_length==1 && alt_length>ref_length) sv_type=VcfReader::TYPE_INSERTION;
         else if (alt_length==1 && ref_length>alt_length) sv_type=VcfReader::TYPE_DELETION;
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
+        else sv_type=-1;
     }
-    sv_type=-1;
+    else sv_type=-1;
 }
 
 
@@ -496,16 +499,18 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
-    if (is_alt_symbolic()) return false;
-    const uint32_t CHROMOSOME_LENGTH = chromosomes.at(chrom).length();
-    if (pos==0 || pos==CHROMOSOME_LENGTH+1) return true;
-    uint32_t p = get_breakend_pos();
-    return (p==0 || p==CHROMOSOME_LENGTH+1);
+    if (is_symbolic) return false;
+    if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
+    const uint32_t p = get_breakend_pos();
+    if (p==UINT32_MAX) return false;
+    string chr_trans;
+    get_breakend_chromosome(chr_trans);
+    return (p==0 || p==chromosomes.at(chr_trans).length()+1);
 }
 
 
 void VcfRecord::get_breakend_chromosome(string& out) const {
-    if (is_alt_symbolic()) { out.clear(); return; }
+    if (is_symbolic) { out.clear(); return; }
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
@@ -515,13 +520,13 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
         c=alt.at(i);
         if (p==UINT16_MAX && (c==VcfReader::BREAKEND_CHAR_OPEN || c==VcfReader::BREAKEND_CHAR_CLOSE)) p=i;
         else if (c==VcfReader::BREAKEND_SEPARATOR) break;
-        else if (p!=UINT16_MAX) out+=c;
+        else if (p!=UINT16_MAX) out.push_back(c);
     }
 }
 
 
 uint32_t VcfRecord::get_breakend_pos() {
-    if (is_alt_symbolic()) return UINT32_MAX;
+    if (is_symbolic) return UINT32_MAX;
     char c;
     uint16_t i, p;
     const uint16_t LENGTH = alt.length();
@@ -534,22 +539,22 @@ uint32_t VcfRecord::get_breakend_pos() {
         }
         else {
             if (c==VcfReader::BREAKEND_CHAR_OPEN || c==VcfReader::BREAKEND_CHAR_CLOSE) break;
-            tmp_buffer_1+=c;
+            tmp_buffer_1.push_back(c);
         }
     }
-    return stoul(tmp_buffer_1);
+    return tmp_buffer_1.empty()?UINT32_MAX:stoul(tmp_buffer_1);
 }
 
 
 uint8_t VcfRecord::get_breakend_orientation_cis() const {
-    if (is_alt_symbolic()) return 0;
+    if (is_symbolic) return 0;
     const char c = alt.at(0);
     return (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE && c!=VcfReader::VCF_MISSING_CHAR)?1:2;
 }
 
 
 uint8_t VcfRecord::get_breakend_orientation_trans() const {
-    if (is_alt_symbolic() || is_breakend_single()) return 0;
+    if (is_symbolic || is_breakend_single()<2) return 0;
     char c;
 
     c=alt.at(0);
@@ -563,17 +568,12 @@ uint8_t VcfRecord::get_breakend_orientation_trans() const {
 
 
 void VcfRecord::get_breakend_inserted_sequence(string& out) const {
-    if (is_alt_symbolic()) { out.clear(); return; }
+    if (is_symbolic) { out.clear(); return; }
     const uint16_t LENGTH = alt.length();
     char c;
     uint16_t p;
 
-    out.clear();
-    if (is_alt_symbolic()) {
-        out.append(alt.substr(1,alt.length()-2));
-        return;
-    }
-    p=UINT16_MAX;
+    out.clear(); p=UINT16_MAX;
     for (uint16_t i=0; i<LENGTH; i++) {
         c=alt.at(i);
         if (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE) continue;
@@ -581,8 +581,9 @@ void VcfRecord::get_breakend_inserted_sequence(string& out) const {
             if (i>1) { out.append(alt.substr(1,i-1)); return; }
             p=i;
         }
-        else if (i<LENGTH-2) { out.append(i+1,LENGTH-i-2); return; }
+        else if (i<LENGTH-2) { out.append(alt.substr(i+1,LENGTH-i-2)); return; }
     }
+    if (LENGTH>2 && (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(LENGTH-1)==VcfReader::VCF_MISSING_CHAR)) { out.append(alt.substr(1,LENGTH-2)); return; }
 }
 
 
@@ -649,7 +650,7 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, pair<ui
         }
         else { out.first=pos; out.second=out.first; }
     }
-    if (sv_type==VcfReader::TYPE_BREAKEND) {
+    else if (sv_type==VcfReader::TYPE_BREAKEND) {
         if (pos==0) {  // Virtual telomeric breakend
             out.first=UINT32_MAX; out.second=UINT32_MAX;
         }
@@ -735,10 +736,10 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
         record.set(file);
         if (record.passes_constraints()) callback(record);
         n_lines++;
-        if (progress_n_lines!=0 && n_lines%progress_n_lines==0) cerr << "Scanned " << n_lines << " lines\n";
+        if (progress_n_lines!=0 && n_lines%progress_n_lines==0) cerr << "Scanned " << n_lines << " records\n";
     }
     file.close();
-    if (progress_n_lines!=0) cerr << "Scanned " << n_lines << " total lines\n";
+    if (progress_n_lines!=0) cerr << "Scanned " << n_lines << " total records\n";
 }
 
 }
