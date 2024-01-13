@@ -498,6 +498,7 @@ set(TESTS
         test_bed
         test_fasta
         test_gaf
+        test_gaf_summary
         test_graph
         test_graphaligner
         test_heterograph

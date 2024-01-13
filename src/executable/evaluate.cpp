@@ -35,153 +35,9 @@ using std::ref;
 
 using namespace sv_merge;
 
-
-class AlignmentSummary{
-public:
-    int32_t start;
-    int32_t stop;
-    int32_t n_match;
-    int32_t n_mismatch;
-    int32_t n_insert;
-    int32_t n_delete;
-
-    void update(const CigarInterval& cigar_interval);
-};
-
-
-void AlignmentSummary::update(const sv_merge::CigarInterval& c) {
-    switch (c.code){
-        case 7:
-            n_match += c.length;    // =
-        case 8:
-            n_mismatch += c.length; // X
-        case 1:
-            n_insert += c.length;   // I
-        case 2:
-            n_delete += c.length;   // D
-        default:
-            return;
-    }
-}
-
-
-class GafSummary{
-public:
-    unordered_map <string, vector<AlignmentSummary> > ref_summaries;
-    unordered_map <string, vector<AlignmentSummary> > query_summaries;
-
-    /**
-     * Update alignment stats, for a given ref node
-     * @param ref_name : ref node to be assigned this cigar operation
-     * @param c : cigar interval obtained from iterating an alignment
-     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
-     */
-    void update_ref(const string& ref_name, const CigarInterval& c, bool insert);
-
-    /**
-     * Update alignment stats, for a given query node
-     * @param query_name : query node to be assigned this cigar operation
-     * @param c : cigar interval obtained from iterating an alignment
-     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
-     */
-    void update_query(const string& query_name, const CigarInterval& c, bool insert);
-
-    void resolve_all_overlaps();
-    void resolve_overlaps(vector<AlignmentSummary>& alignments);
-};
-
-
-void GafSummary::update_ref(const string& ref_name, const CigarInterval& c, bool insert){
-    auto& result = ref_summaries.at(ref_name);
-    if (insert){
-        result.emplace_back();
-    }
-    // TODO: add ref/query specific rules to update fn for start/stop coord, using reversal flag
-    result.back().update(c);
-}
-
-
-void GafSummary::update_query(const string& query_name, const CigarInterval& c, bool insert){
-    auto& result = query_summaries.at(query_name);
-    if (insert){
-        result.emplace_back();
-    }
-    // TODO: add ref/query specific rules to update fn for start/stop coord, using reversal flag
-    result.back().update(c);
-}
-
-
-/**
- * Sweep algorithm to split intervals into intersections
- * @param alignments
- * @param is_ref
- */
-void GafSummary::resolve_overlaps(vector<AlignmentSummary>& alignments, bool is_ref) {
-    vector <pair <interval_t,unordered_set<size_t> > > labeled_intervals;
-    vector <pair <interval_t,unordered_set<size_t> > > intersected_intervals;
-
-    for (size_t i=0; i<alignments.size(); i++){
-        const auto& a = alignments[i];
-        labeled_intervals.push_back({{a.start,a.stop},{i}});
-    }
-
-    // How to sort labeled intervals with structure ((a,b), label) by start (a)
-    auto left_comparator = [](const pair <interval_t,unordered_set<size_t> >& a, const pair <interval_t,unordered_set<size_t> >& b){
-        return a.first.first < b.first.first;
-    };
-
-    // How to sort intervals with structure (a,b) by end (b)
-    auto right_comparator = [](const interval_t& a, const interval_t& b){
-        return a.second < b.second;
-    };
-
-    sort(labeled_intervals.begin(), labeled_intervals.end(), left_comparator);
-
-    // Only need to store/compare the interval (and not the data/label) for this DS
-    set<interval_t, decltype(right_comparator)> active_intervals;
-
-    for (const auto& [interval,value] : labeled_intervals){
-        if (interval.first > interval.second){
-            throw runtime_error("ERROR: interval start is greater than interval stop: " + to_string(interval.first) + ',' + to_string(interval.second));
-        }
-
-        vector<interval_t> to_be_removed;
-
-        // TODO: Every time an element is added or removed, update the vector of intersected_intervals:
-        //  1. extend the previous interval
-        //  2. remove/add an element from the set (check if the start/stop is not identical to prev)
-
-        // Iterate active intervals, which are maintained sorted by interval stop
-        for (const auto& other_interval: active_intervals){
-            // Flag any expired intervals for deletion
-            if (other_interval.second < interval.first){
-                to_be_removed.emplace_back(other_interval);
-            }
-        }
-
-        // Remove the intervals that have been passed already in the sweep
-        for (const auto& item: to_be_removed){
-            active_intervals.erase(item);
-        }
-
-        active_intervals.emplace(interval);
-    }
-}
-
-
-void GafSummary::resolve_all_overlaps() {
-    for (auto& [name, alignments]: ref_summaries){
-        resolve_overlaps(alignments);
-    }
-    for (auto& [name, alignments]: query_summaries){
-        resolve_overlaps(alignments);
-    }
-}
-
-
 void compute_summaries_from_gaf(
         const path& gaf_path,
-        const unordered_map<string,string>& query_sequences,
+        const unordered_map<string,string>& ref_sequences,
         int32_t flank_length,
         GafSummary& gaf_summary
         ){
@@ -197,45 +53,67 @@ void compute_summaries_from_gaf(
         string name;
         alignment.get_query_name(name);
 
-        vector<interval_t> ref_intervals;
-        unordered_map<interval_t,string> interval_to_node_name;
-
         // First establish the set of intervals that defines the steps in the path (node lengths)
+        // And maintain a map that will point from an interval_t to a step in the path (size_t)
+        vector<interval_t> ref_intervals;
+        unordered_map<interval_t,size_t> interval_to_path_index;
+
         int32_t x = 0;
+        size_t i = 0;
         alignment.for_step_in_path(name, [&](const string& step_name, bool is_reverse){
-            auto l = int32_t(query_sequences.at(step_name).size());
+            auto l = int32_t(ref_sequences.at(step_name).size());
             ref_intervals.emplace_back(x, x+l);
-            interval_to_node_name.emplace(ref_intervals.back(), step_name);
+            interval_to_path_index.emplace(ref_intervals.back(), i);
             x += l;
+            i++;
         });
 
         cerr << name << '\n';
 
-        int64_t length;
         string prev_node_name;
-        CigarInterval intersection;
 
         for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
         [&](const CigarInterval& i, const interval_t& interval){
-            intersection = i;
+            // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
+            auto i_norm = i;
 
-            auto node_name = interval_to_node_name.at(interval);
+            auto path_index = interval_to_path_index.at(interval);
+            const auto& [node_name, node_reversal] = alignment.get_step_of_path(path_index);
 
-            if (is_ref_move[intersection.code]){
-                length = intersection.ref_stop - intersection.ref_start;
+            cerr << '\t' << node_reversal << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
+
+            // REVERSAL:
+            // path  alignment  result
+            // -----------------------
+            // 0     0          0
+            // 0     1          1
+            // 1     0          1
+            // 1     1          0
+            i_norm.is_reverse = (node_reversal xor i_norm.is_reverse);
+
+            auto [a,b] = i_norm.get_forward_ref_interval();
+
+            // Compute distance from edge of interval (start of node in path)
+            int32_t start = a - interval.first;
+            int32_t stop = b - interval.first;
+
+            if (not i_norm.is_reverse){
+                i_norm.ref_start = start;
+                i_norm.ref_stop = stop;
             }
             else{
-                length = intersection.get_query_length();
+                auto node_length = int32_t(ref_sequences.at(node_name).size());
+                i_norm.ref_start = node_length - start - 1;
+                i_norm.ref_stop = node_length - stop - 1;
             }
-            cerr << node_name << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[intersection.code] << ',' << intersection.length << ',' << length << " r:" << intersection.ref_start << ',' << intersection.ref_stop << " q:" << intersection.query_start << ',' << intersection.query_stop << '\n';
 
             // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
             bool new_query_alignment = prev_node_name.empty();
             bool new_ref_alignment = node_name != prev_node_name;
 
             // Update the last alignment block in the GafSummary for ref and query
-            gaf_summary.update_ref(node_name, i, new_ref_alignment);
-            gaf_summary.update_query(node_name, i, new_query_alignment);
+            gaf_summary.update_ref(node_name, i_norm, new_ref_alignment);
+            gaf_summary.update_query(node_name, i_norm, new_query_alignment);
 
             prev_node_name = node_name;
         },{});
@@ -243,6 +121,8 @@ void compute_summaries_from_gaf(
         cerr << '\n';
 
     });
+
+    gaf_summary.resolve_all_overlaps();
 }
 
 
@@ -337,6 +217,14 @@ void generate_vcf_and_run_graphaligner_thread_fn(
         run_command(command, true);
 
         i = job_index.fetch_add(1);
+
+        GafSummary g;
+
+//        compute_summaries_from_gaf(
+//            gaf_path,
+//            query_sequences,
+//            0,      // TODO FIX THIS
+//            g);
     }
 }
 

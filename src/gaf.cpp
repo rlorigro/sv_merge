@@ -236,6 +236,11 @@ void GafAlignment::for_step_in_path(const string& path_name, const function<void
 }
 
 
+const pair<string,bool>& GafAlignment::get_step_of_path(size_t index) const{
+    return path.at(index);
+}
+
+
 bool GafAlignment::is_reverse() const{
     return reversal;
 }
@@ -484,6 +489,192 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(Alignment& a
     for_alignment_in_gaf(gaf_path, [&](GafAlignment& a){
         f(a);
     });
+}
+
+
+AlignmentSummary::AlignmentSummary(int32_t start, int32_t stop):
+        start(start),
+        stop(stop),
+        n_match(0),
+        n_mismatch(0),
+        n_insert(0),
+        n_delete(0)
+{}
+
+
+AlignmentSummary::AlignmentSummary():
+        start(numeric_limits<int32_t>::max()),
+        stop(numeric_limits<int32_t>::min()),
+        n_match(0),
+        n_mismatch(0),
+        n_insert(0),
+        n_delete(0)
+{}
+
+
+void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
+    switch (c.code){
+        case 7:
+            n_match += float(c.length);    // =
+            break;
+        case 8:
+            n_mismatch += float(c.length); // X
+            break;
+        case 1:
+            n_insert += float(c.length);   // I
+            break;
+        case 2:
+            n_delete += float(c.length);   // D
+            break;
+        default:
+            break;
+    }
+
+    if (is_ref){
+        auto [a,b] = c.get_forward_ref_interval();
+        if (a < start){
+            start = a;
+        }
+        if (b > stop){
+            stop = b;
+        }
+    }
+    else{
+        auto [a,b] = c.get_forward_query_interval();
+        if (a < start){
+            start = a;
+        }
+        if (b > stop){
+            stop = b;
+        }
+    }
+}
+
+
+void GafSummary::update_ref(const string& ref_name, const CigarInterval& c, bool insert){
+    auto& result = ref_summaries[ref_name];
+    if (insert){
+        result.emplace_back();
+    }
+    result.back().update(c, true);
+}
+
+
+void GafSummary::update_query(const string& query_name, const CigarInterval& c, bool insert){
+    auto& result = ref_summaries[query_name];
+    if (insert){
+        result.emplace_back();
+    }
+    result.back().update(c, false);
+}
+
+
+HalfInterval::HalfInterval(size_t id, int32_t position, bool is_start):
+        id(id),
+        position(position),
+        is_start(is_start)
+{}
+
+
+/**
+ * Sweep algorithm to split intervals into intersections
+ * @param alignments
+ * @param is_ref
+ */
+void GafSummary::resolve_overlaps(vector<AlignmentSummary>& alignments) {
+    if (alignments.size() <= 1){
+        return;
+    }
+
+    vector <HalfInterval> half_intervals;
+    vector <int32_t> positions;
+    vector <unordered_set<size_t> > ids;
+    vector <AlignmentSummary> result;
+
+    for (size_t i=0; i<alignments.size(); i++){
+        const auto& a = alignments[i];
+        half_intervals.emplace_back(i,a.start,true);
+        half_intervals.emplace_back(i,a.stop,false);
+    }
+
+    // How to sort labeled intervals with structure ((a,b), label) by start (a)
+    auto left_comparator = [](const HalfInterval& a, const HalfInterval& b){
+        if (a.position == b.position){
+            return a.is_start > b.is_start;
+        }
+        else {
+            return a.position < b.position;
+        }
+    };
+
+    sort(half_intervals.begin(), half_intervals.end(), left_comparator);
+
+    const auto& x = half_intervals[0];
+    positions.emplace_back(x.position);
+    ids.push_back({x.id});
+
+    // With at least 2 intervals, should be guaranteed 4 half intervals in the vector
+    for (size_t i=1; i<half_intervals.size(); i++){
+        const auto& h = half_intervals[i];
+
+//        cerr << "-- " << h.position << ',' << (h.is_start ? '[' : ')') << ',' << h.id << '\n';
+
+        // Every time an element is added or removed, update the vector of intersected_intervals:
+        //  1. Extend the previous interval
+        //  2. Remove/add an element from the set (check if the start/stop is not identical to prev)
+        if (h.is_start){
+            // Only terminate the previous interval if this one does not have the same position
+            if (h.position > positions.back()) {
+                // Add new breakpoint
+                positions.emplace_back(h.position);
+                ids.emplace_back(ids.back());
+            }
+            // ADD item to last set
+            ids.back().emplace(h.id);
+        }
+        else{
+            // Only terminate the previous interval if this one does not have the same position
+            if (h.position > positions.back()) {
+                // Add new breakpoint
+                positions.emplace_back(h.position);
+                ids.emplace_back(ids.back());
+            }
+            // REMOVE item from last set
+            ids.back().erase(h.id);
+        }
+    }
+
+    // Finally construct new alignments that are the average of the overlapping alignments
+    for (size_t i=0; i<ids.size() - 1; i++){
+        result.emplace_back();
+        result.back().start = positions[i];
+        result.back().stop = positions[i+1];
+
+        for (auto id: ids[i]){
+            result.back().n_match += alignments[id].n_match;
+            result.back().n_mismatch += alignments[id].n_mismatch;
+            result.back().n_insert += alignments[id].n_insert;
+            result.back().n_delete += alignments[id].n_delete;
+        }
+
+        auto n = float(ids[i].size());
+        result.back().n_match /= n;
+        result.back().n_mismatch /= n;
+        result.back().n_insert /= n;
+        result.back().n_delete /= n;
+    }
+
+    alignments = std::move(result);
+}
+
+
+void GafSummary::resolve_all_overlaps() {
+    for (auto& [name, alignments]: ref_summaries){
+        resolve_overlaps(alignments);
+    }
+    for (auto& [name, alignments]: query_summaries){
+        resolve_overlaps(alignments);
+    }
 }
 
 
