@@ -54,19 +54,19 @@ public:
      */
     bool pass_only, high_qual_only;
     int32_t min_sv_length, n_samples_to_load;
-    float min_qual, min_af, min_nmf;
+    double min_qual, min_af, min_nmf;
 
     /**
      * Values derived from the user constraints above
      */
-    float min_n_haplotypes_alt_baseline, min_n_haplotypes_nonmissing_baseline;
-    uint32_t min_n_haplotypes_alt, min_n_haplotypes_nonmissing;
+    double min_n_haplotypes_alt_baseline, min_n_haplotypes_nonmissing_baseline;
+    int32_t min_n_haplotypes_alt, min_n_haplotypes_nonmissing;
 
     /**
      * VCF fields loaded from a line
      */
     bool is_autosomal;
-    float qual;  // -1 = missing
+    double qual;  // -1 = missing
     int32_t pos;
     string chrom, id, ref, alt, filter, info, format;
     vector<string> genotypes;
@@ -77,9 +77,9 @@ public:
     bool is_high_quality, is_pass, is_symbolic;
     int8_t sv_type;  // -1 = unsupported type
     int32_t sv_length;  // MAX = the length of the SV could not be inferred
-    uint32_t n_alts;  // >1 iff the site is multiallelic
-    uint32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
-    uint32_t n_haplotypes_ref, n_haplotypes_alt;
+    int32_t n_alts;  // >1 iff the site is multiallelic
+    int32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
+    int32_t n_haplotypes_ref, n_haplotypes_alt;
 
     /**
      * @param n_samples_to_load number of samples in a line that are interesting for the user;
@@ -89,7 +89,13 @@ public:
      * @param min_af calls with too few haplotypes containing the ALT allele are discarded by the user;
      * @param min_nmf calls with too few non-missing haplotypes are discarded by the user.
      */
-    VcfRecord(bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_af, float min_nmf);
+    VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf);
+
+    /**
+     * @return a new object that contains a copy of every variable of the current object that was loaded from a VCF
+     * record; the state of every other variable is undefined.
+     */
+    VcfRecord clone() const;
 
     /**
      * Reads `stream` until EOL/EOF and loads some or all of the data in the current line.
@@ -124,7 +130,7 @@ public:
      * @param tmp_buffer reused temporary space;
      * @return number of GT haplotypes in `sample` (zero iff `sample` is invalid).
      */
-    uint8_t get_gt(uint32_t sample, pair<int8_t,int8_t>& out);
+    uint8_t get_gt(int32_t sample, pair<int8_t,int8_t>& out);
 
     /**
      * Remark: this performs a linear scan of `info`.
@@ -132,7 +138,7 @@ public:
      * @return the first occurrence of `key` in `ìnfo[from..]`, if present (in this case `out` contains the value of
      * `key`); `string::npos` if `key` does not occur in `ìnfo`.
      */
-    size_t get_info_field(const string& key, const size_t from, string& out) const;
+    size_t get_info_field(const string& key, size_t from, string& out) const;
 
     /**
      * Remark: it can happen that there are two copies of a chromosome but the GT field contains just one value (e.g.
@@ -141,7 +147,7 @@ public:
      * @param buffer the content of a VCF sample field;
      * @return out output pair, containing the number of zero (`.first`) and nonzero (`.second`) haplotypes.
      */
-    void ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out) const;
+    static void ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& out);
 
     /**
      * Remark: a haploid sample is assumed to be phased.
@@ -157,17 +163,25 @@ public:
 
     /**
      * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
-     * ID must be used in conjunction with VcfReader to find the
      */
-    void get_samples_with_alt(unordered_set<uint32_t>& out);
+    void get_samples_with_alt(unordered_set<int32_t>& out);
 
     /**
      * Stores in `out` the zero-based IDs of all the elements of `genotypes` that contain a nonzero.
-     * ID must be used in conjunction with VcfReader to find the
      */
-    void get_samples_with_alt(set<uint32_t>& out);
+    void get_samples_with_alt(set<int32_t>& out);
 
     bool is_alt_symbolic() const;
+
+    /**
+     * @return 0=single breakend without inserted sequence; 1=with inserted sequence; 2=not a single breakend.
+     */
+    uint8_t is_breakend_single() const;
+
+    /**
+     * Virtual telomeric breakends are artificial records that carry no information.
+     */
+    bool is_breakend_virtual(const unordered_map<string,string>& chromosomes);
 
     /**
      * Remark: `out` is set to an empty string if the chromosome could not be determined.
@@ -175,25 +189,34 @@ public:
     void get_breakend_chromosome(string& out) const;
 
     /**
-     * @return UINT64_MAX if the position could not be determined.
+     * @return INT32_MAX if the position could not be determined.
      */
-    uint32_t get_breakend_pos();
+    int32_t get_breakend_pos();
 
     /**
+     * Remark: the procedure works also for single breakends.
+     *
      * @return
      * 0 if the orientation could not be determined;
-     * 1 if the breakend continues to the left of `pos`;
-     * 2 if the breakend continues the the right of `pos`.
+     * 1 if the CIS side of the breakend extends to the left of `pos`;
+     * 2 if the CIS side of the breakend extends the the right of `pos`.
      */
     uint8_t get_breakend_orientation_cis() const;
 
     /**
-    * @return
-    * 0 if the orientation could not be determined;
-    * 1 if the breakend continues to the left of the position in `alt`;
-    * 2 if the breakend continues the the right of the position in `alt`.
-    */
+     * @return
+     * 0 if the orientation could not be determined;
+     * 1 if the TRANS side of the breakend extends to the left of the position in `alt`;
+     * 2 if the TRANS side of the breakend extends the the right of the position in `alt`.
+     */
     uint8_t get_breakend_orientation_trans() const;
+
+    /**
+     * Stores in `out` all bases inserted between the breakend position and its mate, if any. E.g.:
+     * - If REF=`T` and ALT=`]chr13:123456]AGTNNNNNCAT`, the procedure returns `AGTNNNNNCA`.
+     * - If REF=`T` and ALT=`.AGTNNNNNCAT`, the procedure returns `AGTNNNNNCA`.
+     */
+    void get_breakend_inserted_sequence(string& out) const;
 
     /**
      * Checks the IMPRECISE tag and the confidence intervals fields.
@@ -205,17 +228,19 @@ public:
      * (typically <=0); `second`: quantity to be added to `pos` to get the last position of the confidence interval
      * (typically >=0).
 	 */
-    void get_confidence_interval_pos(pair<float, float>& out);
-    void get_confidence_interval_end(pair<float, float>& out);
-    void get_confidence_interval_length(pair<float, float>& out);
+    void get_confidence_interval_pos(pair<double,double>& out);
+    void get_confidence_interval_end(pair<double,double>& out);
+    void get_confidence_interval_length(pair<double,double>& out);
 
     /**
-     * Stores in `out` the zero-based coordinates of the SV in the reference:
-     * - if the SV affects all and only the zero-based positions in a closed interval [x..y], out=(x,y+1);
-     * - if the SV is an INS between zero-based positions x and x+1, out=(x,x);
-     * - if the SV is a BND, either between zero-based positions x and x+1, or between zero-based positions x-1 and x,
-     *   out=(x,x);
-     * - if a value cannot be determined, it is set to UINT64_MAX.
+     * Stores in `out` the zero-based coordinates of the SV in the reference.
+     * - If the SV affects all and only the zero-based positions in a closed interval `[x..y]`, `out=(x,y+1)`.
+     * - If the SV is an INS between zero-based positions `x` and `x+1`, `out=(x+1,x+1)`. Note that `x=-1` is allowed
+     *   (telomeric insertion).
+     * - If the SV is a BND, either between zero-based positions `x` and `x+1`, or between zero-based positions `x-1`
+     *   and `x`, `out=(x,x)`. The spec allows `x=-1` (virtual telomeric breakend), but the function returns INT32_MAX
+     *   instead, since a virtual breakend carries no information.
+     * - If a value cannot be determined, it is set to INT32_MAX.
      *
      * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
      * `sv_length`, if available.
@@ -228,7 +253,7 @@ private:
      */
     string tmp_buffer_1, tmp_buffer_2;
     pair<uint8_t, uint8_t> tmp_pair;
-    pair<float, float> tmp_pair_2;
+    pair<double,double> tmp_pair_2;
 
     /**
      * Sets `sv_type` using `ref`, `alt` and `info`, which are assumed to be already set.
@@ -243,6 +268,8 @@ private:
      * - INFO.END if it exists;
      * - non-symbolic ALT if it exists.
      *
+     * Remark: the length of a replacement record is arbitrarily set to the length of the substring of the reference
+     * that is to be replaced.
      * Remark: `ref`, `alt` and `info` are assumed to be already set.
      *
      * @param tmp_buffer reused temporary space.
@@ -254,14 +281,14 @@ private:
      *
      * @return TRUE iff some VCF fields were skipped.
      */
-    bool set_field(const string& field, uint32_t field_id, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, float min_af, float min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
+    bool set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
 
     /**
      * Core logic of confidence intervals extraction
      *
      * @param which 0=pos, 1=sv_length, 2=end.
      */
-    void get_confidence_interval(uint8_t which, pair<float, float>& out);
+    void get_confidence_interval(uint8_t which, pair<double,double>& out);
 };
 
 
@@ -311,6 +338,7 @@ public:
     static const uint16_t STDEV_END_STR_LENGTH;
     static const string PRECISE_STR;
     static const string IMPRECISE_STR;
+    static const string MATEID_STR;
 
     /**
      * Supported SV types
@@ -321,6 +349,7 @@ public:
     static const uint8_t TYPE_DUPLICATION;
     static const uint8_t TYPE_BREAKEND;
     static const uint8_t TYPE_REPLACEMENT;
+    static const uint8_t TYPE_CNV;
 
     /**
      * Supported SV types: labels used by the callers.
@@ -335,35 +364,35 @@ public:
     static const string DUP_INT_STR;
     static const string INV_STR;
     static const string BND_STR;
+    static const string CNV_STR;
 
     /**
      * Configuration parameters. See `VcfRecord` for details.
      * This is public to allow users to set only specific parameters.
      */
-    uint32_t progress_n_lines;
+    int32_t progress_n_lines;
     bool high_qual_only;
-    float min_qual;
+    double min_qual;
     bool pass_only;
-    uint32_t min_sv_length;
-    uint32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample. MAX=load all samples.
-    float min_allele_frequency;
-    float min_nonmissing_frequency;
+    int32_t min_sv_length;
+    int32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample. MAX=load all samples.
+    double min_allele_frequency;
+    double min_nonmissing_frequency;
 
     /**
      * All the samples in the VCF according to the header
      */
     vector<string> sample_ids;
-    uint32_t n_samples_in_vcf;
+    int32_t n_samples_in_vcf;
 
     /**
      * @param path a VCF file that contains only calls in `chromosome`;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
-    VcfReader(const path& vcf_path, uint32_t progress_n_lines, bool high_qual_only, float min_qual, bool pass_only, uint32_t min_sv_length, uint32_t n_samples_to_load, float min_allele_frequency, float min_nonmissing_frequency);
+    VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency);
     VcfReader(const path& vcf_path);
 
     /**
-     *
      * @param callback called on every VCF record that passes the constraints; see `VcfRecord` for details;
      */
     void for_record_in_vcf(const function<void(VcfRecord& record)>& callback);

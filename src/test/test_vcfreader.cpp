@@ -15,8 +15,8 @@ using sv_merge::VcfReader;
 
 
 ofstream outstream;
-unordered_set<uint32_t> tmp_set;
-pair<float, float> tmp_pair;
+unordered_set<int32_t> tmp_set;
+pair<double,double> tmp_pair;
 string tmp_string;
 
 void test_callback(VcfRecord& record) { record.print(outstream); outstream << '\n'; }
@@ -61,7 +61,7 @@ void test_callback_4(VcfRecord& record) {
 /**
  * Performs `input_vcf -> test_vcf` and compares `test_vcf` to `truth_vcf`.
  */
-void test(const function<void(VcfRecord& record)>& callback, const string& test_id, const string& chromosome, const bool high_qual_only, const float min_qual, const bool pass_only, const uint32_t min_sv_length, const uint32_t n_samples_to_load, const float min_af, const float min_nmf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
+void test(const function<void(VcfRecord& record)>& callback, const string& test_id, const string& chromosome, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     cerr << "Test ID: " << test_id << '\n';
     cerr << "   chromosome: " << chromosome << '\n';
     cerr << "   high_qual_only: " << high_qual_only << '\n';
@@ -75,17 +75,17 @@ void test(const function<void(VcfRecord& record)>& callback, const string& test_
     outstream.open(test_vcf);
     reader.for_record_in_vcf(callback);
     outstream.close();
-    for (auto sample_id: reader.sample_ids) cerr << sample_id << "  ";
+    for (const auto& sample_id: reader.sample_ids) cerr << sample_id << "  ";
     cerr << "\n";
     string command = "diff --brief "+test_vcf.string()+" "+truth_vcf.string();
     run_command(command);
 }
 
 
-void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, const string& caller_id, const vector<string>& CHROMOSOMES, const vector<float>& MIN_QUALS, const vector<int>& MIN_SV_LENGTHS, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
+void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, const string& caller_id, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<int>& MIN_SV_LENGTHS, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
-    uint32_t min_sv_length;
-    float min_qual, min_af, min_nmf;
+    int32_t min_sv_length;
+    double min_qual, min_af, min_nmf;
     string command;
 
     for (auto& chromosome: CHROMOSOMES) {
@@ -140,10 +140,10 @@ void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, c
 /**
  * Currently tuned for the "raw" HPRC VCF.
  */
-void test_joint_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOMES, const vector<float>& MIN_QUALS, const vector<float>& MIN_AFS, const vector<float>& MIN_NMFS, const string& N_THREADS, const path& tmp1_vcf, const path& tmp2_vcf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
+void test_joint_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<double>& MIN_AFS, const vector<double>& MIN_NMFS, const string& N_THREADS, const path& tmp1_vcf, const path& tmp2_vcf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
-    uint32_t min_sv_length, n_samples_to_load, n_haplotypes;
-    float min_qual, min_af, min_nmf;
+    int32_t min_sv_length, n_samples_to_load, n_haplotypes;
+    double min_qual, min_af, min_nmf;
     string command;
 
     n_samples_to_load=45;
@@ -207,9 +207,9 @@ int main(int argc, char* argv[]) {
      * Testing ranges
      */
     const vector<int> MIN_SV_LENGTHS = {0, 50, 100, 500, 1000};
-    const vector<float> MIN_QUALS = {0.0, 10.0, 20.0, 30.0};
-    const vector<float> MIN_AFS = {0.02, 0.08, 0.16, 0.32, 0.64};
-    const vector<float> MIN_NMFS = {0.02, 0.08, 0.16, 0.32, 0.64};
+    const vector<double> MIN_QUALS = {0.0, 10.0, 20.0, 30.0};
+    const vector<double> MIN_AFS = {0.02, 0.08, 0.16, 0.32, 0.64};
+    const vector<double> MIN_NMFS = {0.02, 0.08, 0.16, 0.32, 0.64};
     // sniffles (and maybe others) doesn't have chrM calls.
     const vector<string> CHROMOSOMES_SINGLE_SAMPLE = {"chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8","chr9","chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22","chrX","chrY"};
     // chrY and chrM are not present in the HPRC VCF. Our AF filters in chrX behave differently from bcftools and would
