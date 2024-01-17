@@ -478,7 +478,7 @@ void VcfRecord::get_samples_with_alt(unordered_set<int32_t>& out) {
 
     out.clear();
     for (i=0; i<SIZE; i++) {
-        tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
+        tmp_buffer_1.clear(); tmp_buffer_1.append(genotypes.at(i));
         ncalls_in_sample(tmp_buffer_1,tmp_pair);
         if (tmp_pair.second!=0) out.emplace(i);
     }
@@ -491,7 +491,7 @@ void VcfRecord::get_samples_with_alt(set<int32_t>& out) {
 
     out.clear();
     for (i=0; i<SIZE; i++) {
-        tmp_buffer_1.clear(); tmp_buffer_1+=genotypes.at(i);
+        tmp_buffer_1.clear(); tmp_buffer_1.append(genotypes.at(i));
         ncalls_in_sample(tmp_buffer_1,tmp_pair);
         if (tmp_pair.second!=0) out.emplace(i);
     }

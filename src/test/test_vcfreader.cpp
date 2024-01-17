@@ -24,7 +24,12 @@ void test_callback(VcfRecord& record) { record.print(outstream); outstream << '\
 // TODO: implement proper test
 void test_callback_2(VcfRecord& record) {
     record.get_samples_with_alt(tmp_set);
-    for (auto& id: tmp_set) { outstream << id << ","; }
+
+    vector<int32_t> tmp_vector;
+    tmp_vector.reserve(tmp_set.size());
+    for (auto i: tmp_set) tmp_vector.push_back(i);
+    sort(tmp_vector.begin(),tmp_vector.end());
+    for (int32_t i=0; i<tmp_vector.size(); i++) { outstream << to_string(tmp_vector.at(i)) << ","; }
     outstream << "\n";
 }
 
