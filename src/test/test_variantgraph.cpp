@@ -6,6 +6,8 @@ using sv_merge::interval_t;
 using sv_merge::run_command;
 using sv_merge::VcfReader;
 using sv_merge::VariantGraph;
+using bdsg::step_handle_t;
+using bdsg::HashGraph;
 
 #include <iostream>
 #include <algorithm>
@@ -99,7 +101,7 @@ void print_truth_vcf(uint8_t mode, bool print_mateid_tag, ofstream& out) {
 /**
  * Excluding symbolic INS
  */
-int32_t get_n_vcf_records() { return 43; }
+size_t get_n_vcf_records() { return 43; }
 
 vector<string> get_caller_ids() { return vector<string> {"sniffles","pbsv","pav","svim","cutesv","svision"}; }
 
@@ -383,8 +385,8 @@ void print_truth_vcf_paths(ofstream& out) {
 /**
  * Assumes that the symbolic INS is not in the list of VCF records.
  */
-vector<pair<edge_t,int32_t>> get_edge_record_map(const HashGraph& graph, const vector<string>& node_ids) {
-    vector<pair<edge_t,int32_t>> out;
+vector<pair<edge_t,size_t>> get_edge_record_map(const HashGraph& graph, const vector<string>& node_ids) {
+    vector<pair<edge_t,size_t>> out;
     handle_t handle_from, handle_to;
 
     // dup1
@@ -420,13 +422,15 @@ vector<pair<edge_t,int32_t>> get_edge_record_map(const HashGraph& graph, const v
     out.emplace_back(graph.edge_handle(handle_from,handle_to),6);
 
     // ins1
+    handle_from=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"1_6"))+1);
+    handle_from=graph.flip(handle_from);
+    handle_to=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"ins1"))+1);
+    handle_to=graph.flip(handle_to);
+    out.emplace_back(graph.edge_handle(handle_from,handle_to),7);
     handle_from=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"ins1"))+1);
     handle_from=graph.flip(handle_from);
     handle_to=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"1_4"))+1);
     handle_to=graph.flip(handle_to);
-    out.emplace_back(graph.edge_handle(handle_from,handle_to),7);
-    handle_from=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"ins1"))+1);
-    handle_to=graph.get_handle(distance(node_ids.begin(),lower_bound(node_ids.begin(),node_ids.end(),"1_6"))+1);
     out.emplace_back(graph.edge_handle(handle_from,handle_to),7);
 
     // inv2
@@ -688,6 +692,344 @@ unordered_map<string,vector<interval_t>> get_tandem_track() {
 }
 
 
+
+void test_is_reference(VariantGraph& graph, const vector<string>& node_labels) {
+    const vector<string> reference_nodes = {
+            "1_1","1_2","1_3","1_4","1_6","1_7","1_8","1_9","1_10","1_11","1_12","1_13","1_14","1_17","1_18","1_19","1_20","1_21","1_22","1_23","1_24","1_25","1_26","1_28","1_29","1_129","1_130",
+            "2_40","2_50","2_55","2_58","2_61","2_166","2_167","2_172","2_285",
+            "3_60","3_67"
+    };
+    const vector<string> reference_nodes_1_1 = {"1_1","1_2","1_3","1_4","1_6","1_7","1_8","1_9","1_10","1_11","1_12","1_13","1_14","1_17","1_18","1_19","1_20","1_21","1_22","1_23","1_24","1_25","1_26","1_28","1_29"};
+    const vector<string> reference_nodes_1_2 = {"1_129","1_130"};
+    const vector<string> reference_nodes_2_1 = {"2_40","2_50","2_55","2_58","2_61"};
+    const vector<string> reference_nodes_2_2 = {"2_166","2_167","2_172"};
+    const vector<string> reference_nodes_3 = {"3_60","3_67"};
+    const vector<string> nonreference_nodes = {"ins1","ins2","ins3","rep1","bnd10","bnd11","bnd12","bnd5","bnd6","bnd7","bnd8","ins0","ins5","rep2","rep3"};
+    const vector<pair<string,string>> nonreference_edges = {{"1_2","1_9"},{"1_4","1_13"},{"1_7","1_17"},{"1_3","1_18"},{"1_4","ins1"},{"ins1","1_6"},{"1_9","ins2"},{"ins2","1_10"},{"1_11","ins3"},{"ins3","1_12"},{"1_8","rep1"},{"rep1","1_23"},{"1_26","1_2"},{"bnd10","1_18"},{"1_25","bnd11"},{"bnd12","1_26"},{"2_40","1_3"},{"1_19","2_61"},{"bnd5","1_20"},{"3_67","bnd6"},{"bnd6","1_24"},{"1_129","bnd7"},{"bnd7","3_67"},{"1_130","bnd8"},{"1_13","2_167"},{"ins0","1_1"},{"1_130","ins5"},{"1_12","1_1"},{"1_130","1_130"},{"rep2","1_18"},{"1_129","rep3"},{"2_285","1_1"}};
+    // For simplicity, only nonreference edges where both handles are in the FWD orientation are used.
+    nid_t node_id;
+
+    graph.insertion_handles_set_clear();
+    for (const auto& label: nonreference_nodes) graph.insertion_handles_set_insert(label,node_labels);
+
+    // Nodes
+    for (const auto& label: reference_nodes) {
+        const auto iterator = lower_bound(node_labels.begin(),node_labels.end(),label);
+        node_id=distance(node_labels.begin(),iterator)+1;  // Node IDs cannot be zero
+        if (!graph.is_reference_node(node_id)) throw runtime_error("is_reference_node() failed on node "+label);
+        if (!graph.is_reference_node(graph.graph.get_handle(node_id,false))) throw runtime_error("is_reference_node() failed on the forward handle of node "+label);
+        if (!graph.is_reference_node(graph.graph.get_handle(node_id,true))) throw runtime_error("is_reference_node() failed on the reverse handle of node "+label);
+    }
+    for (const auto& label: nonreference_nodes) {
+        const auto iterator = lower_bound(node_labels.begin(),node_labels.end(),label);
+        node_id=distance(node_labels.begin(),iterator)+1;  // Node IDs cannot be zero
+        if (graph.is_reference_node(node_id)) throw runtime_error("is_reference_node() failed on node "+label);
+        if (graph.is_reference_node(graph.graph.get_handle(node_id,false))) throw runtime_error("is_reference_node() failed on the forward handle of node "+label);
+        if (graph.is_reference_node(graph.graph.get_handle(node_id,true))) throw runtime_error("is_reference_node() failed on the reverse handle of node "+label);
+    }
+
+    // Edges
+    for (size_t i=1; i<reference_nodes_1_1.size(); i++) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_1_1.at(i-1)))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_1_1.at(i)))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+reference_nodes_1_1.at(i-1)+"--"+reference_nodes_1_1.at(i));
+        edge=edge_t(graph.graph.flip(edge.second),graph.graph.flip(edge.first));
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on reverse edge "+reference_nodes_1_1.at(i-1)+"--"+reference_nodes_1_1.at(i));
+    }
+    for (size_t i=1; i<reference_nodes_1_2.size(); i++) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_1_2.at(i-1)))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_1_2.at(i)))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+reference_nodes_1_2.at(i-1)+"--"+reference_nodes_1_2.at(i));
+        edge=edge_t(graph.graph.flip(edge.second),graph.graph.flip(edge.first));
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on reverse edge "+reference_nodes_1_2.at(i-1)+"--"+reference_nodes_1_2.at(i));
+    }
+    for (size_t i=1; i<reference_nodes_2_1.size(); i++) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_2_1.at(i-1)))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_2_1.at(i)))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+reference_nodes_2_1.at(i-1)+"--"+reference_nodes_2_1.at(i));
+        edge=edge_t(graph.graph.flip(edge.second),graph.graph.flip(edge.first));
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on reverse edge "+reference_nodes_2_1.at(i-1)+"--"+reference_nodes_2_1.at(i));
+    }
+    for (size_t i=1; i<reference_nodes_2_2.size(); i++) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_2_2.at(i-1)))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_2_2.at(i)))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+reference_nodes_2_2.at(i-1)+"--"+reference_nodes_2_2.at(i));
+        edge=edge_t(graph.graph.flip(edge.second),graph.graph.flip(edge.first));
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on reverse edge "+reference_nodes_2_2.at(i-1)+"--"+reference_nodes_2_2.at(i));
+    }
+    for (size_t i=1; i<reference_nodes_3.size(); i++) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_3.at(i-1)))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),reference_nodes_3.at(i)))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+reference_nodes_3.at(i-1)+"--"+reference_nodes_3.at(i));
+        edge=edge_t(graph.graph.flip(edge.second),graph.graph.flip(edge.first));
+        if (!graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on reverse edge "+reference_nodes_3.at(i-1)+"--"+reference_nodes_3.at(i));
+    }
+    for (const auto& pair: nonreference_edges) {
+        const handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),pair.first))+1);
+        const handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),pair.second))+1);
+        edge_t edge = graph.graph.edge_handle(handle_from,handle_to);
+        if (graph.is_reference_edge(edge)) throw runtime_error("is_reference_edge() failed on edge "+pair.first+"--"+pair.second);
+    }
+}
+
+
+void test_vcf_records_with_edges_impl(const string& from, bool from_is_forward, const string& to, bool to_is_forward, vector<edge_t>& edges, vector<VcfRecord>& records, VariantGraph& graph, const vector<string>& node_labels) {
+    handle_t handle_from = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),from))+1);
+    if (!from_is_forward) handle_from=graph.graph.flip(handle_from);
+    handle_t handle_to = graph.graph.get_handle(distance(node_labels.begin(),lower_bound(node_labels.begin(),node_labels.end(),to))+1);
+    if (!to_is_forward) handle_to=graph.graph.flip(handle_to);
+    edges.emplace_back(handle_from,handle_to);
+}
+
+
+void test_vcf_records_with_edges(VariantGraph& graph, const vector<string>& node_labels) {
+    vector<edge_t> edges;
+    vector<VcfRecord> records;
+    string id;
+
+    id="sniffles_del1";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_2",true,"1_9",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_del2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_4",true,"1_13",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_del3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_7",true,"1_17",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="sniffles_inv1";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_3",true,"1_18",false,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("1_4",false,"1_19",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_inv2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_6",true,"1_21",false,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("1_7",false,"1_22",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pav_inv3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_10",true,"1_24",false,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("1_11",false,"1_25",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svim_inv4";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_20",true,"1_28",false,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("1_21",false,"1_29",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_ins1";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_4",true,"ins1",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("ins1",true,"1_6",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pav_ins2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_9",true,"ins2",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("ins2",true,"1_10",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pav_ins3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_11",true,"ins3",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("ins3",true,"1_12",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_rep1";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_8",true,"rep1",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("rep1",true,"1_23",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_26",true,"1_2",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=3) throw runtime_error("get_vcf_records_with_edges() failed (1) on VCF records sniffles_dup1 = sniffles_bnd19");
+    vector<string> ids;
+    for (const auto& record: records) ids.emplace_back(record.id);
+    std::sort(ids.begin(),ids.end());
+    if (ids.at(0)!="cutesv_bnd20" || ids.at(1)!="sniffles_bnd19" || ids.at(2)!="sniffles_dup1") throw runtime_error("get_vcf_records_with_edges() failed (2) on VCF records sniffles_dup1 = sniffles_bnd19");
+
+    id="svim_bnd10";
+    edges.clear();
+    test_vcf_records_with_edges_impl("bnd10",true,"1_18",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svim_bnd11";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_25",true,"bnd11",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="cutesv_bnd12";
+    edges.clear();
+    test_vcf_records_with_edges_impl("bnd12",true,"1_26",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="sniffles_bnd1";
+    edges.clear();
+    test_vcf_records_with_edges_impl("2_40",true,"1_3",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pbsv_bnd2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_7",true,"2_50",false,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pav_bnd3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_8",false,"2_58",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svim_bnd4";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_19",true,"2_61",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svim_bnd5";
+    edges.clear();
+    test_vcf_records_with_edges_impl("bnd5",true,"1_20",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("2_172",false,"bnd5",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svim_bnd6";
+    edges.clear();
+    test_vcf_records_with_edges_impl("3_67",true,"bnd6",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("bnd6",true,"1_24",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="cutesv_bnd7";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_129",true,"bnd7",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("bnd7",true,"3_67",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="cutesv_bnd8";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_130",true,"bnd8",true,edges,records,graph,node_labels);
+    test_vcf_records_with_edges_impl("bnd8",true,"2_285",false,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="pav_bnd9";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_13",true,"2_167",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_ins0";
+    edges.clear();
+    test_vcf_records_with_edges_impl("ins0",true,"1_1",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_ins5";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_130",true,"ins5",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_dup2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_12",true,"1_1",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_dup3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_130",true,"1_130",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_inv5";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_1",false,"1_17",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_inv6";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_129",true,"1_130",false,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_rep2";
+    edges.clear();
+    test_vcf_records_with_edges_impl("rep2",true,"1_18",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_rep3";
+    edges.clear();
+    test_vcf_records_with_edges_impl("1_129",true,"rep3",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+
+    id="svision_bnd21";
+    edges.clear();
+    test_vcf_records_with_edges_impl("2_285",true,"1_1",true,edges,records,graph,node_labels);
+    graph.get_vcf_records_with_edges(edges,records);
+    if (records.size()!=1 || records.at(0).id!=id) throw runtime_error("get_vcf_records_with_edges() failed on VCF record "+id);
+}
+
+
+void test_for_each_vcf_record(VariantGraph& graph, const path& test_vcf) {
+    vector<pair<string,bool>> array;
+    vector<VcfRecord> records;
+    ofstream out;
+
+    graph.graph.for_each_path_handle([&](path_handle_t path) {
+        array.clear();
+        step_handle_t from = graph.graph.path_begin(path);
+        const step_handle_t end = graph.graph.path_end(path);
+        while (from!=end) {
+            const handle_t from_handle = graph.graph.get_handle_of_step(from);
+            array.emplace_back(std::to_string(graph.graph.get_id(from_handle)),graph.graph.get_is_reverse(from_handle));
+            from=graph.graph.get_next_step(from);
+        }
+        graph.for_each_vcf_record(array,[&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){ records.emplace_back(record); });
+    });
+    out.open(test_vcf.string());
+    print_truth_vcf_header(out);
+    for (const auto& record: records) { record.print(out); out << '\n'; }
+    out.close();
+}
+
+
 int main(int argc, char* argv[]) {
     const path ROOT_DIR = path(argv[1]);
 
@@ -698,8 +1040,8 @@ int main(int argc, char* argv[]) {
     const path TEST_VCF_2 = ROOT_DIR/"test2.vcf";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t FLANK_LENGTH = 10;
-    const int32_t SIGNATURE_N_STEPS = 10;
-    const int32_t N_REUSE_TESTS = 10;
+    const size_t SIGNATURE_N_STEPS = 10;
+    const size_t N_REUSE_TESTS = 10;
 
     ofstream input_vcf(INPUT_VCF.string());
     print_truth_vcf_header(input_vcf);
@@ -724,7 +1066,7 @@ int main(int argc, char* argv[]) {
     const vector<string> caller_ids = get_caller_ids();
     auto rd = std::random_device {};
     VariantGraph graph(chromosomes,tandem_track);
-    for (uint16_t i=0; i<N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
+    for (size_t i=0; i<N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
         cerr << "----- REUSE TEST " << std::to_string((i+1)) << " ------\n";
         auto rng = std::default_random_engine { rd() };
         vector<VcfRecord> records_prime = records;
@@ -774,12 +1116,16 @@ int main(int argc, char* argv[]) {
     print_truth_gfa(true,false,false,false,false,false,truth_gfa);
     truth_gfa.close();
     vector<string> node_labels = graph.load_gfa(TRUTH_GFA.string());
-    vector<pair<edge_t,int32_t>> edge_record_map = get_edge_record_map(graph.graph,node_labels);
+    vector<pair<edge_t,size_t>> edge_record_map = get_edge_record_map(graph.graph,node_labels);
     graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
     ofstream test_vcf(TEST_VCF.string());
     print_truth_vcf_header(test_vcf);
     graph.print_supported_vcf_records(test_vcf,false,caller_ids);
     test_vcf.close();
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=DEL' | sort > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=DEL' | sort > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
@@ -796,6 +1142,10 @@ int main(int argc, char* argv[]) {
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INV' | sort > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INV' | sort > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "INS...\n";
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
@@ -808,6 +1158,10 @@ int main(int argc, char* argv[]) {
     test_vcf.close();
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INS' | sort > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INS' | sort > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "REP...\n";
@@ -822,6 +1176,10 @@ int main(int argc, char* argv[]) {
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep rep | sort > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep rep | sort > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "DUP...\n";
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
@@ -834,6 +1192,10 @@ int main(int argc, char* argv[]) {
     test_vcf.close();
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "BND...\n";
@@ -848,6 +1210,10 @@ int main(int argc, char* argv[]) {
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "All types...\n";
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
@@ -860,6 +1226,10 @@ int main(int argc, char* argv[]) {
     test_vcf.close();
     command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    test_for_each_vcf_record(graph,TEST_VCF.string());
+    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
+    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "Testing paths_to_vcf_records()...\n";
@@ -893,6 +1263,37 @@ int main(int argc, char* argv[]) {
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp1.txt"); run_command(command);
     command.clear(); command.append("bcftools view --no-header "+TEST_VCF_2.string()+" | sort > tmp2.txt"); run_command(command);
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+
+    cerr << "Testing is_reference_node() and is_reference_edge()...\n";
+    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
+    print_truth_gfa(true,true,true,true,true,true,truth_gfa);
+    truth_gfa.close();
+    node_labels=graph.load_gfa(TRUTH_GFA.string());
+    edge_record_map=get_edge_record_map(graph.graph,node_labels);
+    graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
+    test_is_reference(graph,node_labels);
+
+    cerr << "Testing vcf_records_with_edges()...\n";
+    truth_vcf.clear(); truth_vcf.open(TRUTH_VCF.string());
+    print_truth_vcf_header(truth_vcf);
+    print_truth_vcf(0,false/*Arbitrary*/,truth_vcf);
+    truth_vcf.close();
+    records.clear();
+    VcfReader reader3(TRUTH_VCF);
+    reader3.for_record_in_vcf([&](VcfRecord& record) {
+        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
+           ) return;
+        records.push_back(record);
+    });
+    graph.build(records,FLANK_LENGTH,false,caller_ids);
+    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
+    print_truth_gfa(true,true,true,true,true,true,truth_gfa);
+    truth_gfa.close();
+    node_labels=graph.load_gfa(TRUTH_GFA.string());
+    edge_record_map=get_edge_record_map(graph.graph,node_labels);
+    graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
+    test_vcf_records_with_edges(graph,node_labels);
 
     cerr << "Removing temporary files...\n";
     command.clear(); command.append("rm -f truth*.vcf test*.vcf truth*.gfa test*.gfa tmp*.txt"); run_command(command);

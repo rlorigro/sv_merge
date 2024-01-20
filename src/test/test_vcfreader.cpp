@@ -29,7 +29,7 @@ void test_callback_2(VcfRecord& record) {
     tmp_vector.reserve(tmp_set.size());
     for (auto i: tmp_set) tmp_vector.push_back(i);
     sort(tmp_vector.begin(),tmp_vector.end());
-    for (int32_t i=0; i<tmp_vector.size(); i++) { outstream << to_string(tmp_vector.at(i)) << ","; }
+    for (size_t i=0; i<tmp_vector.size(); i++) { outstream << to_string(tmp_vector.at(i)) << ","; }
     outstream << "\n";
 }
 
@@ -87,9 +87,9 @@ void test(const function<void(VcfRecord& record)>& callback, const string& test_
 }
 
 
-void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, const string& caller_id, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<int>& MIN_SV_LENGTHS, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
+void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, const string& caller_id, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<size_t>& MIN_SV_LENGTHS, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
-    int32_t min_sv_length;
+    size_t min_sv_length;
     double min_qual, min_af, min_nmf;
     string command;
 
@@ -147,7 +147,7 @@ void test_single_sample_vcf(const path& caller_vcf, const bool filter_by_qual, c
  */
 void test_joint_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<double>& MIN_AFS, const vector<double>& MIN_NMFS, const string& N_THREADS, const path& tmp1_vcf, const path& tmp2_vcf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
     bool high_qual_only, pass_only;
-    int32_t min_sv_length, n_samples_to_load, n_haplotypes;
+    size_t min_sv_length, n_samples_to_load, n_haplotypes;
     double min_qual, min_af, min_nmf;
     string command;
 
@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
     /**
      * Testing ranges
      */
-    const vector<int> MIN_SV_LENGTHS = {0, 50, 100, 500, 1000};
+    const vector<size_t> MIN_SV_LENGTHS = {0, 50, 100, 500, 1000};
     const vector<double> MIN_QUALS = {0.0, 10.0, 20.0, 30.0};
     const vector<double> MIN_AFS = {0.02, 0.08, 0.16, 0.32, 0.64};
     const vector<double> MIN_NMFS = {0.02, 0.08, 0.16, 0.32, 0.64};

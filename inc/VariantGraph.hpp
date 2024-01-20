@@ -14,6 +14,7 @@ using bdsg::nid_t;
 using bdsg::HashGraph;
 using bdsg::handle_t;
 using bdsg::edge_t;
+using bdsg::path_handle_t;
 
 #include <string>
 #include <iterator>
@@ -36,6 +37,12 @@ namespace sv_merge {
  */
 class VariantGraph {
 public:
+    /**
+     * VCF records given in input to graph construction.
+     * Some VCF records might not have been used for building the graph.
+     */
+    vector<VcfRecord> vcf_records;
+
     /**
      * Bidirected graph. Users are assumed to interact with it directly.
      */
@@ -66,14 +73,16 @@ public:
      * chromosome, and that every record is biallelic. If an event starts at the first position of a chromosome, POS
      * must be zero and REF must start with N (this is the usual VCF convention; the VCF spec seems to deviate from this
      * convention at the first position of a chromosome). Duplicate records, if any, do not create duplicate edges in
-     * the graph; instead, they are all mapped to the same edge.
+     * the graph; instead, they are all mapped to the same edge. There can be records that are identical in everything
+     * except their ID, e.g. if they were created by different callers (although such records would have been merged by
+     * `bcftools merge` and their IDs would have been concatenated).
      * @param flank_length ensures that an interval of this length, with no overlap to the tandem track, is present
      * before the leftmost breakpoint (after the rightmost breakpoint) of every chromosome in the graph; if two
      * consecutive breakpoints are farther away than `flank_length`, two disconnected nodes are created;
      * @param deallocate_ref_alt TRUE: the procedure deallocates every REF and ALT field in `records`; this can be
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
-     * field of a VCF record to be counted.
+     * field of a VCF record in order to be considered.
      */
     void build(vector<VcfRecord>& records, int32_t flank_length, bool deallocate_ref_alt, const vector<string>& callers={});
 
@@ -86,15 +95,14 @@ public:
      * The procedure sets only variable `graph`. GFA paths are loaded, if any.
      *
      * @param gfa_path all node IDs are assumed to be distinct;
-     * @return sorted list of node IDs; the integer IDs in `graph` are positions in this list.
+     * @return lexicographically sorted list of node IDs; the integer IDs in `graph` are positions in this list.
      */
     vector<string> load_gfa(const path& gfa_path);
 
     /**
-     * Consider the set of VCF records that were used for building `graph`. Every such VCF record corresponds to a
-     * sequence of oriented edges. The procedure writes to a file every VCF record R such that there is a (possibly
-     * circular) path in `graph` that supports all the edges of R in their original orientation, or all of them in their
-     * reverse orientation.
+     * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a
+     * sequence of non-reference edges. The procedure writes to a file every R such that there is a (possibly circular)
+     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse.
      *
      * Remark: in the current implementation, DELs that remove a prefix or suffix of a chromosome create no edge in the
      * graph, so they cannot be supported by a path and they are not printed in output. This could be solved by creating
@@ -113,7 +121,7 @@ public:
     void print_supported_vcf_records(ofstream& outstream, bool print_all_records, const vector<string>& callers= {});
 
     /**
-     * Writes every path in `graph` as a distinct VCF record:
+     * Writes every path handle in `graph` as a distinct VCF record:
      * 1. a replacement record if the first and last node of the path are on the same chromosome, in the same
      * orientation, and with compatible positions;
      * 2. a BND record with inserted sequence if the first and last node are not on the same chromosome, or have
@@ -135,19 +143,72 @@ public:
      */
     void get_dangling_nodes(bool mode, unordered_set<nid_t>& out) const;
 
-    int32_t get_n_dangling_nodes() const;
+    size_t get_n_dangling_nodes() const;
 
     /**
      * @return the number of edges between two reference nodes that belong to different chromosomes. This might be
      * smaller than the number of inter-chromosomal BND records, if some BNDs have an inserted sequence.
      */
-    int32_t get_n_interchromosomal_edges() const;
+    size_t get_n_interchromosomal_edges() const;
 
     /**
      * @return the number of edges between a reference node and a new node not in the reference. This might be greater
      * than the number of INS and replacement records, if some BNDs have an inserted sequence.
      */
-    int32_t get_n_ins_edges() const;
+    size_t get_n_ins_edges() const;
+
+    bool is_reference_node(const nid_t& node_id);
+
+    /**
+     * @param node_handle in any orientation.
+     */
+    bool is_reference_node(const handle_t& node_handle);
+
+    /**
+     * @param edge in any orientation.
+     */
+    bool is_reference_edge(const edge_t& edge);
+
+    /**
+     * Every VCF record corresponds to a sequence of non-reference edges. The procedure makes `out` the set of all the
+     * VCF records whose sequence of non-reference edges coincides with the given sequence of edges or its reverse.
+     *
+     * @param edges each edge can be represented in any orientation;
+     * @param out VCF records are in the order in which they appear in `vcf_records`.
+     */
+    void get_vcf_records_with_edges(const vector<edge_t>& edges, vector<VcfRecord>& out);
+
+    /**
+     * Iterates over every VCF record and its sequence of non-reference edges. VCF records that do not contribute any
+     * non-reference edge to `graph` are not iterated.
+     *
+     * @param id unique integer identifier of `record`.
+     */
+    void for_each_vcf_record(const function<void(size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record)>& callback);
+
+    /**
+     * Given a path P, the procedure iterates over every VCF record R (and its non-reference edges) that is supported by
+     * P, i.e. such that P traverses the sequence of non-reference edges of R, or its reverse.
+     *
+     * @param path a sequence of pairs `(node_id, is_reverse)`; node IDs are assumed to come from the set of node IDs in
+     * `graph`;
+     * @param id a unique integer identifier of `record`.
+     */
+    void for_each_vcf_record(const vector<pair<string,bool>>& path, const function<void(size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record)>& callback);
+
+
+
+
+
+    // Also: handle identical records from different callers or files. which caller is most often represented in the output?
+
+
+
+
+
+
+
+
 
     /**
      * Prints to STDERR the number of non-reference edges supported by X VCF records, and the number of VCF records
@@ -168,14 +229,14 @@ public:
      *
      * Remark: strings in `seq_*` are not canonized.
      */
-    void print_graph_signature(int32_t max_steps, const path& output_path) const;
+    void print_graph_signature(size_t max_steps, const path& output_path) const;
 
     /**
      * Sets `edge_to_vcf_record` and `vcf_record_to_edge`.
      *
-     * @param map a list of (edge,vcfID) pairs.
+     * @param map a list of `(edge,vcfID)` pairs, where `edge` can be in any orientation.
      */
-    void load_edge_record_map(const vector<pair<edge_t,int32_t>>& map, int32_t n_vcf_records);
+    void load_edge_record_map(const vector<pair<edge_t,size_t>>& map, size_t n_vcf_records);
 
     /**
      * Erases `node_to_chromosome`.
@@ -185,7 +246,17 @@ public:
     /**
      * Inserts a mapping into `node_to_chromosome`.
      */
-    void node_to_chromosome_insert(const string& node_id, const vector<string> node_ids, const string& chromosome, int32_t position);
+    void node_to_chromosome_insert(const string& node_label, const vector<string>& node_labels, const string& chromosome, int32_t position);
+
+    /**
+     * Erases `insertion_handles_set`.
+     */
+    void insertion_handles_set_clear();
+
+    /**
+     * Inserts elements into `insertion_handles_set`.
+     */
+    void insertion_handles_set_insert(const string& node_label, const vector<string>& node_labels);
 
 private:
     /**
@@ -200,13 +271,14 @@ private:
     static const char GFA_FWD_CHAR;
     static const char GFA_REV_CHAR;
     static const char GFA_LINE_END;
+    static const char GAF_FWD_CHAR;
+    static const char GAF_REV_CHAR;
     static const uint64_t STREAMSIZE_MAX;
 
     const unordered_map<string,string>& chromosomes;
     const uint8_t n_chromosomes;
     const unordered_map<string,vector<interval_t>>& tandem_track;
-    vector<VcfRecord> vcf_records;
-    int32_t n_vcf_records;
+    size_t n_vcf_records;
     unordered_set<string> bnd_ids;  // ID field of every BND record
 
     /**
@@ -228,33 +300,35 @@ private:
      * identical to the ALT sequence of other VCF records.
      */
     vector<handle_t> insertion_handles;
+    unordered_set<handle_t> insertion_handles_set;  // Same content as above
 
     /**
-     * Maps every non-reference edge of the graph to the VCF records that support it.
+     * Maps every non-reference edge of the graph (in canonical form) to the VCF records that support it.
      */
-    unordered_map<edge_t,vector<int32_t>> edge_to_vcf_record;
+    unordered_map<edge_t,vector<size_t>> edge_to_vcf_record;
 
     /**
-     * For every VCF record: its sequence of non-reference edges in `graph`.
+     * For every VCF record: its sequence of non-reference edges in `graph` (in canonical form).
      */
     vector<vector<edge_t>> vcf_record_to_edge;
 
     /**
      * Reused temporary space
      */
-    vector<bool> printed;
-    vector<vector<uint8_t>> flags;
+    vector<bool> printed, initialized;
+    vector<vector<size_t>> flags;
     interval_t tmp_interval;
 
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
      */
-    inline int32_t find_closest(const string& chromosome, int32_t position) const;
+    inline size_t find_closest(const string& chromosome, int32_t position) const;
 
     /**
-     * Adds `(from,to)` to `graph` if not already present, and adds `record` to the edge in `edge_to_vcf_record`.
+     * Adds `(from,to)` to `graph` if not already present, and connects `record_id` to the edge in `edge_to_vcf_record`
+     * and `vcf_record_to_edge`.
      */
-    void add_nonreference_edge(const handle_t& from, const handle_t& to, int32_t record_id);
+    void add_nonreference_edge(const handle_t& from, const handle_t& to, size_t record_id);
 
     /**
      * Removes duplicated positions from a list.
@@ -262,12 +336,27 @@ private:
     static inline void sort_and_compact_positions(vector<int32_t>& positions);
 
     /**
-     * Transforms `path_encoding` (a path in GFA format) to a path in `graph`.
+     * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.
      *
      * @param node_ids string IDs used in the GFA file;
      * @param buffer temporary space.
      */
-    void load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
+    path_handle_t load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
+
+    /**
+     * Stores `path_encoding` (assumed to be a valid path in GAF format) in `graph`.
+     *
+     * @param path_encoding node IDs are assumed to come from the set of node IDs in `graph`.
+     */
+    path_handle_t load_gaf_path(const string& path_encoding, const string& path_name, string& buffer);
+
+    /**
+     * Stores `path_encoding` (assumed to be a valid path) in `graph`.
+     *
+     * @param path a sequence of pairs `(node_id, is_reverse)`; node IDs are assumed to come from the set of node IDs in
+     * `graph`.
+     */
+    path_handle_t load_gaf_path(vector<pair<string,bool>>& path, const string& path_name);
 
     /**
      * Destroys all paths in `graph` by iterating over them explicitly.
@@ -275,12 +364,23 @@ private:
     void destroy_paths();
 
     /**
-     * Looks for `query` in `edges`, and sets `flags[i]=1` (resp. 2; resp. 3) if `query` equals `edges[i]` in the
-     * forward (resp. reverse; resp. both forward and reverse) orientation.
+     * Looks up `query` in `edges`, and sets `flags[i]=rank` if the canonized `query` equals `edges[i]`.
      *
      * Remark: for simplicity this is implemented as a linear scan, since `edges` is assumed to be short.
+     *
+     * @param query in any orientation.
      */
-    void mark_edge(const edge_t& query, const vector<edge_t>& edges, vector<uint8_t>& flags) const;
+    void mark_edge(const edge_t& query, size_t rank, const vector<edge_t>& edges, vector<size_t>& flags) const;
+
+    /**
+     * Every VCF record corresponds to a sequence of non-reference edges. The procedure makes `out` the set of all
+     * VCF records whose sequence of non-reference edges (or its reverse) is identical to (if `identical=true`) or
+     * contained in (if `identical=false`) the given sequence of edges.
+     *
+     * @param edges each edge can be represented in any orientation;
+     * @param out positions in `vcf_records`, sorted.
+     */
+    void get_vcf_records_with_edges_impl(const vector<edge_t>& edges, bool identical, vector<size_t>& out);
 
     /**
      * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
@@ -306,18 +406,18 @@ private:
      * Remark: this is a recursive procedure that creates new string objects. It should be implemented more efficiently
      * with a stack of characters and without recursion.
      */
-    void print_signature_impl(const handle_t& handle, const string& path, int32_t steps_performed, int32_t max_steps, vector<string>& strings) const;
+    void print_signature_impl(const handle_t& handle, const string& path, size_t steps_performed, size_t max_steps, vector<string>& strings) const;
 
     /**
      * @param interval1,interval2 format [x..y).
      */
     static inline bool intersect(const interval_t& interval1, const interval_t& interval2);
 
-    static void print_sv_lengths(vector<int32_t>& lengths, uint8_t bin_size, const string& prefix) ;
+    static void print_sv_lengths(vector<size_t>& lengths, uint8_t bin_size, const string& prefix) ;
 
     static void print_bnds(vector<pair<string,string>>& bnds) ;
 
-    static void increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<int32_t>>& caller_count, uint8_t column);
+    static void increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<size_t>>& caller_count, uint8_t column);
 };
 
 }
