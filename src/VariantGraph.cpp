@@ -912,19 +912,21 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
 
     out.clear();
 
+    // Canonizing edges
+    tmp_edges.clear();
+    for (const auto& edge: edges) tmp_edges.emplace_back(graph.edge_handle(edge.first,edge.second));
+
     // Initializing `printed` and `flags`.
-    for (const auto& edge: edges) {
-        const edge_t canonized_edge = graph.edge_handle(edge.first,edge.second);
-        if (!edge_to_vcf_record.contains(canonized_edge)) {
+    for (const auto& edge: tmp_edges) {
+        if (!edge_to_vcf_record.contains(edge)) {
             if (identical) return;
             else continue;
         }
-        for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) initialized.at(r)=false;
+        for (const size_t& r: edge_to_vcf_record.at(edge)) initialized.at(r)=false;
     }
-    for (const auto& edge: edges) {
-        const edge_t canonized_edge = graph.edge_handle(edge.first,edge.second);
-        if (!edge_to_vcf_record.contains(canonized_edge)) continue;
-        for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
+    for (const auto& edge: tmp_edges) {
+        if (!edge_to_vcf_record.contains(edge)) continue;
+        for (const size_t& r: edge_to_vcf_record.at(edge)) {
             if (initialized.at(r)) continue;
             printed.at(r)=false;
             n_edges=vcf_record_to_edge.at(r).size();
@@ -935,18 +937,16 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
 
     // Marking `flags`.
     rank=1;
-    for (const auto& edge: edges) {
-        const edge_t canonized_edge = graph.edge_handle(edge.first,edge.second);
-        if (!edge_to_vcf_record.contains(canonized_edge)) { rank++; continue; }
-        for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) mark_edge(canonized_edge,rank,vcf_record_to_edge.at(r),flags.at(r));
+    for (const auto& edge: tmp_edges) {
+        if (!edge_to_vcf_record.contains(edge)) { rank++; continue; }
+        for (const size_t& r: edge_to_vcf_record.at(edge)) mark_edge(edge,rank,vcf_record_to_edge.at(r),flags.at(r));
         rank++;
     }
 
     // Finding supported VCF records
-    for (const auto& edge: edges) {
-        const edge_t canonized_edge = graph.edge_handle(edge.first,edge.second);
-        if (!edge_to_vcf_record.contains(canonized_edge)) continue;
-        for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
+    for (const auto& edge: tmp_edges) {
+        if (!edge_to_vcf_record.contains(edge)) continue;
+        for (const size_t& r: edge_to_vcf_record.at(edge)) {
             if (printed.at(r)) continue;
             n_edges=vcf_record_to_edge.at(r).size();
             if (!identical || n_edges==N_QUERY_EDGES) {
@@ -966,6 +966,7 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
         }
     }
     if (out.size()>1) sort(out.begin(),out.end());
+    tmp_edges.clear();
 }
 
 

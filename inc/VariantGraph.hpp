@@ -196,20 +196,6 @@ public:
      */
     void for_each_vcf_record(const vector<pair<string,bool>>& path, const function<void(size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record)>& callback);
 
-
-
-
-
-    // Also: handle identical records from different callers or files. which caller is most often represented in the output?
-
-
-
-
-
-
-
-
-
     /**
      * Prints to STDERR the number of non-reference edges supported by X VCF records, and the number of VCF records
      * creating X non-reference edges.
@@ -318,6 +304,7 @@ private:
     vector<bool> printed, initialized;
     vector<vector<size_t>> flags;
     interval_t tmp_interval;
+    vector<edge_t> tmp_edges;
 
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
