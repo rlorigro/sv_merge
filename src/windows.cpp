@@ -11,7 +11,7 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank
     vcf_reader.min_sv_length = 0;
     vcf_reader.progress_n_lines = 100'000;
 
-    unordered_set<uint32_t> sample_ids;
+    unordered_set<int32_t> sample_ids;
     unordered_set<string> sample_names;
 
     coord_t coord;

@@ -160,10 +160,10 @@ bool equal_ignore_case(const string& str1, const string& str2) {
     return true;
 }
 
+
 void lowercase_string(string& str) {
     const size_t length = str.length();
     for (size_t i=0; i<length; i++) str.at(i)=(char)tolower(str.at(i));
 }
-
 
 }

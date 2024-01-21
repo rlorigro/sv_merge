@@ -24,13 +24,13 @@ inline void hash_combine(size_t& seed, T const& v)
 }
 
 
-template <typename A, typename B>
-struct hash<pair<A,B> > {
-    size_t operator()(const pair<A,B>& x) const {
-        size_t hash_val = std::hash<A>()(x.first);
-        hash_combine(hash_val, x.second);
-        return hash_val;
-    }
-};
+//template <typename A, typename B>
+//struct hash<pair<A,B> > {
+//    size_t operator()(const pair<A,B>& x) const {
+//        size_t hash_val = std::hash<A>()(x.first);
+//        hash_combine(hash_val, x.second);
+//        return hash_val;
+//    }
+//};
 
 }
