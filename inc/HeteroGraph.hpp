@@ -42,8 +42,7 @@ public:
 
 
 template<class T> class HeteroGraph {
-    // node_id --> type_of_neighbor --> neighbor_id --> weight
-    unordered_map<int64_t, unordered_map<char, unordered_map <int64_t, float> > > edges;
+    unordered_map<int64_t, vector<pair <int64_t,float> > > edges;
     unordered_map<int64_t, T> nodes;
     unordered_map<string, int64_t> id_map;
     int64_t id_counter = 0;
@@ -54,6 +53,9 @@ public:
     void reserve_nodes(size_t n);
     void reserve_edges(size_t n);
     T& add_node(const string& name, char type);
+
+    // Simple helper function to search a vector and update it (since edges are stored in vectors)
+    void update_adjacency_list(int64_t id, float weight, vector<pair <int64_t,float> >& adjacencies);
 
     void add_edge(const string& name_a, const string& name_b, float weight);
     void add_edge(int64_t id_a, int64_t id_b, float weight);
@@ -91,6 +93,9 @@ public:
     void for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor, int64_t id)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const;
+
+    /// Helpers
+    pair<int64_t,int64_t> canonicalize_edge(int64_t a, int64_t b) const;
 };
 
 
@@ -175,17 +180,43 @@ template<class T> pair<bool,int64_t> HeteroGraph<T>::try_name_to_id(const string
 }
 
 
+template<class T> pair<int64_t,int64_t> HeteroGraph<T>::canonicalize_edge(int64_t a, int64_t b) const{
+    if (a > b){
+        return {b,a};
+    }
+    else{
+        return {a,b};
+    }
+}
+
+
+template<class T> void HeteroGraph<T>::update_adjacency_list(
+        int64_t id,
+        float weight,
+        vector<pair <int64_t,float> >& adjacencies) {
+
+    auto ab = std::find_if(adjacencies.begin(), adjacencies.end(), [&](pair<int64_t, float>& p){
+        return p.first == id;
+    });
+
+    if (ab == adjacencies.end()){
+        adjacencies.emplace_back(id, weight);
+    }
+    else{
+        ab->second = weight;
+    }
+}
+
+
 template<class T> void HeteroGraph<T>::add_edge(const string& name_a, const string& name_b, float weight) {
     auto id_a = name_to_id(name_a);
     auto id_b = name_to_id(name_b);
 
-    auto type_a = nodes.at(id_a).type;
-    auto type_b = nodes.at(id_b).type;
+    auto& result_a = edges[id_a];
+    auto& result_b = edges[id_b];
 
-    // Undirected by default, add both directions. Also, overwrite if it existed already.
-    // Because this is a heterogeneous graph we also want to sort the edges by type of neighbor
-    edges[id_a][type_b][id_b] = weight;
-    edges[id_b][type_a][id_a] = weight;
+    update_adjacency_list(id_b, weight, result_a);
+    update_adjacency_list(id_a, weight, result_b);
 }
 
 
@@ -202,13 +233,11 @@ template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, floa
         throw runtime_error("ERROR: cannot find id: " + to_string(id_b));
     }
 
-    auto type_a = result_a->second.type;
-    auto type_b = result_b->second.type;
+    auto& adjacencies_a = edges[id_a];
+    auto& adjacencies_b = edges[id_b];
 
-    // Undirected by default, add both directions. Also, overwrite if it existed already.
-    // Because this is a heterogeneous graph we also want to sort the edges by type of neighbor
-    edges[id_a][type_b][id_b] = weight;
-    edges[id_b][type_a][id_a] = weight;
+    update_adjacency_list(id_b, weight, adjacencies_a);
+    update_adjacency_list(id_a, weight, adjacencies_b);
 }
 
 
@@ -219,36 +248,23 @@ template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) cons
 
 // TODO: Untested
 template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t id_a, int64_t id_b) const{
-    auto r1 = edges.find(id_a);
-    if (r1 == edges.end()){
-        return {false,0};
+    pair<bool,float> value = {false, 0};
+
+    auto result = edges.find(id_a);
+
+    if (result != edges.end()){
+        auto& adjacencies = result->second;
+
+        auto ab = std::find_if(adjacencies.begin(), adjacencies.end(), [&](const pair<int64_t, float>& p){
+            return p.first == id_b;
+        });
+
+        if (ab != adjacencies.end()) {
+            value = {true, ab->second};
+        }
     }
 
-    auto result_a = nodes.find(id_a);
-    auto result_b = nodes.find(id_b);
-
-    if (result_a == nodes.end()){
-        return {false,0};
-    }
-
-    if (result_b == nodes.end()){
-        return {false,0};
-    }
-
-    auto type_b = result_b->second.type;
-
-    // Undirected by default
-    auto r2 = r1->second.find(type_b);
-    if (r2 == r1->second.end()){
-        return {false,0};
-    }
-
-    auto r3 = r2->second.find(id_b);
-    if (r3 == r2->second.end()){
-        return {false,0};
-    }
-
-    return {true,r3->second};
+    return value;
 }
 
 
@@ -261,32 +277,32 @@ template<class T> void HeteroGraph<T>::remove_edge(const string& name_a, const s
 
 
 template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
-    auto type_a = nodes.at(id_a).type;
-    auto type_b = nodes.at(id_b).type;
+    auto result_a = edges.find(id_a);
 
-    // Undirected by default
-    auto& result_a_type = edges.at(id_a);
-    auto& result_a = result_a_type.at(type_b);
-    result_a.erase(id_b);
+    if (result_a != edges.end()){
+        auto& adjacencies = result_a->second;
 
-    auto& result_b_type = edges.at(id_b);
-    auto& result_b = result_b_type.at(type_a);
-    result_b.erase(id_a);
+        auto ab = std::find_if(adjacencies.begin(), adjacencies.end(), [&](const pair<int64_t, float>& p){
+            return p.first == id_b;
+        });
 
-    // If there are no more IDs corresponding to a given ID, then don't leave an empty container dangling
-    if (result_a.empty()){
-        result_a_type.erase(id_a);
-    }
-    if (result_b.empty()){
-        result_b_type.erase(id_b);
+        if (ab != adjacencies.end()){
+            adjacencies.erase(ab);
+        }
     }
 
-    // If there are no more IDs corresponding to a given ID, then don't leave an empty container dangling
-    if (result_a_type.empty()){
-        edges.erase(type_a);
-    }
-    if (result_b_type.empty()){
-        edges.erase(type_b);
+    auto result_b = edges.find(id_b);
+
+    if (result_b != edges.end()){
+        auto& adjacencies = result_b->second;
+
+        auto ba = std::find_if(adjacencies.begin(), adjacencies.end(), [&](const pair<int64_t, float>& p){
+            return p.first == id_a;
+        });
+
+        if (ba != adjacencies.end()) {
+            adjacencies.erase(ba);
+        }
     }
 }
 
@@ -294,12 +310,10 @@ template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
 template<class T> void HeteroGraph<T>::for_each_edge(const function<void(const string& a, const string& b, float weight)>& f) const{
     for (const auto& [id_a,item]: edges){
         // Iterate all types indiscriminately
-        for (const auto& [type_b,item2]: item) {
-            for (const auto &[id_b,w]: item2) {
-                auto a = nodes.at(id_a);
-                auto b = nodes.at(id_b);
-                f(a.name, b.name, w);
-            }
+        for (const auto& [id_b,w]: item) {
+            auto a = nodes.at(id_a);
+            auto b = nodes.at(id_b);
+            f(a.name, b.name, w);
         }
     }
 }
@@ -323,10 +337,8 @@ template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, con
     }
 
     // Iterate all types indiscriminately
-    for (const auto& [type_b,item]: result->second) {
-        for (const auto &[id_b,w]: item) {
-            f(nodes.at(id_b), id_b);
-        }
+    for (const auto& [id_b,w]: result->second) {
+        f(nodes.at(id_b), id_b);
     }
 }
 
@@ -339,14 +351,7 @@ template<class T> int64_t HeteroGraph<T>::get_edge_count(int64_t id, char type) 
         return -1;
     }
 
-    // Iterate all types indiscriminately
-    auto result2 = result->second.find(type);
-
-    if (result2 == result->second.end()){
-        return -1;
-    }
-
-    return int64_t(result2->second.size());
+    return int64_t(result->second.size());
 }
 
 
@@ -354,66 +359,54 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
     auto id = name_to_id(name);
 
     // Check if there are any edges from this node
-    const auto result_edge = edges.find(id);
+    const auto result = edges.find(id);
 
-    if (result_edge == edges.end()){
+    if (result == edges.end()){
         return;
     }
 
-    // Check if any entries exist for this type of edge
-    const auto result_type = result_edge->second.find(type);
-
-    if (result_type == result_edge->second.end()){
-        return;
-    }
-
-    // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: result_type->second) {
-        f(nodes.at(id_b), id_b);
+    // Iterate all edges, but only operate on the specified type
+    for (const auto& [id_b,w]: result->second) {
+        const auto& node = nodes.at(id_b);
+        if (node.type == type){
+            f(node, id_b);
+        }
     }
 }
 
 
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const{
     // Check if there are any edges from this node
-    const auto result_edge = edges.find(id);
+    const auto result = edges.find(id);
 
-    if (result_edge == edges.end()){
+    if (result == edges.end()){
         return;
     }
 
-    // Check if any entries exist for this type of edge
-    const auto result_type = result_edge->second.find(type);
-
-    if (result_type == result_edge->second.end()){
-        return;
-    }
-
-    // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: result_type->second) {
-        f(id_b);
+    // Iterate all edges, but only operate on the specified type
+    for (const auto& [id_b,w]: result->second) {
+        const auto& node = nodes.at(id_b);
+        if (node.type == type){
+            f(id_b);
+        }
     }
 }
 
 
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const{
     // Check if there are any edges from this node
-    const auto result_edge = edges.find(id);
+    const auto result = edges.find(id);
 
-    if (result_edge == edges.end()){
+    if (result == edges.end()){
         return;
     }
 
-    // Check if any entries exist for this type of edge
-    const auto result_type = result_edge->second.find(type);
-
-    if (result_type == result_edge->second.end()){
-        return;
-    }
-
-    // Iterate only the type of neighbor specified
-    for (const auto& [id_b,w]: result_type->second) {
-        f(id_b, w);
+    // Iterate all edges, but only operate on the specified type
+    for (const auto& [id_b,w]: result->second) {
+        const auto& node = nodes.at(id_b);
+        if (node.type == type){
+            f(id_b, w);
+        }
     }
 }
 
@@ -434,12 +427,10 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(const string& start_name,
         f(nodes.at(n), n);
 
         // Iterate all types indiscriminately
-        for (const auto& [type_b,item]: edges.at(n)) {
-            for (const auto &[n_other,w]: item) {
-                if (visited.find(n_other) == visited.end()) {
-                    q.emplace(n_other);
-                    visited.emplace(n_other);
-                }
+        for (const auto& [n_other,w]: edges.at(n)) {
+            if (visited.find(n_other) == visited.end()) {
+                q.emplace(n_other);
+                visited.emplace(n_other);
             }
         }
     }
@@ -466,16 +457,14 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(
         f(nodes.at(n), n);
 
         // Iterate all types indiscriminately
-        for (const auto& [type_b,item]: edges.at(n)) {
-            for (const auto &[n_other,w]: item) {
-                if (w < min_edge_weight){
-                    continue;
-                }
+        for (const auto& [n_other,w]: edges.at(n)) {
+            if (w < min_edge_weight){
+                continue;
+            }
 
-                if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true) {
-                    q.emplace(n_other);
-                    visited.emplace(n_other);
-                }
+            if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true) {
+                q.emplace(n_other);
+                visited.emplace(n_other);
             }
         }
     }
