@@ -47,4 +47,8 @@ system_clock::time_point get_current_time();
 
 bool files_equal(path p1, path p2);
 
+bool equal_ignore_case(const string& str1, const string& str2);
+
+void lowercase_string(string& str);
+
 }

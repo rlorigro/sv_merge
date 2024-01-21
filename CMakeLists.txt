@@ -77,7 +77,7 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-        src/pair_hash.cpp
+#        src/pair_hash.cpp
         src/path_optimizer.cpp
         src/read_centroid_optimizer.cpp
         src/read_cluster_optimizer.cpp
@@ -86,6 +86,7 @@ set(SOURCES
         src/TransitiveMap.cpp
         src/Timer.cpp
         src/VcfReader.cpp
+        src/VariantGraph.cpp
         src/windows.cpp
         )
 
@@ -512,6 +513,7 @@ set(TESTS
         test_read_clustering
         test_shared_memory
         test_signal_handler
+        test_unordered_dense
         test_transmap
         test_triangle_inequality
         test_wfa2
@@ -535,6 +537,9 @@ foreach(FILENAME_PREFIX ${TESTS})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -550,6 +555,9 @@ foreach(FILENAME_PREFIX ${TESTS})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     endif()
 
@@ -581,6 +589,9 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -596,6 +607,9 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     endif()
 
