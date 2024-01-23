@@ -92,7 +92,7 @@ public:
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record in order to be considered.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers={});
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
 
     /**
      * Serializes the bidirected graph, including paths, if any.
