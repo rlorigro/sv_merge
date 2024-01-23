@@ -252,7 +252,7 @@ private:
     static const char GFA_NODE_CHAR;
     static const char GFA_LINK_CHAR;
     static const char GFA_PATH_CHAR;
-    static const char GFA_OVERLAP_FIELD;
+    static const string GFA_OVERLAP_FIELD;
     static const char GFA_PATH_SEPARATOR;
     static const char GFA_FWD_CHAR;
     static const char GFA_REV_CHAR;
