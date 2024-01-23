@@ -85,10 +85,10 @@ bool VariantGraph::intersect(const interval_t& interval1, const interval_t& inte
 
 int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length) {
     const auto CHROMOSOME_LENGTH = (int32_t)chromosomes.at(chromosome_id).length();
+    if (pos==CHROMOSOME_LENGTH-1) return INT32_MAX;
+    if (!tandem_track.contains(chromosome_id)) return min(pos+flank_length,CHROMOSOME_LENGTH-1);
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
     const size_t N_INTERVALS = intervals.size();
-
-    if (pos==CHROMOSOME_LENGTH-1) return INT32_MAX;
     if (N_INTERVALS==0) return min(pos+flank_length,CHROMOSOME_LENGTH-1);
     tmp_interval.first=pos+1; tmp_interval.second=pos+1+flank_length;
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
@@ -107,10 +107,10 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
 
 
 int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32_t pos, int32_t flank_length) {
+    if (pos==0) return INT32_MAX;
+    if (!tandem_track.contains(chromosome_id)) return pos>=flank_length?pos-flank_length:0;
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
     const size_t N_INTERVALS = intervals.size();
-
-    if (pos==0) return INT32_MAX;
     if (N_INTERVALS==0) return pos>=flank_length?pos-flank_length:0;
     tmp_interval.first=pos>=flank_length?pos-flank_length:0; tmp_interval.second=pos;
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
@@ -132,7 +132,7 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
 }
 
 
-void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, bool deallocate_ref_alt, const vector<string>& callers) {
+void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers) {
     graph.clear();
     this->vcf_records=std::move(records);
     n_vcf_records=vcf_records.size();
@@ -231,7 +231,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, bool 
     cerr << "Number of non-reference nodes: " << insertion_handles.size() << '\n';
 
     // Building all reference nodes and all reference edges, taking into account the tandem repeat track and the
-    // flanking requirement.
+    // flanking requirements.
     // Remark: this procedure works also when the list of first positions of a chromosome contains the position right
     // after the last position of the chromosome.
     chunk_first.clear(); chunk_first.reserve(n_chromosomes);
@@ -257,9 +257,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, bool 
         else previous_handle_exists=false;
         for (j=1; j<n_positions; j++) {
             p=first_positions.at(j-1);
-            p_prime=get_flank_boundary_right(chromosome,p,flank_length);
+            p_prime=get_flank_boundary_right(chromosome,p,interior_flank_length);
             q=first_positions.at(j);
-            q_prime=get_flank_boundary_left(chromosome,q,flank_length);
+            q_prime=get_flank_boundary_left(chromosome,q,interior_flank_length);
             if (p_prime!=INT32_MAX && q_prime!=INT32_MAX && p_prime<q_prime) {
                 const handle_t reference_handle_1 = graph.create_handle(chrom_sequence.substr(p,p_prime-p+1));
                 const handle_t reference_handle_2 = graph.create_handle(chrom_sequence.substr(q_prime,q-q_prime));
@@ -418,6 +418,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, bool 
 
 void VariantGraph::to_gfa(const path& gfa_path) const {
     ofstream outstream(gfa_path.string());
+    if (!outstream.good() || !outstream.is_open()) throw runtime_error("ERROR: file could not be written: " + gfa_path.string());
     graph.for_each_handle([&](handle_t handle) { outstream << GFA_NODE_CHAR << GFA_SEPARATOR << graph.get_id(handle) << GFA_SEPARATOR << graph.get_sequence(handle) << GFA_LINE_END; });
     graph.for_each_edge([&](edge_t edge) { outstream << GFA_LINK_CHAR << GFA_SEPARATOR << graph.get_id(edge.first) << GFA_SEPARATOR << (graph.get_is_reverse(edge.first)?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << graph.get_id(edge.second) << GFA_SEPARATOR << (graph.get_is_reverse(edge.second)?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << GFA_OVERLAP_FIELD << GFA_LINE_END; });
     graph.for_each_path_handle([&](path_handle_t path) {
@@ -449,7 +450,7 @@ vector<string> VariantGraph::load_gfa(const path& gfa_path) {
 
     // Loading node IDs
     instream.open(gfa_path.string());
-    if (!instream.is_open() || !instream.good()) throw runtime_error("ERROR: could not read file: "+gfa_path.string());
+    if (!instream.good() || !instream.is_open()) throw runtime_error("ERROR: could not read file: "+gfa_path.string());
     n_fields=0;
     while (instream.get(c)) {
         if (c!=GFA_SEPARATOR && c!=GFA_LINE_END) { buffer.push_back(c); continue; }
@@ -473,6 +474,7 @@ vector<string> VariantGraph::load_gfa(const path& gfa_path) {
     // Loading graph
     destroy_paths(); graph.clear();
     instream.open(gfa_path.string());
+    if (!instream.good() || !instream.is_open()) throw runtime_error("ERROR: could not read file: "+gfa_path.string());
     is_node=false; is_link=false; is_path=false; orientation_from=false; orientation_to=false; id_from=INT32_MAX; id_to=INT32_MAX;
     n_fields=0;
     while (instream.get(c)) {
@@ -1202,6 +1204,7 @@ void VariantGraph::print_graph_signature(size_t max_steps, const path& output_pa
     });
     sort(signatures.begin(),signatures.end());
     ofstream output_file(output_path.string());
+    if (!output_file.good() || !output_file.is_open()) throw runtime_error("ERROR: file could not be written: " + output_path.string());
     for (i=0; i<signatures.size(); i++) output_file << signatures.at(i) << '\n';
     output_file.close();
 }
