@@ -1040,6 +1040,7 @@ int main(int argc, char* argv[]) {
     const path TEST_VCF_2 = ROOT_DIR/"test2.vcf";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t FLANK_LENGTH = 10;
+    const int32_t INTERIOR_FLANK_LENGTH = 10;
     const size_t SIGNATURE_N_STEPS = 10;
     const size_t N_REUSE_TESTS = 10;
 
@@ -1071,7 +1072,7 @@ int main(int argc, char* argv[]) {
         auto rng = std::default_random_engine { rd() };
         vector<VcfRecord> records_prime = records;
         std::shuffle(std::begin(records_prime),std::end(records_prime),rng);
-        graph.build(records_prime,FLANK_LENGTH,false,caller_ids);
+        graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
 
         cerr << "Testing print_supported_vcf_records() (all records)...\n";
         ofstream truth_vcf(TRUTH_VCF.string());
@@ -1109,7 +1110,7 @@ int main(int argc, char* argv[]) {
     print_truth_vcf_header(truth_vcf);
     print_truth_vcf(2,false/*Arbitrary*/,truth_vcf);
     truth_vcf.close();
-    graph.build(records,FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
 
     cerr << "DEL...\n";
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
@@ -1255,7 +1256,7 @@ int main(int argc, char* argv[]) {
            ) return;
         records.push_back(record);
     });
-    graph.build(records,FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
     ofstream test_vcf2(TEST_VCF_2.string());
     print_truth_vcf_header(test_vcf2);
     graph.print_supported_vcf_records(test_vcf2,true,caller_ids);
@@ -1286,7 +1287,7 @@ int main(int argc, char* argv[]) {
            ) return;
         records.push_back(record);
     });
-    graph.build(records,FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
     print_truth_gfa(true,true,true,true,true,true,truth_gfa);
     truth_gfa.close();

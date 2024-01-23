@@ -50,9 +50,12 @@ public:
 
     /**
      * @param chromosomes map id -> sequence;
-     * @param tandem_track a sorted list of zero-based, non-overlapping intervals per chromosome, with format `[x..y)`.
+     * @param tandem_track map chromosome -> sorted list of zero-based, non-overlapping intervals, with format `[x..y)`.
+     * A chromosome might not appear in the map. A chromosome might appear in the map and its list of intervals might be
+     * empty. The tandem track is used for adding flanking regions with enough non-tandem sequence to the graph, which
+     * is useful for seeding graph alignments: see `build()` for more details.
      */
-    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track);
+    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {});
 
     /**
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
@@ -77,14 +80,19 @@ public:
      * except their ID, e.g. if they were created by different callers (although such records would have been merged by
      * `bcftools merge` and their IDs would have been concatenated).
      * @param flank_length ensures that an interval of this length, with no overlap to the tandem track, is present
-     * before the leftmost breakpoint (after the rightmost breakpoint) of every chromosome in the graph; if two
-     * consecutive breakpoints are farther away than `flank_length`, two disconnected nodes are created;
+     * before the leftmost breakpoint (after the rightmost breakpoint) of every chromosome in the graph;
+     * @param interior_flank_length consider two consecutive breakpoints A, B on the same chromosome; the procedure
+     * computes the shortest window to the right of A (resp. to the left of B) that contains an interval of this length
+     * with no overlap to the tandem track; if the windows of A and of B do not overlap, two disconnected nodes are
+     * created; otherwise, a single node [A..B) is created; this is useful to avoid creating long nodes when the
+     * breakpoints of a chromosome form clusters that are far away from one another; this parameter should be set to a
+     * small multiple of average read length;
      * @param deallocate_ref_alt TRUE: the procedure deallocates every REF and ALT field in `records`; this can be
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record in order to be considered.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, bool deallocate_ref_alt, const vector<string>& callers={});
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers={});
 
     /**
      * Serializes the bidirected graph, including paths, if any.
@@ -252,7 +260,7 @@ private:
     static const char GFA_NODE_CHAR;
     static const char GFA_LINK_CHAR;
     static const char GFA_PATH_CHAR;
-    static const char GFA_OVERLAP_FIELD;
+    static const string GFA_OVERLAP_FIELD;
     static const char GFA_PATH_SEPARATOR;
     static const char GFA_FWD_CHAR;
     static const char GFA_REV_CHAR;
