@@ -110,7 +110,8 @@ public:
     /**
      * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a
      * sequence of non-reference edges. The procedure writes to a file every R such that there is a (possibly circular)
-     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse.
+     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse. The procedure
+     * writes to another file every R for which this does not hold.
      *
      * Remark: in the current implementation, DELs that remove a prefix or suffix of a chromosome create no edge in the
      * graph, so they cannot be supported by a path and they are not printed in output. This could be solved by creating
@@ -121,12 +122,12 @@ public:
      *
      * Remark: for every pair of mated BND records, the procedure outputs just one of them.
      *
-     * @param print_all_records TRUE=disregard paths and print every VCF record in input (including those that were not
-     * used for building the graph);
+     * @param print_all_records TRUE=disregard paths and print every VCF record to `supported` (including those that
+     * were not used for building the graph), and no VCF record to `unsupported`;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record to be counted.
      */
-    void print_supported_vcf_records(ofstream& outstream, bool print_all_records, const vector<string>& callers= {});
+    void print_supported_vcf_records(ofstream& supported, ofstream& unsupported, bool print_all_records, const vector<string>& callers = {});
 
     /**
      * Writes every path handle in `graph` as a distinct VCF record:
@@ -146,12 +147,34 @@ public:
     void paths_to_vcf_records(ofstream& outstream);
 
     /**
-     * If `mode=TRUE`, makes `out` the set of all IDs of nodes that have edges only on one side. Otherwise, prints
+     * If `mode=TRUE`, makes `out` the set of all IDs of nodes that have neighbors only on one side. Otherwise, prints
      * information about dangling nodes to STDERR.
      */
     void get_dangling_nodes(bool mode, unordered_set<nid_t>& out) const;
 
     size_t get_n_dangling_nodes() const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side.
+     */
+    bool is_dangling_node(const handle_t& node_handle) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side.
+     */
+    bool is_dangling_node(const nid_t& node_id) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side, and belongs to the chromosome where all the POS
+     * fields of `vcf_records` are located.
+     */
+    bool is_flanking_node(const handle_t& node_handle) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side, and belongs to the chromosome where all the POS
+     * fields of `vcf_records` are located.
+     */
+    bool is_flanking_node(const nid_t& node_id) const;
 
     /**
      * @return the number of edges between two reference nodes that belong to different chromosomes. This might be
@@ -165,12 +188,12 @@ public:
      */
     size_t get_n_ins_edges() const;
 
-    bool is_reference_node(const nid_t& node_id);
+    bool is_reference_node(const nid_t& node_id) const;
 
     /**
      * @param node_handle in any orientation.
      */
-    bool is_reference_node(const handle_t& node_handle);
+    bool is_reference_node(const handle_t& node_handle) const;
 
     /**
      * @param edge in any orientation.
