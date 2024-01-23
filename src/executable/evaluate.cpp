@@ -1,5 +1,9 @@
 #include "TransitiveMap.hpp"
+#include "interval_tree.hpp"
+#include "VariantGraph.hpp"
+#include "VcfReader.hpp"
 #include "Filesystem.hpp"
+#include "fasta.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
 #include "fetch.hpp"
@@ -8,6 +12,7 @@
 #include "bed.hpp"
 
 using ghc::filesystem::create_directories;
+using lib_interval_tree::interval_tree_t;
 
 #include <unordered_map>
 #include <exception>
@@ -36,8 +41,8 @@ using std::ref;
 using namespace sv_merge;
 
 void compute_summaries_from_gaf(
+        const unordered_map<string,int32_t>& node_lengths,
         const path& gaf_path,
-        const unordered_map<string,string>& ref_sequences,
         int32_t flank_length,
         GafSummary& gaf_summary
         ){
@@ -60,10 +65,15 @@ void compute_summaries_from_gaf(
 
         int32_t x = 0;
         size_t i = 0;
+
+        cerr << "PARSING PATH" << '\n';
         alignment.for_step_in_path(name, [&](const string& step_name, bool is_reverse){
-            auto l = int32_t(ref_sequences.at(step_name).size());
+            auto l = int32_t(node_lengths.at(step_name));
+
             ref_intervals.emplace_back(x, x+l);
             interval_to_path_index.emplace(ref_intervals.back(), i);
+            cerr << i << ' ' << step_name << ',' << l << ',' << x << ',' << x+l << '\n';
+
             x += l;
             i++;
         });
@@ -77,10 +87,12 @@ void compute_summaries_from_gaf(
             // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
             auto i_norm = i;
 
+            cerr << '\t' << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
+
             auto path_index = interval_to_path_index.at(interval);
             const auto& [node_name, node_reversal] = alignment.get_step_of_path(path_index);
 
-            cerr << '\t' << node_reversal << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
+//            cerr << '\t' << node_reversal << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
 
             // REVERSAL:
             // path  alignment  result
@@ -102,7 +114,7 @@ void compute_summaries_from_gaf(
                 i_norm.ref_stop = stop;
             }
             else{
-                auto node_length = int32_t(ref_sequences.at(node_name).size());
+                auto node_length = int32_t(node_lengths.at(node_name));
                 i_norm.ref_start = node_length - start - 1;
                 i_norm.ref_stop = node_length - stop - 1;
             }
@@ -119,7 +131,6 @@ void compute_summaries_from_gaf(
         },{});
 
         cerr << '\n';
-
     });
 
     gaf_summary.resolve_all_overlaps();
@@ -172,15 +183,21 @@ void write_region_subsequences_to_file_thread_fn(
 }
 
 
-void generate_vcf_and_run_graphaligner_thread_fn(
+void generate_graph_and_run_graphaligner_thread_fn(
+        unordered_map<Region,vector<VcfRecord> >& region_records,
+        const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const path& vcf,
         const path& output_dir,
-        const path& ref_fasta,
         const path& fasta_filename,
+        size_t flank_length,
         atomic<size_t>& job_index
 ){
-    path vcf_to_gfa_script = "/home/ryan/code/hapslap/scripts/vcf_to_gfa.py";
+    // TODO: finish implementing tandem track as a user input
+    unordered_map<string,vector<interval_t>> tandem_track;
+    for (auto& [key,value]: ref_sequences){
+        tandem_track[key] = {};
+    }
 
     size_t i = job_index.fetch_add(1);
 
@@ -192,22 +209,32 @@ void generate_vcf_and_run_graphaligner_thread_fn(
         path input_subdir = output_dir / region.to_string('_');
         path output_subdir = output_dir / region.to_string('_') / vcf_name_prefix;
 
-        string command = "python3 " + vcf_to_gfa_script.string() +
-                         " --vcf " + vcf.string() +
-                         " --ref " + ref_fasta.string() +
-                         " --output_dir " + output_subdir.string() +
-                         " --region " + region.to_string();
+        create_directories(output_subdir);
 
-        run_command(command, true);
+        path gfa_path = output_subdir / "graph.gfa";
+
+        auto result = region_records.find(region);
+
+        if (result == region_records.end()){
+            cerr << "WARNING: skipping empty region: " + region.to_string() + '\n';
+            i = job_index.fetch_add(1);
+            continue;
+        }
+
+        auto& records = result->second;
+
+        VariantGraph variant_graph(ref_sequences, tandem_track);
+
+        variant_graph.build(records, flank_length, true);
+        variant_graph.to_gfa(gfa_path);
 
         path gaf_path = output_subdir / "alignments.gaf";
 
         auto name_prefix = get_name_prefix_of_vcf(vcf);
 
-        path gfa_path = output_subdir / (name_prefix + ".gfa");
         path fasta_path = input_subdir / fasta_filename;
 
-        command = "GraphAligner"
+        string command = "GraphAligner"
                   " -x " "vg"
                   " -t " "1"
                   " -a " + gaf_path.string() +
@@ -220,23 +247,40 @@ void generate_vcf_and_run_graphaligner_thread_fn(
 
         GafSummary g;
 
-//        compute_summaries_from_gaf(
-//            gaf_path,
-//            query_sequences,
-//            0,      // TODO FIX THIS
-//            g);
+        // Helper object for the GAF parsier, which has no header for GFA node lengths
+        unordered_map<string,int32_t> node_lengths;
+
+        // Use the HashGraph object to get all the lengths
+        variant_graph.graph.for_each_handle([&](const handle_t& h) {
+            nid_t node_id = variant_graph.graph.get_id(h);
+            auto l = int32_t(variant_graph.graph.get_length(h));
+
+            // Update
+            node_lengths.emplace(to_string(node_id), l);
+        });
+
+        compute_summaries_from_gaf(
+                node_lengths,
+                gaf_path,
+                0,
+                g);
     }
 }
 
 
 // TODO: replace this with proper implementation when it exists
 void generate_graph_alignments(
+        const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<Region,TransMap>& region_transmaps,
-        const path& vcf,
-        const path& ref_fasta,
+        const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
+        const path& vcf,
         size_t n_threads,
-        const path& output_dir){
+        size_t flank_length,
+        const path& output_dir
+        ){
+
+    unordered_map<Region,vector<VcfRecord> > region_records;
 
     path fasta_filename = "haplotypes.fasta";
 
@@ -247,7 +291,6 @@ void generate_graph_alignments(
         vector<thread> threads;
 
         threads.reserve(n_threads);
-
 
         // Launch threads
         for (uint64_t n = 0; n < n_threads; n++) {
@@ -271,6 +314,43 @@ void generate_graph_alignments(
         }
     }
 
+    // Load records for this VCF
+    VcfReader vcf_reader(vcf);
+    vcf_reader.min_qual = numeric_limits<float>::min();
+    vcf_reader.min_sv_length = 0;
+    vcf_reader.progress_n_lines = 100'000;
+    coord_t record_coord;
+
+    cerr << "Reading VCF... " << '\n';
+    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
+        // TODO: allow breakends in evaluation
+        if (r.sv_type == VcfReader::TYPE_BREAKEND){
+            cerr << "WARNING: skipping breakend"  << '\n';
+            return;
+        }
+
+        r.get_reference_coordinates(false, record_coord);
+        cerr << r.sv_type << ' ' << r.chrom << ' ' << record_coord.first << ',' << record_coord.second << '\n';
+
+        // For each overlapping region, put the VcfRecord in that region
+        contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
+            coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
+
+            // Check if this record exceeds the region
+            if (record_coord.first < unflanked_window.first or record_coord.second > unflanked_window.second){
+                cerr << "WARNING: skipping record with that exceeds the unflanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
+                return true;
+            }
+
+            cerr << "FOUND: " << r.chrom << ',' << iter->low() << ',' << iter->high() << '\n';
+
+            Region region(r.chrom, iter->low(), iter->high());
+            region_records[region].emplace_back(r);
+            return true;
+        });
+    });
+
+
     // Convert VCFs to graphs and run graph aligner
     {
         // Thread-related variables
@@ -283,12 +363,14 @@ void generate_graph_alignments(
         for (uint64_t n = 0; n < n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
-                threads.emplace_back(generate_vcf_and_run_graphaligner_thread_fn,
+                threads.emplace_back(generate_graph_and_run_graphaligner_thread_fn,
+                        std::ref(region_records),
+                        std::cref(ref_sequences),
                         std::cref(regions),
                         std::cref(vcf),
                         std::cref(output_dir),
-                        std::cref(ref_fasta),
                         std::cref(fasta_filename),
+                        flank_length,
                         std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -320,6 +402,7 @@ void evaluate(
         vector<path>& vcfs,
         path output_dir,
         path windows_bed,               // Override the interval graph if this is provided
+        path tandem_bed,
         path bam_csv,
         path ref_fasta,
         int32_t flank_length,
@@ -339,23 +422,42 @@ void evaluate(
     cerr << t << "Initializing" << '\n';
 
     vector <pair <string,path> > bam_paths;
+    unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
-    cerr << t << "Constructing windows" << '\n';
+
+    cerr << t << "Reading BED file" << '\n';
 
     load_windows_from_bed(windows_bed, regions);
+
+    // This is only used while loading VCFs to find where each record belongs
+    // TODO: consider moving out of main scope
+    unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
 
     for (auto& r: regions) {
         r.start -= flank_length;
         r.stop += flank_length;
+
+        contig_interval_trees[r.name].insert({r.start, r.stop});
     }
+
+    cerr << t << "Fetching reads for all windows" << '\n';
 
     // The container to store all fetched reads and their relationships to samples/paths
     unordered_map<Region,TransMap> region_transmaps;
 
-    cerr << t << "Fetching reads for all windows" << '\n';
-
     fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, true, region_transmaps);
+
+    cerr << t << "Loading reference sequences" << '\n';
+
+    for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
+        // Check if this contig is covered at all in the windows
+        auto result = contig_interval_trees.find(s.name);
+
+        if (result != contig_interval_trees.end()){
+            ref_sequences[s.name] = s.sequence;
+        }
+    });
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';
 
@@ -371,12 +473,15 @@ void evaluate(
     for (const auto& vcf: vcfs){
         cerr << "Generating graph alignments for VCF: " << vcf << '\n';
         generate_graph_alignments(
-            region_transmaps,
-            vcf,
-            ref_fasta,
-            regions,
-            n_threads,
-            staging_dir);
+                contig_interval_trees,
+                region_transmaps,
+                ref_sequences,
+                regions,
+                vcf,
+                n_threads,
+                flank_length,
+                output_dir
+        );
     }
 
 
@@ -388,6 +493,7 @@ void evaluate(
 int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
+    path tandem_bed;
     path bam_csv;
     path ref_fasta;
     string vcfs_string;
@@ -412,6 +518,12 @@ int main (int argc, char* argv[]){
             "--windows",
             windows_bed,
             "Path to BED file containing windows to merge (inferred automatically if not provided)");
+    // TODO: make this automatic
+
+    app.add_option(
+            "--tandems",
+            tandem_bed,
+            "Path to BED file containing tandem track which will inform how to aggregate variants in windows");
 
     app.add_option(
             "--vcfs",
@@ -445,7 +557,7 @@ int main (int argc, char* argv[]){
 
     auto vcfs = app.get_option("--vcfs")->as<std::vector<path> >();
 
-    evaluate(vcfs, output_dir, windows_bed, bam_csv, ref_fasta, flank_length, n_threads, debug);
+    evaluate(vcfs, output_dir, windows_bed, tandem_bed, bam_csv, ref_fasta, flank_length, n_threads, debug);
 
     return 0;
 }
