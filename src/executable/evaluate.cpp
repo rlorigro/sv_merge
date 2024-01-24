@@ -66,19 +66,21 @@ void compute_summaries_from_gaf(
         int32_t x = 0;
         size_t i = 0;
 
-        cerr << "PARSING PATH" << '\n';
+//        cerr << "PARSING PATH" << '\n';
         alignment.for_step_in_path(name, [&](const string& step_name, bool is_reverse){
             auto l = int32_t(node_lengths.at(step_name));
 
             ref_intervals.emplace_back(x, x+l);
             interval_to_path_index.emplace(ref_intervals.back(), i);
-            cerr << i << ' ' << step_name << ',' << l << ',' << x << ',' << x+l << '\n';
+//            cerr << i << ' ' << step_name << ',' << l << ',' << x << ',' << x+l << '\n';
 
             x += l;
             i++;
         });
 
-        cerr << name << '\n';
+        gaf_summary.query_paths.emplace_back(name, alignment.get_path());
+
+//        cerr << name << '\n';
 
         string prev_node_name;
 
@@ -87,7 +89,7 @@ void compute_summaries_from_gaf(
             // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
             auto i_norm = i;
 
-            cerr << '\t' << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
+//            cerr << '\t' << " r:" << interval.first << ',' << interval.second << ' ' << " i:" << i.ref_start << ',' << i.ref_stop << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
 
             auto path_index = interval_to_path_index.at(interval);
             const auto& [node_name, node_reversal] = alignment.get_step_of_path(path_index);
@@ -115,22 +117,24 @@ void compute_summaries_from_gaf(
             }
             else{
                 auto node_length = int32_t(node_lengths.at(node_name));
-                i_norm.ref_start = node_length - start - 1;
-                i_norm.ref_stop = node_length - stop - 1;
+                i_norm.ref_start = node_length - start;
+                i_norm.ref_stop = node_length - stop;
             }
 
             // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
             bool new_query_alignment = prev_node_name.empty();
             bool new_ref_alignment = node_name != prev_node_name;
 
+            auto ref_length = interval.second - interval.first;
+
             // Update the last alignment block in the GafSummary for ref and query
-            gaf_summary.update_ref(node_name, i_norm, new_ref_alignment);
-            gaf_summary.update_query(node_name, i_norm, new_query_alignment);
+            gaf_summary.update_ref(node_name, ref_length, i_norm, new_ref_alignment);
+            gaf_summary.update_query(name, alignment.get_query_length(), i_norm, new_query_alignment);
 
             prev_node_name = node_name;
         },{});
 
-        cerr << '\n';
+//        cerr << '\n';
     });
 
     gaf_summary.resolve_all_overlaps();
@@ -183,6 +187,98 @@ void write_region_subsequences_to_file_thread_fn(
 }
 
 
+/**
+ * @param output_dir
+ * @param gaf_summary summary object which has been updated during the iteration of alignments
+ * @param variant_graph cannot be const, but is effectively const in this context. This object is used to determine
+ * if alignments cover variants in the graph
+ */
+void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph& variant_graph){
+    path nodes_output_path = output_dir / "nodes.csv";
+    ofstream nodes_file(nodes_output_path);
+    if (not nodes_file.is_open() or not nodes_file.good()){
+        throw runtime_error("ERROR: file could not be written: " + nodes_output_path.string());
+    }
+
+    // Write a CSV file with the format:
+    // name,length,is_ref,coverage,identity
+    // [string],[int],[bool],[float],[float]
+    nodes_file << "name,length,is_ref,coverage,identity" << '\n';
+    for (auto& [name, alignments]: gaf_summary.ref_summaries){
+        auto id = stoll(name);
+
+        auto length = gaf_summary.node_lengths.at(name);
+
+        bool is_ref = variant_graph.is_reference_node(id);
+
+        AlignmentSummary total;
+        int32_t bases_not_covered = 0;
+
+        AlignmentSummary prev(0,0);
+        for (auto& a: alignments){
+            total.n_match += a.n_match;
+            total.n_mismatch += a.n_mismatch;
+            total.n_insert += a.n_insert;
+            total.n_delete += a.n_delete;
+
+            auto distance = a.start - prev.stop;
+
+            bases_not_covered += distance;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+
+            prev = a;
+        }
+
+        auto identity = total.compute_identity();
+        auto coverage = float(length - bases_not_covered) / float(length);
+        nodes_file << name << ',' << length << ',' << is_ref << ',' << coverage << ',' << identity << '\n';
+    }
+
+    path haps_output_path = output_dir / "haps.csv";
+    ofstream haps_file(haps_output_path);
+    if (not haps_file.is_open() or not haps_file.good()){
+        throw runtime_error("ERROR: file could not be written: " + haps_output_path.string());
+    }
+
+    haps_file << "name,length,is_ref,coverage,identity" << '\n';
+
+    // Write a CSV file with the format:
+    // name,length,is_ref,coverage,identity
+    // [string],[int],[bool],[float],[float]
+    for (auto& [name, alignments]: gaf_summary.query_summaries){
+        auto length = gaf_summary.query_lengths.at(name);
+
+        AlignmentSummary total;
+        int32_t bases_not_covered;
+
+        AlignmentSummary prev(0,0);
+        for (auto& a: alignments){
+            total.n_match += a.n_match;
+            total.n_mismatch += a.n_mismatch;
+            total.n_insert += a.n_insert;
+            total.n_delete += a.n_delete;
+
+            auto distance = a.start - prev.stop;
+
+            bases_not_covered += distance;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+            prev = a;
+        }
+
+        auto identity = total.compute_identity();
+        auto coverage = float(length - bases_not_covered) / float(length);
+        haps_file << name << ',' << length << ',' << 0 << ',' << coverage << ',' << identity << '\n';
+    }
+
+}
+
+
 void generate_graph_and_run_graphaligner_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,string>& ref_sequences,
@@ -226,6 +322,8 @@ void generate_graph_and_run_graphaligner_thread_fn(
         VariantGraph variant_graph(ref_sequences, tandem_track);
 
         variant_graph.build(records, flank_length, true);
+
+        cerr << "WRITING GFA to file: " << gfa_path << '\n';
         variant_graph.to_gfa(gfa_path);
 
         path gaf_path = output_subdir / "alignments.gaf";
@@ -245,9 +343,9 @@ void generate_graph_and_run_graphaligner_thread_fn(
 
         i = job_index.fetch_add(1);
 
-        GafSummary g;
+        GafSummary gaf_summary;
 
-        // Helper object for the GAF parsier, which has no header for GFA node lengths
+        // Helper object for the GAF parser, which has no header to describe GFA node lengths
         unordered_map<string,int32_t> node_lengths;
 
         // Use the HashGraph object to get all the lengths
@@ -263,7 +361,9 @@ void generate_graph_and_run_graphaligner_thread_fn(
                 node_lengths,
                 gaf_path,
                 0,
-                g);
+                gaf_summary);
+
+        write_summary(output_subdir, gaf_summary, variant_graph);
     }
 }
 
@@ -330,19 +430,18 @@ void generate_graph_alignments(
         }
 
         r.get_reference_coordinates(false, record_coord);
-        cerr << r.sv_type << ' ' << r.chrom << ' ' << record_coord.first << ',' << record_coord.second << '\n';
 
         // For each overlapping region, put the VcfRecord in that region
         contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
             coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
 
+            cerr << "RECORD: " << r.chrom << ' ' << record_coord.first << ',' << record_coord.second << '\n';
+
             // Check if this record exceeds the region
             if (record_coord.first < unflanked_window.first or record_coord.second > unflanked_window.second){
-                cerr << "WARNING: skipping record with that exceeds the unflanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
+                cerr << "WARNING: skipping record with that exceeds the un-flanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
                 return true;
             }
-
-            cerr << "FOUND: " << r.chrom << ',' << iter->low() << ',' << iter->high() << '\n';
 
             Region region(r.chrom, iter->low(), iter->high());
             region_records[region].emplace_back(r);
@@ -381,17 +480,6 @@ void generate_graph_alignments(
         // Wait for threads to finish
         for (auto &n: threads) {
             n.join();
-        }
-    }
-
-    string vcf_name_prefix = get_name_prefix_of_vcf(vcf);
-    // Parse the GAFs to get summary info
-    {
-        for (const auto& region: regions){
-            path output_subdir = output_dir / region.to_string('_') / vcf_name_prefix;
-
-
-
         }
     }
 

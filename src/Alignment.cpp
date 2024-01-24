@@ -196,12 +196,12 @@ void for_cigar_interval_in_alignment(
 
         while (ref_iter != ref_intervals.end()) {
             intersection.code = c.code;
-            intersection.length = c.length;
 
             intersection.ref_start = max(ref_iter->first, c.ref_start);
             intersection.ref_stop = min(ref_iter->second, c.ref_stop);
 
             auto l = intersection.ref_stop - intersection.ref_start;
+            intersection.length = l;
 
 //            cerr << "++ r:" << ref_iter->first << ',' << ref_iter->second << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
@@ -265,12 +265,12 @@ void for_cigar_interval_in_alignment(
 
         while (query_iter != query_intervals.end()) {
             intersection.code = c.code;
-            intersection.length = c.length;
 
             intersection.query_start = max(query_iter->first, c.query_start);
             intersection.query_stop = min(query_iter->second, c.query_stop);
 
             auto l = intersection.query_stop - intersection.query_start;
+            intersection.length = l;
 
 //            cerr << "++ r:" << c.ref_start << ',' << c.ref_stop << " q:" << query_iter->first << ',' << query_iter->second << '\n';
 

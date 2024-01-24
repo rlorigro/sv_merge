@@ -49,8 +49,6 @@ void GafAlignment::add_tag(const string& token){
     auto tag_type = token.substr(0,i);
     auto tag_value = token.substr(i+1,token.size() - (i+1));
 
-    cerr << tag_type << ',' << tag_value << '\n';
-
     if (tag_type == "tp:A"){
         if (tag_value == "P"){
             primary = true;
@@ -233,6 +231,11 @@ void GafAlignment::for_step_in_path(const string& path_name, const function<void
     for (const auto& [name, r]: path){
         f(name, r);
     }
+}
+
+
+const vector<pair<string,bool> >& GafAlignment::get_path() const{
+    return path;
 }
 
 
@@ -512,6 +515,11 @@ AlignmentSummary::AlignmentSummary():
 {}
 
 
+float AlignmentSummary::compute_identity() const{
+    return (n_match) / (n_match + n_mismatch + n_insert + n_delete);
+}
+
+
 void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
     switch (c.code){
         case 7:
@@ -551,7 +559,11 @@ void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
 }
 
 
-void GafSummary::update_ref(const string& ref_name, const CigarInterval& c, bool insert){
+void GafSummary::update_ref(const string& ref_name, int32_t ref_length, const CigarInterval& c, bool insert){
+    // Update the length of the node, for usage later in the pipeline.
+    // We only really need this once, but this guarantees every node has a length (simply overwrite if exists already)
+    node_lengths[ref_name] = ref_length;
+
     auto& result = ref_summaries[ref_name];
     if (insert){
         result.emplace_back();
@@ -560,8 +572,12 @@ void GafSummary::update_ref(const string& ref_name, const CigarInterval& c, bool
 }
 
 
-void GafSummary::update_query(const string& query_name, const CigarInterval& c, bool insert){
-    auto& result = ref_summaries[query_name];
+void GafSummary::update_query(const string& query_name, int32_t query_length, const CigarInterval& c, bool insert){
+    // Update the length of the query, for usage later in the pipeline.
+    // We only really need this once, but this guarantees every query has a length (simply overwrite if exists already)
+    query_lengths[query_name] = query_length;
+
+    auto& result = query_summaries[query_name];
     if (insert){
         result.emplace_back();
     }
@@ -646,15 +662,23 @@ void GafSummary::resolve_overlaps(vector<AlignmentSummary>& alignments) {
 
     // Finally construct new alignments that are the average of the overlapping alignments
     for (size_t i=0; i<ids.size() - 1; i++){
+        if (ids[i].empty()){
+            continue;
+        }
+
         result.emplace_back();
         result.back().start = positions[i];
         result.back().stop = positions[i+1];
 
+        auto l = float(result.back().stop - result.back().start);
+
         for (auto id: ids[i]){
-            result.back().n_match += alignments[id].n_match;
-            result.back().n_mismatch += alignments[id].n_mismatch;
-            result.back().n_insert += alignments[id].n_insert;
-            result.back().n_delete += alignments[id].n_delete;
+            auto l_other = float(alignments[id].stop - alignments[id].start);
+
+            result.back().n_match += alignments[id].n_match * (l / l_other);
+            result.back().n_mismatch += alignments[id].n_mismatch * (l / l_other);
+            result.back().n_insert += alignments[id].n_insert * (l / l_other);
+            result.back().n_delete += alignments[id].n_delete * (l / l_other);
         }
 
         auto n = float(ids[i].size());

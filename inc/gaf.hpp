@@ -80,6 +80,7 @@ public:
     [[nodiscard]] bool is_reverse() const override;
     void for_step_in_path(const string& path_name, const function<void(const string& step_name, bool is_reverse)>& f) const;
     [[nodiscard]] const pair<string,bool>& get_step_of_path(size_t index) const;
+    [[nodiscard]] const vector<pair<string,bool> >& get_path() const;
 
     /// Helper
     [[nodiscard]] bool parse_path_reversal_token(char c) const;
@@ -115,29 +116,38 @@ public:
     AlignmentSummary();
     AlignmentSummary(int32_t start, int32_t stop);
     void update(const CigarInterval& cigar_interval, bool is_ref);
+    float compute_identity() const;
 };
 
 
 class GafSummary{
 public:
+    unordered_map<string,int32_t> node_lengths;
+    unordered_map<string,int32_t> query_lengths;
+
     unordered_map <string, vector<AlignmentSummary> > ref_summaries;
     unordered_map <string, vector<AlignmentSummary> > query_summaries;
+
+    // Paths observed in alignments
+    vector <pair <string, vector <pair<string,bool> > > > query_paths;
 
     /**
      * Update alignment stats, for a given ref node
      * @param ref_name : ref node to be assigned this cigar operation
+     * @param ref_length : ref node length (NOT the full ref path length)
      * @param c : cigar interval obtained from iterating an alignment
      * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
      */
-    void update_ref(const string& ref_name, const CigarInterval& c, bool insert);
+    void update_ref(const string& ref_name, int32_t ref_length, const CigarInterval& c, bool insert);
 
     /**
      * Update alignment stats, for a given query node
-     * @param query_name : query node to be assigned this cigar operation
+     * @param query_name : query name to be assigned this cigar operation
+     * @param query_length : query sequence length
      * @param c : cigar interval obtained from iterating an alignment
      * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
      */
-    void update_query(const string& query_name, const CigarInterval& c, bool insert);
+    void update_query(const string& query_name, int32_t query_length, const CigarInterval& c, bool insert);
 
     void resolve_all_overlaps();
     static void resolve_overlaps(vector<AlignmentSummary>& alignments);
