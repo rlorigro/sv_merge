@@ -94,13 +94,17 @@ public:
      */
     void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
 
-
     /**
-     * Builds a trivial graph that contains one node for string `chromosome[p..q)` (zero-based) and two nodes for
-     * the flanking sequences.
+     * Builds a trivial graph that contains one node for string `chromosome[p..q)` (zero-based) and one node for each
+     * of its flanking sequences (if they exist).
      */
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
 
+    /**
+     * @return TRUE iff a graph built from `records` would contain at least one non-reference edge.
+     * This can be useful for deciding which `build()` function to call.
+     */
+    bool would_graph_be_nontrivial(vector<VcfRecord>& records);
 
     /**
      * Serializes the bidirected graph, including paths, if any.

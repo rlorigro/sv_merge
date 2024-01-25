@@ -327,6 +327,19 @@ void print_truth_gfa(bool print_paths_del, bool print_paths_inv, bool print_path
 }
 
 
+/**
+ * For testing `build()` with no VCF record.
+ * @param out
+ */
+void print_truth_gfa_trivial(ofstream& out) {
+    out << "S\t1\tCCCCCCCCCCCCCCCCCCCCCC\n";
+    out << "S\t2\tCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\n";
+    out << "S\t3\tCCCCCCCCCCCCCCCCCCCCCCCCCC\n";
+    out << "L\t1\t+\t2\t+\t0M\n";
+    out << "L\t2\t+\t3\t+\t0M\n";
+}
+
+
 void print_truth_vcf_paths(ofstream& out) {
     const string QUAL = "60";  // Arbitrary
     const string FILTER = "PASS";
@@ -1101,6 +1114,7 @@ int main(int argc, char* argv[]) {
     const path INPUT_VCF = ROOT_DIR/"input.vcf";
     const path TRUTH_VCF = ROOT_DIR/"truth.vcf";
     const path TRUTH_GFA = ROOT_DIR/"truth.gfa";
+    const path TRUTH_GFA_2 = ROOT_DIR/"truth2.gfa";
     const path TEST_VCF = ROOT_DIR/"test.vcf";
     const path TEST_VCF_2 = ROOT_DIR/"test2.vcf";
     const path UNSUPPORTED_VCF = ROOT_DIR/"unsupported.vcf";
@@ -1134,12 +1148,28 @@ int main(int argc, char* argv[]) {
     auto rd = std::random_device {};
     VariantGraph graph(chromosomes,tandem_track);
     vector<VcfRecord> no_records;
+
+    cerr << "Testing constructors with no VCF records...\n";
+    if (graph.would_graph_be_nontrivial(no_records)) throw runtime_error("would_graph_be_nontrivial() failed on emtpy VCF records");
     graph.build(no_records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);  // Testing that build() does not crash with no VCF records
+    graph.build("chr2",60,186,20);  // Testing trivial graph
+    graph.to_gfa(TEST_GFA);
+    ofstream truth_gfa_trivial(TRUTH_GFA_2.string());
+    print_truth_gfa_trivial(truth_gfa_trivial);
+    truth_gfa_trivial.close();
+    command.clear(); command.append("grep ^S "+TRUTH_GFA_2.string()+" | cut -f 1,3 | sort > tmp1.txt"); run_command(command);
+    command.clear(); command.append("grep ^S "+TEST_GFA.string()+" | cut -f 1,3 | sort > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    command.clear(); command.append("grep ^L "+TRUTH_GFA_2.string()+" | wc -l > tmp1.txt"); run_command(command);
+    command.clear(); command.append("grep ^L "+TEST_GFA.string()+" | wc -l > tmp2.txt"); run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+
     for (size_t i=0; i<N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
         cerr << "----- REUSE TEST " << std::to_string((i+1)) << " ------\n";
         auto rng = std::default_random_engine { rd() };
         vector<VcfRecord> records_prime = records;
         std::shuffle(std::begin(records_prime),std::end(records_prime),rng);
+        if (!graph.would_graph_be_nontrivial(records_prime)) throw runtime_error("would_graph_be_nontrivial() failed on non-emtpy VCF records");
         graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
 
         cerr << "Testing print_supported_vcf_records() (all records)...\n";

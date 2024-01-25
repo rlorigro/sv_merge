@@ -422,30 +422,33 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length) {
+    if (!chromosomes.contains(chromosome)) throw runtime_error("Invalid chromosome");
+    const string& CHROMOSOME_SEQUENCE = chromosomes.at(chromosome);
+    const auto CHROMOSOME_LENGTH = (int32_t)CHROMOSOME_SEQUENCE.length();
+    if (p<0 || p>=CHROMOSOME_LENGTH) throw runtime_error("Invalid p");
+    if (q<0 || q>=CHROMOSOME_LENGTH) throw runtime_error("Invalid q");
+    if (p>q) throw runtime_error("Invalid p and q");
+
     graph.clear();
-    n_vcf_records=0;
-    bnd_ids.clear();
-    node_handles.clear();
+    n_vcf_records=0; vcf_records.clear();
+    bnd_ids.clear(); node_handles.clear();
     for (const auto& chromosome: chromosomes) node_handles.emplace(chromosome.first,vector<handle_t>());
-    node_to_chromosome.clear();
-    insertion_handles.clear(); insertion_handles_set.clear();
+    node_to_chromosome.clear(); insertion_handles.clear(); insertion_handles_set.clear();
     edge_to_vcf_record.clear(); vcf_record_to_edge.clear();
 
     bool previous_handle_exists;
     int32_t first_pos, last_pos;
     handle_t previous_handle;
     vector<int32_t> first_positions;
-    const string& chrom_sequence = chromosomes.at(chromosome);
-    const auto CHROMOSOME_LENGTH = (int32_t)chrom_sequence.length();
+    handle_t reference_handle;
 
     vector<handle_t>& handles = node_handles.at(chromosome);
-    handles.clear();
 
     // Left flank
     first_pos=get_flank_boundary_left(chromosome,p,flank_length);
     if (first_pos==INT32_MAX) first_pos=0;
     if (p!=first_pos) {
-        const handle_t reference_handle = graph.create_handle(chrom_sequence.substr(first_pos,p-first_pos));
+        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(first_pos,p-first_pos));
         handles.emplace_back(reference_handle);
         first_positions.emplace_back(first_pos);
         node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,first_pos);
@@ -453,19 +456,19 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     }
     else previous_handle_exists=false;
 
-    // Window
-    const handle_t reference_handle = graph.create_handle(chrom_sequence.substr(p,q-p));
+    // [p..q)
+    reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(p,q-p));
     handles.emplace_back(reference_handle);
     first_positions.emplace_back(p);
     node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,p);
     if (previous_handle_exists) graph.create_edge(previous_handle,reference_handle);
-    previous_handle_exists=true; previous_handle=reference_handle;
+    previous_handle=reference_handle;
 
     // Right flank
     if (q<CHROMOSOME_LENGTH) {
         last_pos=get_flank_boundary_right(chromosome,q,flank_length);
         if (last_pos==INT32_MAX) last_pos=(int32_t)(CHROMOSOME_LENGTH-1);
-        const handle_t reference_handle = graph.create_handle(chrom_sequence.substr(q,last_pos+1-q));
+        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(q,last_pos+1-q));
         handles.emplace_back(reference_handle);
         first_positions.emplace_back(q);
         node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,q);
@@ -473,7 +476,25 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     }
 
     chunk_first.clear(); chunk_first.emplace(chromosome,first_positions);
-    vcf_record_to_edge.clear();
+}
+
+
+bool VariantGraph::would_graph_be_nontrivial(vector<VcfRecord>& records) {
+    if (records.size()==0) return false;
+    pair<int32_t,int32_t> tmp_pair;
+    for (auto& record: records) {
+        record.get_reference_coordinates(false,tmp_pair);
+        if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
+        if ( (record.sv_type==VcfReader::TYPE_INSERTION && !record.is_symbolic) ||
+             record.sv_type==VcfReader::TYPE_DELETION ||
+             record.sv_type==VcfReader::TYPE_INVERSION ||
+             record.sv_type==VcfReader::TYPE_DUPLICATION ||
+             record.sv_type==VcfReader::TYPE_REPLACEMENT ||
+             record.sv_type==VcfReader::TYPE_CNV ||
+             (record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()>=1 && !record.is_breakend_virtual(chromosomes))
+             ) return true;
+    }
+    return false;
 }
 
 
