@@ -29,7 +29,7 @@ class Counts {
     const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
     const char CSV_DELIMITER = ',';
     const char LINE_DELIMITER = '\n';
-    const size_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
+    const int32_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
     const vector<string>& tools;
     const size_t N_TOOLS;
@@ -162,6 +162,12 @@ class Counts {
     vector<size_t> vcf_counts_supported, vcf_counts_unsupported;
 
 
+    void on_init_nodes() {
+        const size_t size = node_counts.size();
+        for (size_t i=0; i<size; i++) node_counts.at(i)=0;
+    }
+
+
     void on_field_end_nodes(size_t field, const string& buffer) {
         switch (field) {
             case 1: name=buffer; break;
@@ -178,13 +184,13 @@ class Counts {
      * @param counts nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered, nonref_nodes_bps,
      * nonref_nodes_bps_covered;
      */
-    void on_node_end(vector<size_t>& counts) {
+    void on_line_end_nodes() {
         if (is_ref) return;
-        counts.at(0)++;
-        if (coverage>=coverage_threshold) counts.at(1)++;
-        else counts.at(2)++;
-        counts.at(3)+=length;
-        counts.at(4)+=(size_t)(coverage*length);
+        node_counts.at(0)++;
+        if (coverage>=coverage_threshold) node_counts.at(1)++;
+        else node_counts.at(2)++;
+        node_counts.at(3)+=length;
+        node_counts.at(4)+=(size_t)(coverage*length);
     }
 
 
@@ -192,12 +198,23 @@ class Counts {
      * @param counts nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered, nonref_nodes_bps,
      * nonref_nodes_bps_covered;
      */
-    void on_window_end_nodes(size_t tool_id, const vector<size_t>& counts) {
-        nonref_nodes.at(tool_id).emplace_back(counts.at(0));
-        nonref_nodes_fully_covered.at(tool_id).emplace_back(counts.at(1));
-        nonref_nodes_partially_covered.at(tool_id).emplace_back(counts.at(2));
-        nonref_nodes_bps.at(tool_id).emplace_back(counts.at(3));
-        nonref_nodes_bps_covered.at(tool_id).emplace_back(counts.at(4));
+    void on_window_end_nodes(size_t tool_id) {
+        nonref_nodes.at(tool_id).emplace_back(node_counts.at(0));
+        nonref_nodes_fully_covered.at(tool_id).emplace_back(node_counts.at(1));
+        nonref_nodes_partially_covered.at(tool_id).emplace_back(node_counts.at(2));
+        nonref_nodes_bps.at(tool_id).emplace_back(node_counts.at(3));
+        nonref_nodes_bps_covered.at(tool_id).emplace_back(node_counts.at(4));
+    }
+
+
+    void on_init_haplotypes() {
+        size_t i, j;
+
+        for (i=0; i<haplotype_counts.size(); i++) haplotype_counts.at(i)=0;
+        for (i=0; i<nonref_haplotype_counts.size(); i++) nonref_haplotype_counts.at(i)=0;
+        for (i=0; i<n_haplotype_clusters; i++) {
+            for (j=0; j<cluster_counts.at(j).size(); j++) cluster_counts.at(i).at(j)=0;
+        }
     }
 
 
@@ -216,7 +233,7 @@ class Counts {
     /**
      * @param *_counts coverage_sum, alignment_identity_sum.
      */
-    void on_haplotype_end(vector<double>& haplotype_counts, vector<double>& nonref_haplotype_counts, vector<vector<double>>& cluster_counts) {
+    void on_line_end_haplotypes() {
         haplotype_counts.at(0)+=coverage;
         haplotype_counts.at(1)+=identity;
         if (!is_ref) {
@@ -232,7 +249,7 @@ class Counts {
     /**
      * @param *_counts coverage_sum, alignment_identity_sum.
      */
-    void on_window_end_haplotypes(size_t tool_id, const vector<double>& haplotype_counts, const vector<double>& nonref_haplotype_counts, const vector<vector<double>>& cluster_counts) {
+    void on_window_end_haplotypes(size_t tool_id) {
         const size_t cluster_id = haplotype2cluster.at(name);
         const size_t cluster_size = haplotype_cluster_size.at(cluster_id);
 
@@ -282,12 +299,6 @@ class Counts {
     }
 
 
-    void read_csv_file() {
-
-    }
-
-
-
     /**
      * Adds to the lists of measures all the values in the directory of a window.
      *
@@ -304,7 +315,7 @@ class Counts {
      */
     void load_window(const path& directory) {
         char c;
-        size_t i, j, k;
+        size_t i, j;
         size_t field;
         string buffer;
         path input_file;
@@ -316,37 +327,33 @@ class Counts {
             input_file=directory/tools.at(i)/NODES_FILE;
             file.clear(); file.open(input_file);
             if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-            for (j=0; j<node_counts.size(); j++) node_counts.at(j)=0;
+            on_init_nodes();
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_node_end(node_counts); buffer.clear(); }
+                if (c==LINE_DELIMITER) { on_line_end_nodes(); buffer.clear(); }
                 else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,buffer); buffer.clear(); }
                 else buffer.push_back(c);
             }
-            if (!buffer.empty()) { on_field_end_nodes(++field,buffer); on_node_end(node_counts); }
+            if (!buffer.empty()) { on_field_end_nodes(++field,buffer); on_line_end_nodes(); }
             file.close();
-            on_window_end_nodes(i,node_counts);
+            on_window_end_nodes(i);
 
             // Haplotype counts
             input_file=directory/tools.at(i)/HAPLOTYPES_FILE;
             file.clear(); file.open(input_file);
             if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-            for (j=0; j<haplotype_counts.size(); j++) haplotype_counts.at(j)=0;
-            for (j=0; j<nonref_haplotype_counts.size(); j++) nonref_haplotype_counts.at(j)=0;
-            for (j=0; j<n_haplotype_clusters; j++) {
-                for (k=0; k<cluster_counts.at(j).size(); k++) cluster_counts.at(j).at(k)=0;
-            }
+            on_init_haplotypes();
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_haplotype_end(haplotype_counts,nonref_haplotype_counts,cluster_counts); buffer.clear(); }
+                if (c==LINE_DELIMITER) { on_line_end_haplotypes(); buffer.clear(); }
                 else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,buffer); buffer.clear(); }
                 else buffer.push_back(c);
             }
-            if (!buffer.empty()) { on_field_end_haplotypes(++field,buffer); on_haplotype_end(haplotype_counts,nonref_haplotype_counts,cluster_counts); }
+            if (!buffer.empty()) { on_field_end_haplotypes(++field,buffer); on_line_end_haplotypes(); }
             file.close();
-            on_window_end_haplotypes(i,haplotype_counts,nonref_haplotype_counts,cluster_counts);
+            on_window_end_haplotypes(i);
 
             // Remaining counts
             input_file=directory/tools.at(i)/OTHER_COUNTS_FILE;
