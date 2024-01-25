@@ -3,6 +3,7 @@
 #include "VcfReader.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
+#include "bed.hpp"
 
 using ghc::filesystem::path;
 using ghc::filesystem::directory_iterator;
@@ -21,6 +22,9 @@ using std::ifstream;
 using std::runtime_error;
 using std::sort;
 using std::to_string;
+using std::max;
+using std::min;
+using std::ofstream;
 
 
 using namespace sv_merge;
@@ -400,29 +404,92 @@ private:
         unsupported_inv.at(tool_id).emplace_back(vcf_counts_unsupported.at(3));
         unsupported_dup.at(tool_id).emplace_back(vcf_counts_unsupported.at(4));
     }
+
+
+    /**
+     * @param directories window coordinates associated with each call to `load_directory()`, in the order in which the
+     * calls were issued; format: [start..stop);
+     * @param intervals in the same order along the reference as the calls to `load_directory()`; format: [start..stop);
+     * @param min_covered_fraction prints only windows with at least this fraction of bases covered by elements of
+     * `intervals`;
+     * @param out a matrix of output files; for each tool (rows), the following output files (columns):
+     * n_alignments
+     * haplotype_coverage_avg
+     * alignment_identity_avg
+     * nonref_haplotype_coverage_avg
+     * nonref_alignment_identity_avg
+     * cluster_coverage_avg
+     * cluster_alignment_identity_avg
+     * nonref_nodes
+     * nonref_nodes_fully_covered
+     * nonref_nodes_partially_covered
+     * nonref_nodes_bps
+     * nonref_nodes_bps_covered
+     * nonref_edges
+     * nonref_edges_covered
+     * supported_vcf_records
+     * unsupported_vcf_records
+     * supported_del
+     * unsupported_del
+     * supported_ins
+     * unsupported_ins
+     * supported_inv
+     * unsupported_inv
+     * supported_dup
+     * unsupported_dup
+     */
+    void print_counts(const vector<Region> directories, const vector<Region>& intervals, double min_covered_fraction, vector<vector<ofstream>>& out) {
+        const size_t N_DIRECTORIES = directories.size();
+        const size_t N_INTERVALS = intervals.size();
+        size_t i, j, first_j_for_next_i;
+        size_t surface;
+        int32_t first, last, current_directory_start, current_directory_stop;
+        string current_directory_name;
+        Region current_directory, current_interval;
+        vector<Region> current_intervals;
+
+        j=0; first_j_for_next_i=UINT64_MAX;
+        for (i=0; i<N_DIRECTORIES; i++) {
+            current_directory=directories.at(i);
+            current_directory_name=current_directory.name;
+            current_directory_start=current_directory.start;
+            current_directory_stop=current_directory.stop;
+            current_intervals.clear();
+            while (j<N_INTERVALS) {
+                current_interval=intervals.at(j);
+                if (first_j_for_next_i==UINT64_MAX && i<N_DIRECTORIES-1 && current_interval.name==directories.at(i+1).name && current_interval.stop>directories.at(i+1).start && current_interval.start<directories.at(i+1).stop) first_j_for_next_i=j;
+                if (current_interval.name!=current_directory_name || current_interval.start>=current_directory_stop) break;
+                if (current_interval.stop<=current_directory_start) { j++; continue; }
+                current_intervals.emplace_back(current_interval);
+            }
+            if (current_intervals.size()!=0) {
+                surface=0;
+                first=current_intervals.at(0).start; last=current_intervals.at(0).stop-1;
+                for (j=1; j<current_intervals.size(); j++) {
+                    if (current_intervals.at(j).start>last) {
+                        surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
+                        first=current_intervals.at(j).start; last=current_intervals.at(j).stop-1;
+                    }
+                    else last=max(last,current_intervals.at(j).stop-1);
+                }
+                surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
+                if (surface>=min_covered_fraction*(current_directory_stop-current_directory_start)) {
+                    // Print to output window all of i's measures...
+                    // -------------->
+
+
+                }
+            }
+            if (first_j_for_next_i!=UINT64_MAX) j=first_j_for_next_i;
+            first_j_for_next_i=UINT64_MAX;
+        }
+    }
+
 };
 
 
 
-class DirectoryName {
-public:
-    size_t chromosome;
-    int32_t first, last;
 
-    DirectoryName(size_t chromosome, int32_t first, int32_t last):
-        chromosome(chromosome),
-        first(first),
-        last(last)
-    { }
-
-    bool operator==(const DirectoryName& other) const {
-        return chromosome==other.chromosome && first==other.first && last==other.last;
-    }
-
-    bool operator<(const DirectoryName& other) const {
-        return chromosome<other.chromosome || first<other.first || last<other.last;
-    }
-};
 
 
 
@@ -438,8 +505,7 @@ int main (int argc, char* argv[]) {
     const size_t n_haplotype_clusters;
     const vector<size_t> haplotype_cluster_size;
     const unordered_map<string,size_t> haplotype2cluster;
-    unordered_map<string,size_t> chromosome2rank;
-    unordered_map<size_t,string> rank2chromosome;
+    vector<path> bed_files;
 
     char c;
     size_t i;
@@ -453,9 +519,18 @@ int main (int argc, char* argv[]) {
 
 
 
-    vector<Region> directories;
+    auto region_comparator = [](const Region& a, const Region& b) {
+        if (a.name<b.name) return true;
+        else if (a.name>b.name) return false;
+        if (a.start<b.start) return true;
+        else if (a.start>b.start) return false;
+        return a.stop<b.stop;
+    };
 
-    // Sorting all directory names
+
+    vector<Region> directories, intervals;
+
+    // Sorting all directories by coordinate
     for (const auto& entry: directory_iterator(ROOT_DIR)) {
         if (!entry.is_directory()) continue;
         current_dir.clear(); current_dir.append(entry.path().stem().string());
@@ -470,26 +545,27 @@ int main (int argc, char* argv[]) {
         last=stoi(buffer);
         directories.emplace_back(chromosome,first,last);
     }
-    if (directories.size()>1) {
-        auto left_comparator = [](const Region& a, const Region& b){
-            if (a.name<b.name) return true;
-            else if (a.name>b.name) return false;
-            if (a.start<b.start) return true;
-            else if (a.start>b.start) return false;
-            return a.stop<b.stop;
-        };
-        sort(directories.begin(),directories.end(),left_comparator);
-    }
+    if (directories.size()>1) sort(directories.begin(),directories.end(),region_comparator);
     n_directories=directories.size();
 
     // Collecting counts in canonical order
     Counts counts(tools,coverage_threshold.at(0),n_haplotypes,n_nonref_haplotypes,n_haplotype_clusters,haplotype_cluster_size,haplotype2cluster);
     for (i=0; i<n_directories; i++) {
         current_dir.clear();
-        current_dir.append(rank2chromosome.at(directories.at(i).chromosome)+(SEPARATOR_1+to_string(directories.at(i).first)+SEPARATOR_2+to_string(directories.at(i).last)));
+        current_dir.append(directories.at(i).name+SEPARATOR_1+to_string(directories.at(i).start)+SEPARATOR_2+to_string(directories.at(i).stop));
         counts.load_directory(ROOT_DIR/current_dir);
     }
 
-    //
+    // Processing each BED file
+    for (auto& file: bed_files) {
+        intervals.clear();
+        for_region_in_bed_file(file, [&](const Region &r) { intervals.emplace_back(r); });
+        if (intervals.size()>1) sort(intervals.begin(),intervals.end(),region_comparator);
+
+
+
+    }
+}
+
 
 }
