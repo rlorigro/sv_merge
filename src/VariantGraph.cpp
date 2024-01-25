@@ -145,8 +145,8 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     edge_to_vcf_record.clear(); if (n_vcf_records!=0) edge_to_vcf_record.reserve(n_vcf_records);
     if (n_vcf_records==0) { vcf_record_to_edge.clear(); return; }
 
-    const string CHROMOSOME_ID = vcf_records.at(0).chrom;
-    const auto CHROMOSOME_LENGTH = (int32_t)chromosomes.at(CHROMOSOME_ID).length();
+    main_chromosome=vcf_records.at(0).chrom;
+    main_chromosome_length=(int32_t)chromosomes.at(main_chromosome).length();
     const uint8_t BIN_SIZE = 5;  // Arbitrary, just for stats.
     bool previous_handle_exists, split_node;
     uint8_t orientation_cis, orientation_trans, is_bnd_single;
@@ -165,7 +165,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     print_vcf_records_stats(BIN_SIZE,callers);
     chunk_first_raw.clear(); chunk_first_raw.reserve(n_chromosomes);
     for (const auto& chromosome: chromosomes) chunk_first_raw.emplace(chromosome.first,vector<int32_t>());
-    vector<int32_t>& first_positions = chunk_first_raw.at(CHROMOSOME_ID);
+    vector<int32_t>& first_positions = chunk_first_raw.at(main_chromosome);
     for (i=0; i<n_vcf_records; i++) {
         VcfRecord& record = vcf_records.at(i);
         record.get_reference_coordinates(false,tmp_pair);
@@ -321,36 +321,36 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     vcf_record_to_edge.reserve(n_vcf_records);
     for (i=0; i<vcf_record_to_edge.size(); i++) vcf_record_to_edge.at(i).clear();
     for (i=vcf_record_to_edge.size(); i<n_vcf_records; i++) vcf_record_to_edge.emplace_back();
-    const vector<handle_t>& handles = node_handles.at(CHROMOSOME_ID);
+    const vector<handle_t>& handles = node_handles.at(main_chromosome);
     bnd_ids.clear(); j=0;
     for (i=0; i<n_vcf_records; i++) {
         VcfRecord& record = vcf_records.at(i);
         record.get_reference_coordinates(false,tmp_pair);
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
         if (tmp_pair.first!=tmp_pair.second) {
-            s=find_closest(CHROMOSOME_ID,tmp_pair.first);
-            t=find_closest(CHROMOSOME_ID,tmp_pair.second);
+            s=find_closest(main_chromosome,tmp_pair.first);
+            t=find_closest(main_chromosome,tmp_pair.second);
             if (record.sv_type==VcfReader::TYPE_DELETION) {
-                if (s!=0 && tmp_pair.second!=CHROMOSOME_LENGTH) add_nonreference_edge(handles.at(s-1), handles.at(t), i);
+                if (s!=0 && tmp_pair.second!=main_chromosome_length) add_nonreference_edge(handles.at(s-1), handles.at(t), i);
             }
             else if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) add_nonreference_edge(handles.at(t-1),handles.at(s),i);
             else if (record.sv_type==VcfReader::TYPE_INVERSION) {
                 if (s!=0) add_nonreference_edge(handles.at(s-1), graph.flip(handles.at(t-1)), i);
-                if (tmp_pair.second!=CHROMOSOME_LENGTH) add_nonreference_edge(graph.flip(handles.at(s)),handles.at(t),i);
+                if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(graph.flip(handles.at(s)),handles.at(t),i);
             }
             else if (record.sv_type==VcfReader::TYPE_REPLACEMENT) {
                 const handle_t& insertion_handle = insertion_handles.at(j);
                 if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,i);
-                if (tmp_pair.second!=CHROMOSOME_LENGTH) add_nonreference_edge(insertion_handle,handles.at(t),i);
+                if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(t),i);
                 j++;
             }
         }
         else {
             if (record.sv_type==VcfReader::TYPE_INSERTION && !record.is_symbolic) {
-                s=find_closest(CHROMOSOME_ID,tmp_pair.first);
+                s=find_closest(main_chromosome,tmp_pair.first);
                 const handle_t& insertion_handle = insertion_handles.at(j);
                 if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,i);
-                if (tmp_pair.first!=CHROMOSOME_LENGTH) add_nonreference_edge(insertion_handle,handles.at(s),i);
+                if (tmp_pair.first!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(s),i);
                 j++;
             }
             else {
@@ -366,7 +366,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                     else {
                         bnd_ids.emplace(record.id);
                         orientation_cis=record.get_breakend_orientation_cis();
-                        const handle_t& handle_from = orientation_cis==1?handles.at(find_closest(CHROMOSOME_ID,tmp_pair.first+1)-1):graph.flip(handles.at(find_closest(CHROMOSOME_ID,tmp_pair.first)));
+                        const handle_t& handle_from = orientation_cis==1?handles.at(find_closest(main_chromosome,tmp_pair.first+1)-1):graph.flip(handles.at(find_closest(main_chromosome,tmp_pair.first)));
                         if (is_bnd_single==2) {
                             record.get_breakend_chromosome(tmp_buffer);
                             trans_pos=record.get_breakend_pos()-1;
@@ -423,10 +423,11 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length) {
     if (!chromosomes.contains(chromosome)) throw runtime_error("Invalid chromosome");
-    const string& CHROMOSOME_SEQUENCE = chromosomes.at(chromosome);
-    const auto CHROMOSOME_LENGTH = (int32_t)CHROMOSOME_SEQUENCE.length();
-    if (p<0 || p>=CHROMOSOME_LENGTH) throw runtime_error("Invalid p");
-    if (q<0 || q>=CHROMOSOME_LENGTH) throw runtime_error("Invalid q");
+    main_chromosome=chromosome;
+    const string& main_chromosome_sequence = chromosomes.at(main_chromosome);
+    main_chromosome_length=(int32_t)main_chromosome_sequence.length();
+    if (p<0 || p>=main_chromosome_length) throw runtime_error("Invalid p");
+    if (q<0 || q>=main_chromosome_length) throw runtime_error("Invalid q");
     if (p>q) throw runtime_error("Invalid p and q");
 
     graph.clear();
@@ -448,7 +449,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     first_pos=get_flank_boundary_left(chromosome,p,flank_length);
     if (first_pos==INT32_MAX) first_pos=0;
     if (p!=first_pos) {
-        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(first_pos,p-first_pos));
+        reference_handle=graph.create_handle(main_chromosome_sequence.substr(first_pos,p-first_pos));
         handles.emplace_back(reference_handle);
         first_positions.emplace_back(first_pos);
         node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,first_pos);
@@ -457,7 +458,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     else previous_handle_exists=false;
 
     // [p..q)
-    reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(p,q-p));
+    reference_handle=graph.create_handle(main_chromosome_sequence.substr(p,q-p));
     handles.emplace_back(reference_handle);
     first_positions.emplace_back(p);
     node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,p);
@@ -465,10 +466,10 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     previous_handle=reference_handle;
 
     // Right flank
-    if (q<CHROMOSOME_LENGTH) {
+    if (q<main_chromosome_length) {
         last_pos=get_flank_boundary_right(chromosome,q,flank_length);
-        if (last_pos==INT32_MAX) last_pos=(int32_t)(CHROMOSOME_LENGTH-1);
-        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(q,last_pos+1-q));
+        if (last_pos==INT32_MAX) last_pos=(int32_t)(main_chromosome_length-1);
+        reference_handle=graph.create_handle(main_chromosome_sequence.substr(q,last_pos+1-q));
         handles.emplace_back(reference_handle);
         first_positions.emplace_back(q);
         node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,q);
@@ -962,13 +963,13 @@ bool VariantGraph::is_dangling_node(const nid_t& node_id) const {
 
 bool VariantGraph::is_flanking_node(const handle_t& node_handle) const {
     if (!is_reference_node(node_handle) || !is_dangling_node(node_handle)) return false;
-    return node_to_chromosome.at(graph.get_id(node_handle)).first==vcf_records.at(0).chrom;
+    return node_to_chromosome.at(graph.get_id(node_handle)).first==main_chromosome;
 }
 
 
 bool VariantGraph::is_flanking_node(const nid_t& node_id) const {
     if (!is_reference_node(node_id) || !is_dangling_node(node_id)) return false;
-    return node_to_chromosome.at(node_id).first==vcf_records.at(0).chrom;
+    return node_to_chromosome.at(node_id).first==main_chromosome;
 }
 
 
