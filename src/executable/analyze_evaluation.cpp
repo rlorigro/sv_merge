@@ -1,11 +1,14 @@
 #include "Filesystem.hpp"
+#include "Region.hpp"
 #include "VcfReader.hpp"
 #include "CLI11.hpp"
 #include "misc.hpp"
 
 using ghc::filesystem::path;
+using ghc::filesystem::directory_iterator;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
+using sv_merge::Region;
 
 #include <stdexcept>
 
@@ -16,62 +19,14 @@ using std::vector;
 using std::unordered_map;
 using std::ifstream;
 using std::runtime_error;
+using std::sort;
 
 
 using namespace sv_merge;
 
 
 class Counts {
-    const string NODES_FILE = "nodes.csv";
-    const string HAPLOTYPES_FILE = "haplotypes.csv";
-    const string OTHER_COUNTS_FILE = "counts.txt";
-    const string SUPPORTED_VCF_FILE = "supported.vcf";
-    const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
-    const char CSV_DELIMITER = ',';
-    const char LINE_DELIMITER = '\n';
-    const int32_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
-
-    const vector<string>& tools;
-    const size_t N_TOOLS;
-    const double coverage_threshold;
-    const size_t n_haplotypes, n_nonref_haplotypes, n_haplotype_clusters;
-    const vector<size_t>& haplotype_cluster_size;
-    const unordered_map<string,size_t>& haplotype2cluster;
-
-    size_t n_windows;
-    vector<vector<size_t>> n_alignments;
-
-    /**
-     * Haplotype averages. Every haplotype contributes equally.
-
-     */
-    vector<vector<double>> haplotype_coverage_avg, alignment_identity_avg;
-
-    /**
-     * Haplotype averages. Every haplotype contributes equally. Haplotypes marked as reference do not contribute.
-     */
-    vector<vector<double>> nonref_haplotype_coverage_avg, nonref_alignment_identity_avg;
-
-    /**
-     * Haplotype cluster measures. Assume that every haplotype is assigned to a cluster. The following measures are
-     * computed by averaging over all the haplotypes in the same cluster, and then by computing the average over all
-     * clusters. Every cluster contributes equally to the measure, regardless of the number of haplotypes it contains.
-     */
-    vector<vector<double>> cluster_coverage_avg, cluster_alignment_identity_avg;
-
-    /**
-     * Graph measures
-     */
-    vector<vector<size_t>> nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered;
-    vector<vector<size_t>> nonref_nodes_bps, nonref_nodes_bps_covered;
-    vector<vector<size_t>> nonref_edges, nonref_edges_covered;
-
-    /**
-     * VCF measures
-     */
-    vector<vector<size_t>> supported_vcf_records, unsupported_vcf_records;
-    vector<vector<size_t>> supported_del, unsupported_del, supported_ins, unsupported_ins, supported_inv, unsupported_inv, supported_dup, unsupported_dup;
-
+public:
     /**
      * @param coverage_threshold fraction above which a node or haplotype is considered fully covered;
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space.
@@ -143,6 +98,153 @@ class Counts {
         unsupported_dup.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { unsupported_dup.emplace_back(); unsupported_dup.at(i).reserve(n_windows); }
     }
+
+
+    /**
+     * Adds to the lists of measures all the values in the directory of a window.
+     *
+     * @param directory assumed structure:
+     * ├── TOOL_ID_1
+     * │   ├── `NODES_FILE`: for every node (rows): `id,length,is_reference (0/1),coverage,identity`.
+     * │   ├── `HAPLOTYPES_FILE`: for every haplotype(row): `id,length,is_reference (0/1),coverage,identity`.
+     * │   ├── `OTHER_COUNTS_FILE`: `total_n_alignments,n_nonreference_edges,n_nonreference_edges_covered`.
+     * │   ├── `SUPPORTED_VCF_FILE`: contains only calls that are fully supported by some alignment.
+     * │   └── `UNSUPPORTED_VCF_FILE`: contains only calls that are not fully supported by any alignment.
+     * ├── TOOL_ID_2
+     * │   ├── ...
+     * ... ...
+     */
+    void load_window(const path& directory) {
+        char c;
+        size_t i, j;
+        size_t field;
+        string buffer;
+        path input_file;
+        ifstream file;
+
+        n_windows++;
+        for (i=0; i<N_TOOLS; i++) {
+            // Node counts
+            input_file=directory/tools.at(i)/NODES_FILE;
+            file.clear(); file.open(input_file);
+            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+            on_init_nodes();
+            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+            field=0;
+            while (file.get(c)) {
+                if (c==LINE_DELIMITER) { on_line_end_nodes(); buffer.clear(); }
+                else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,buffer); buffer.clear(); }
+                else buffer.push_back(c);
+            }
+            if (!buffer.empty()) { on_field_end_nodes(++field,buffer); on_line_end_nodes(); }
+            file.close();
+            on_window_end_nodes(i);
+
+            // Haplotype counts
+            input_file=directory/tools.at(i)/HAPLOTYPES_FILE;
+            file.clear(); file.open(input_file);
+            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+            on_init_haplotypes();
+            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+            field=0;
+            while (file.get(c)) {
+                if (c==LINE_DELIMITER) { on_line_end_haplotypes(); buffer.clear(); }
+                else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,buffer); buffer.clear(); }
+                else buffer.push_back(c);
+            }
+            if (!buffer.empty()) { on_field_end_haplotypes(++field,buffer); on_line_end_haplotypes(); }
+            file.close();
+            on_window_end_haplotypes(i);
+
+            // Remaining counts
+            input_file=directory/tools.at(i)/OTHER_COUNTS_FILE;
+            file.clear(); file.open(input_file);
+            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+            field=0;
+            while (file.get(c)) {
+                if (c==LINE_DELIMITER) { on_window_end_other_counts(i); buffer.clear(); }
+                else if (c==CSV_DELIMITER) { on_field_end_other_counts(++field,buffer); buffer.clear(); }
+                else buffer.push_back(c);
+            }
+            if (!buffer.empty()) { on_field_end_other_counts(++field,buffer); on_window_end_other_counts(i); }
+            file.close();
+
+            // VCF counts
+            input_file=directory/tools.at(i)/SUPPORTED_VCF_FILE;
+            for (j=0; j<vcf_counts_supported.size(); j++) vcf_counts_supported.at(j)=0;
+            VcfReader reader1(input_file);
+            reader1.for_record_in_vcf([&](VcfRecord& record) {
+                vcf_counts_supported.at(0)++;
+                if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_supported.at(1)++;
+                else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_supported.at(2)++;
+                else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_supported.at(3)++;
+                else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_supported.at(4)++;
+            });
+            input_file=directory/tools.at(i)/UNSUPPORTED_VCF_FILE;
+            for (j=0; j<vcf_counts_unsupported.size(); j++) vcf_counts_unsupported.at(j)=0;
+            VcfReader reader2(input_file);
+            reader2.for_record_in_vcf([&](VcfRecord& record) {
+                vcf_counts_unsupported.at(0)++;
+                if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_unsupported.at(1)++;
+                else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_unsupported.at(2)++;
+                else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_unsupported.at(3)++;
+                else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_unsupported.at(4)++;
+            });
+            on_window_end_vcf_counts(i,vcf_counts_supported,vcf_counts_unsupported);
+        }
+    }
+
+
+private:
+    const string NODES_FILE = "nodes.csv";
+    const string HAPLOTYPES_FILE = "haplotypes.csv";
+    const string OTHER_COUNTS_FILE = "counts.txt";
+    const string SUPPORTED_VCF_FILE = "supported.vcf";
+    const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
+    const char CSV_DELIMITER = ',';
+    const char LINE_DELIMITER = '\n';
+    const int32_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
+
+    const vector<string>& tools;
+    const size_t N_TOOLS;
+    const double coverage_threshold;
+    const size_t n_haplotypes, n_nonref_haplotypes, n_haplotype_clusters;
+    const vector<size_t>& haplotype_cluster_size;
+    const unordered_map<string,size_t>& haplotype2cluster;
+
+    size_t n_windows;
+    vector<vector<size_t>> n_alignments;
+
+    /**
+     * Haplotype averages. Every haplotype contributes equally.
+     */
+    vector<vector<double>> haplotype_coverage_avg, alignment_identity_avg;
+
+    /**
+     * Haplotype averages. Every haplotype contributes equally. Haplotypes marked as reference do not contribute.
+     */
+    vector<vector<double>> nonref_haplotype_coverage_avg, nonref_alignment_identity_avg;
+
+    /**
+     * Haplotype cluster measures. Assume that every haplotype is assigned to a cluster. The following measures are
+     * computed by averaging over all the haplotypes in the same cluster, and then by computing the average over all
+     * clusters. Every cluster contributes equally to the measure, regardless of the number of haplotypes it contains.
+     */
+    vector<vector<double>> cluster_coverage_avg, cluster_alignment_identity_avg;
+
+    /**
+     * Graph measures
+     */
+    vector<vector<size_t>> nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered;
+    vector<vector<size_t>> nonref_nodes_bps, nonref_nodes_bps_covered;
+    vector<vector<size_t>> nonref_edges, nonref_edges_covered;
+
+    /**
+     * VCF measures
+     */
+    vector<vector<size_t>> supported_vcf_records, unsupported_vcf_records;
+    vector<vector<size_t>> supported_del, unsupported_del, supported_ins, unsupported_ins, supported_inv, unsupported_inv, supported_dup, unsupported_dup;
 
     /**
      * Reused temporary space, storing the current line of a CSV file.
@@ -297,102 +399,29 @@ class Counts {
         unsupported_inv.at(tool_id).emplace_back(vcf_counts_unsupported.at(3));
         unsupported_dup.at(tool_id).emplace_back(vcf_counts_unsupported.at(4));
     }
+};
 
 
-    /**
-     * Adds to the lists of measures all the values in the directory of a window.
-     *
-     * @param directory assumed structure:
-     * ├── TOOL_ID_1
-     * │   ├── `NODES_FILE`: for every node (rows): `id,length,is_reference (0/1),coverage,identity`.
-     * │   ├── `HAPLOTYPES_FILE`: for every haplotype(row): `id,length,is_reference (0/1),coverage,identity`.
-     * │   ├── `OTHER_COUNTS_FILE`: `total_n_alignments,n_nonreference_edges,n_nonreference_edges_covered`.
-     * │   ├── `SUPPORTED_VCF_FILE`: contains only calls that are fully supported by some alignment.
-     * │   └── `UNSUPPORTED_VCF_FILE`: contains only calls that are not fully supported by any alignment.
-     * ├── TOOL_ID_2
-     * │   ├── ...
-     * ... ...
-     */
-    void load_window(const path& directory) {
-        char c;
-        size_t i, j;
-        size_t field;
-        string buffer;
-        path input_file;
-        ifstream file;
 
-        n_windows++;
-        for (i=0; i<N_TOOLS; i++) {
-            // Node counts
-            input_file=directory/tools.at(i)/NODES_FILE;
-            file.clear(); file.open(input_file);
-            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-            on_init_nodes();
-            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
-            field=0;
-            while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_line_end_nodes(); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
-            }
-            if (!buffer.empty()) { on_field_end_nodes(++field,buffer); on_line_end_nodes(); }
-            file.close();
-            on_window_end_nodes(i);
+class DirectoryName {
+public:
+    int32_t chromosome, first, last;
 
-            // Haplotype counts
-            input_file=directory/tools.at(i)/HAPLOTYPES_FILE;
-            file.clear(); file.open(input_file);
-            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-            on_init_haplotypes();
-            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
-            field=0;
-            while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_line_end_haplotypes(); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
-            }
-            if (!buffer.empty()) { on_field_end_haplotypes(++field,buffer); on_line_end_haplotypes(); }
-            file.close();
-            on_window_end_haplotypes(i);
+    DirectoryName(int32_t chromosome, int32_t first, int32_t last):
+        chromosome(chromosome),
+        first(first),
+        last(last)
+    { }
 
-            // Remaining counts
-            input_file=directory/tools.at(i)/OTHER_COUNTS_FILE;
-            file.clear(); file.open(input_file);
-            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
-            field=0;
-            while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_window_end_other_counts(i); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_other_counts(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
-            }
-            if (!buffer.empty()) { on_field_end_other_counts(++field,buffer); on_window_end_other_counts(i); }
-            file.close();
+    bool operator==(const DirectoryName& other) const {
 
-            // VCF counts
-            input_file=directory/tools.at(i)/SUPPORTED_VCF_FILE;
-            for (j=0; j<vcf_counts_supported.size(); j++) vcf_counts_supported.at(j)=0;
-            VcfReader reader1(input_file);
-            reader1.for_record_in_vcf([&](VcfRecord& record) {
-                vcf_counts_supported.at(0)++;
-                if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_supported.at(1)++;
-                else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_supported.at(2)++;
-                else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_supported.at(3)++;
-                else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_supported.at(4)++;
-            });
-            input_file=directory/tools.at(i)/UNSUPPORTED_VCF_FILE;
-            for (j=0; j<vcf_counts_unsupported.size(); j++) vcf_counts_unsupported.at(j)=0;
-            VcfReader reader2(input_file);
-            reader2.for_record_in_vcf([&](VcfRecord& record) {
-                vcf_counts_unsupported.at(0)++;
-                if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_unsupported.at(1)++;
-                else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_unsupported.at(2)++;
-                else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_unsupported.at(3)++;
-                else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_unsupported.at(4)++;
-            });
-            on_window_end_vcf_counts(i,vcf_counts_supported,vcf_counts_unsupported);
-        }
     }
+
+    bool operator<(const DirectoryName& other) const {
+
+    }
+
+
 };
 
 
@@ -400,10 +429,47 @@ class Counts {
 
 
 
-
-
-
-
 int main (int argc, char* argv[]) {
+    const path ROOT_DIR;
+    vector<string>& tools;
+    vector<double> coverage_threshold;
+    const size_t n_haplotypes;
+    const size_t n_nonref_haplotypes;
+    const size_t n_haplotype_clusters;
+    const vector<size_t> haplotype_cluster_size;
+    const unordered_map<string,size_t> haplotype2cluster;
+
+    char c;
+    size_t i;
+    size_t length;
+    int32_t first, last;
+    string chromosome, buffer, current_dir;
+
+    const char SEPARATOR_1 = '_';
+    const char SEPARATOR_2 = '-';
+
+
+    Counts counts_all(tools,coverage_threshold.at(0),n_haplotypes,n_nonref_haplotypes,n_haplotype_clusters,haplotype_cluster_size,haplotype2cluster);
+
+    vector<DirectoryName> directories;
+
+    // Retrieving and sorting all directory names
+    for (const auto& entry: directory_iterator(ROOT_DIR)) {
+        if (!entry.is_directory()) continue;
+        current_dir.clear(); current_dir.append(entry.path().stem().string());
+        if (!current_dir.starts_with("chr")) continue;
+        buffer=""; length=current_dir.length();
+        for (i=0; i<length; i++) {
+            c=current_dir.at(i);
+            if (c==SEPARATOR_1) { chromosome.clear(); chromosome.append(buffer); buffer.clear(); }
+            else if (c==SEPARATOR_2) { first=stoi(buffer); buffer.clear(); }
+            else buffer.push_back(c);
+        }
+        last=stoi(buffer);
+        directories.emplace_back(chromosome,first,last);
+    }
+    if (directories.size()>1) sort(directories.begin(),directories.end());
+
+
 
 }
