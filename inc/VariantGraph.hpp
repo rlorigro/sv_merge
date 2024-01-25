@@ -95,6 +95,18 @@ public:
     void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
 
     /**
+     * Builds a trivial graph that contains one node for string `chromosome[p..q)` (zero-based) and one node for each
+     * of its flanking sequences (if they exist).
+     */
+    void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
+
+    /**
+     * @return TRUE iff a graph built from `records` would contain at least one non-reference edge.
+     * This can be useful for deciding which `build()` function to call.
+     */
+    bool would_graph_be_nontrivial(vector<VcfRecord>& records);
+
+    /**
      * Serializes the bidirected graph, including paths, if any.
      */
     void to_gfa(const path& gfa_path) const;
@@ -406,7 +418,7 @@ private:
      * @param pos zero-based;
      * @param tandem_track a sorted list of non-overlapping intervals per chromosome, with format `[x..y)`;
      * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
-     * `x>pos`; returns `INT32_MAX` if no such interval exists.
+     * `x>=pos`; returns `INT32_MAX` if no such interval exists.
      */
     int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
 

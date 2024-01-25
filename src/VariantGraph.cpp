@@ -86,11 +86,11 @@ bool VariantGraph::intersect(const interval_t& interval1, const interval_t& inte
 int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length) {
     const auto CHROMOSOME_LENGTH = (int32_t)chromosomes.at(chromosome_id).length();
     if (pos==CHROMOSOME_LENGTH-1) return INT32_MAX;
-    if (!tandem_track.contains(chromosome_id)) return min(pos+flank_length,CHROMOSOME_LENGTH-1);
+    if (!tandem_track.contains(chromosome_id)) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
     const size_t N_INTERVALS = intervals.size();
-    if (N_INTERVALS==0) return min(pos+flank_length,CHROMOSOME_LENGTH-1);
-    tmp_interval.first=pos+1; tmp_interval.second=pos+1+flank_length;
+    if (N_INTERVALS==0) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
+    tmp_interval.first=pos; tmp_interval.second=pos+flank_length;
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
     size_t p = iter-intervals.begin();
     if (p>0 && intersect(tmp_interval,intervals.at(p-1))) {
@@ -134,15 +134,16 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
 
 void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers) {
     graph.clear();
-    this->vcf_records=std::move(records);
-    n_vcf_records=vcf_records.size();
-    bnd_ids.clear(); bnd_ids.reserve(n_vcf_records);
-    node_handles.clear(); node_handles.reserve(n_chromosomes);
+    n_vcf_records=records.size();
+    if (n_vcf_records!=0) this->vcf_records=std::move(records);
+    else this->vcf_records.clear();
+    bnd_ids.clear(); if (n_vcf_records!=0) bnd_ids.reserve(n_vcf_records);
+    node_handles.clear(); if (n_vcf_records!=0) node_handles.reserve(n_chromosomes);
     for (const auto& chromosome: chromosomes) node_handles.emplace(chromosome.first,vector<handle_t>());
-    node_to_chromosome.clear(); node_to_chromosome.reserve(n_vcf_records);
-    insertion_handles.clear(); insertion_handles.reserve(n_vcf_records);
-    edge_to_vcf_record.clear(); edge_to_vcf_record.reserve(n_vcf_records);
-    if (vcf_records.empty()) { vcf_record_to_edge.clear(); return; }
+    node_to_chromosome.clear(); if (n_vcf_records!=0) node_to_chromosome.reserve(n_vcf_records);
+    insertion_handles.clear(); if (n_vcf_records!=0) insertion_handles.reserve(n_vcf_records);
+    edge_to_vcf_record.clear(); if (n_vcf_records!=0) edge_to_vcf_record.reserve(n_vcf_records);
+    if (n_vcf_records==0) { vcf_record_to_edge.clear(); return; }
 
     const string CHROMOSOME_ID = vcf_records.at(0).chrom;
     const auto CHROMOSOME_LENGTH = (int32_t)chromosomes.at(CHROMOSOME_ID).length();
@@ -420,6 +421,83 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 }
 
 
+void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length) {
+    if (!chromosomes.contains(chromosome)) throw runtime_error("Invalid chromosome");
+    const string& CHROMOSOME_SEQUENCE = chromosomes.at(chromosome);
+    const auto CHROMOSOME_LENGTH = (int32_t)CHROMOSOME_SEQUENCE.length();
+    if (p<0 || p>=CHROMOSOME_LENGTH) throw runtime_error("Invalid p");
+    if (q<0 || q>=CHROMOSOME_LENGTH) throw runtime_error("Invalid q");
+    if (p>q) throw runtime_error("Invalid p and q");
+
+    graph.clear();
+    n_vcf_records=0; vcf_records.clear();
+    bnd_ids.clear(); node_handles.clear();
+    for (const auto& chromosome: chromosomes) node_handles.emplace(chromosome.first,vector<handle_t>());
+    node_to_chromosome.clear(); insertion_handles.clear(); insertion_handles_set.clear();
+    edge_to_vcf_record.clear(); vcf_record_to_edge.clear();
+
+    bool previous_handle_exists;
+    int32_t first_pos, last_pos;
+    handle_t previous_handle;
+    vector<int32_t> first_positions;
+    handle_t reference_handle;
+
+    vector<handle_t>& handles = node_handles.at(chromosome);
+
+    // Left flank
+    first_pos=get_flank_boundary_left(chromosome,p,flank_length);
+    if (first_pos==INT32_MAX) first_pos=0;
+    if (p!=first_pos) {
+        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(first_pos,p-first_pos));
+        handles.emplace_back(reference_handle);
+        first_positions.emplace_back(first_pos);
+        node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,first_pos);
+        previous_handle_exists=true; previous_handle=reference_handle;
+    }
+    else previous_handle_exists=false;
+
+    // [p..q)
+    reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(p,q-p));
+    handles.emplace_back(reference_handle);
+    first_positions.emplace_back(p);
+    node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,p);
+    if (previous_handle_exists) graph.create_edge(previous_handle,reference_handle);
+    previous_handle=reference_handle;
+
+    // Right flank
+    if (q<CHROMOSOME_LENGTH) {
+        last_pos=get_flank_boundary_right(chromosome,q,flank_length);
+        if (last_pos==INT32_MAX) last_pos=(int32_t)(CHROMOSOME_LENGTH-1);
+        reference_handle=graph.create_handle(CHROMOSOME_SEQUENCE.substr(q,last_pos+1-q));
+        handles.emplace_back(reference_handle);
+        first_positions.emplace_back(q);
+        node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,q);
+        graph.create_edge(previous_handle,reference_handle);
+    }
+
+    chunk_first.clear(); chunk_first.emplace(chromosome,first_positions);
+}
+
+
+bool VariantGraph::would_graph_be_nontrivial(vector<VcfRecord>& records) {
+    if (records.size()==0) return false;
+    pair<int32_t,int32_t> tmp_pair;
+    for (auto& record: records) {
+        record.get_reference_coordinates(false,tmp_pair);
+        if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
+        if ( (record.sv_type==VcfReader::TYPE_INSERTION && !record.is_symbolic) ||
+             record.sv_type==VcfReader::TYPE_DELETION ||
+             record.sv_type==VcfReader::TYPE_INVERSION ||
+             record.sv_type==VcfReader::TYPE_DUPLICATION ||
+             record.sv_type==VcfReader::TYPE_REPLACEMENT ||
+             record.sv_type==VcfReader::TYPE_CNV ||
+             (record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()>=1 && !record.is_breakend_virtual(chromosomes))
+             ) return true;
+    }
+    return false;
+}
+
+
 void VariantGraph::to_gfa(const path& gfa_path) const {
     ofstream outstream(gfa_path.string());
     if (!outstream.good() || !outstream.is_open()) throw runtime_error("ERROR: file could not be written: " + gfa_path.string());
@@ -518,7 +596,7 @@ vector<string> VariantGraph::load_gfa(const path& gfa_path) {
         else {  /* No other field is used */ }
         if (c==GFA_LINE_END) {
             if (is_node) graph.create_handle(node_sequence,id_from);
-            else if (is_link) graph.create_edge(orientation_from?graph.get_handle(id_from):graph.flip(graph.get_handle(id_from)),orientation_to?graph.get_handle(id_to):graph.flip(graph.get_handle(id_to)));
+            else if (is_link) graph.create_edge(graph.get_handle(id_from,!orientation_from),graph.get_handle(id_to,!orientation_to));
             else if (is_path) load_gfa_path(path_encoding,node_ids,path_name,buffer);
             n_fields=0;
         }
@@ -543,7 +621,7 @@ path_handle_t VariantGraph::load_gfa_path(const string& path_encoding, const vec
         else if (c!=GFA_FWD_CHAR && c!=GFA_REV_CHAR) { buffer.push_back(c); continue; }
         const auto iterator = lower_bound(node_ids.begin(),node_ids.end(),buffer);
         node_id=distance(node_ids.begin(),iterator)+1;  // Node IDs cannot be zero
-        graph.append_step(path,c==GFA_FWD_CHAR?graph.get_handle(node_id):graph.flip(graph.get_handle(node_id)));
+        graph.append_step(path,graph.get_handle(node_id,c==GFA_REV_CHAR));
         buffer.clear();
     }
     return path;
@@ -1029,7 +1107,7 @@ void VariantGraph::for_each_vcf_record(const vector<pair<string,bool>>& path, co
     for (i=1; i<LENGTH; i++) {
         node_id_from=stoi(path.at(i-1).first); is_reverse_from=path.at(i-1).second;
         node_id_to=stoi(path.at(i).first); is_reverse_to=path.at(i).second;
-        edges.emplace_back(graph.edge_handle(is_reverse_from?graph.flip(graph.get_handle(node_id_from)):graph.get_handle(node_id_from),is_reverse_to?graph.flip(graph.get_handle(node_id_to)):graph.get_handle(node_id_to)));
+        edges.emplace_back(graph.edge_handle(graph.get_handle(node_id_from,is_reverse_from),graph.get_handle(node_id_to,is_reverse_to)));
     }
     get_vcf_records_with_edges_impl(edges,false,ids);
     edges.clear();
@@ -1053,14 +1131,14 @@ path_handle_t VariantGraph::load_gaf_path(const string& path_encoding, const str
         c=path_encoding.at(i);
         if (c==GAF_FWD_CHAR || c==GAF_REV_CHAR) {
             node_id=stoi(buffer);
-            graph.append_step(path,current_orientation?graph.get_handle(node_id):graph.flip(graph.get_handle(node_id)));
+            graph.append_step(path,graph.get_handle(node_id,!current_orientation));
             current_orientation=c==GAF_FWD_CHAR;
             buffer.clear();
         }
         else buffer.push_back(c);
     }
     node_id=stoi(buffer);
-    graph.append_step(path,current_orientation?graph.get_handle(node_id):graph.flip(graph.get_handle(node_id)));
+    graph.append_step(path,graph.get_handle(node_id,!current_orientation));
     return path;
 }
 
@@ -1072,7 +1150,7 @@ path_handle_t VariantGraph::load_gaf_path(vector<pair<string,bool>>& path, const
     path_handle_t path_handle = graph.create_path_handle(path_name);
     for (size_t i=0; i<LENGTH; i++) {
         node_id=stoi(path.at(i).first);
-        graph.append_step(path_handle,path.at(i).second?graph.flip(graph.get_handle(node_id)):graph.get_handle(node_id));
+        graph.append_step(path_handle,graph.get_handle(node_id,path.at(i).second));
     }
     return path_handle;
 }
