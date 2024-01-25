@@ -97,6 +97,9 @@ public:
     /**
      * Builds a trivial graph that contains one node for string `chromosome[p..q)` (zero-based) and one node for each
      * of its flanking sequences (if they exist).
+     *
+     * @param flank_length ensures that an interval of this length, with no overlap to the tandem track, is present
+     * before `p` and at or after `q`.
      */
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
 
