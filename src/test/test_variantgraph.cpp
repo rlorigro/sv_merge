@@ -1133,6 +1133,8 @@ int main(int argc, char* argv[]) {
     const vector<string> caller_ids = get_caller_ids();
     auto rd = std::random_device {};
     VariantGraph graph(chromosomes,tandem_track);
+    vector<VcfRecord> no_records;
+    graph.build(no_records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);  // Testing that build() does not crash with no VCF records
     for (size_t i=0; i<N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
         cerr << "----- REUSE TEST " << std::to_string((i+1)) << " ------\n";
         auto rng = std::default_random_engine { rd() };
