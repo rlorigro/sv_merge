@@ -308,6 +308,8 @@ private:
     const uint8_t n_chromosomes;
     const unordered_map<string,vector<interval_t>>& tandem_track;
     size_t n_vcf_records;
+    string main_chromosome;  // The CHROM field of every VCF record
+    int32_t main_chromosome_length;
     unordered_set<string> bnd_ids;  // ID field of every BND record
 
     /**
