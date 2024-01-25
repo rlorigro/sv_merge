@@ -20,6 +20,7 @@ using std::unordered_map;
 using std::ifstream;
 using std::runtime_error;
 using std::sort;
+using std::to_string;
 
 
 using namespace sv_merge;
@@ -114,7 +115,7 @@ public:
      * │   ├── ...
      * ... ...
      */
-    void load_window(const path& directory) {
+    void load_directory(const path& directory) {
         char c;
         size_t i, j;
         size_t field;
@@ -405,23 +406,22 @@ private:
 
 class DirectoryName {
 public:
-    int32_t chromosome, first, last;
+    size_t chromosome;
+    int32_t first, last;
 
-    DirectoryName(int32_t chromosome, int32_t first, int32_t last):
+    DirectoryName(size_t chromosome, int32_t first, int32_t last):
         chromosome(chromosome),
         first(first),
         last(last)
     { }
 
     bool operator==(const DirectoryName& other) const {
-
+        return chromosome==other.chromosome && first==other.first && last==other.last;
     }
 
     bool operator<(const DirectoryName& other) const {
-
+        return chromosome<other.chromosome || first<other.first || last<other.last;
     }
-
-
 };
 
 
@@ -438,10 +438,12 @@ int main (int argc, char* argv[]) {
     const size_t n_haplotype_clusters;
     const vector<size_t> haplotype_cluster_size;
     const unordered_map<string,size_t> haplotype2cluster;
+    unordered_map<string,size_t> chromosome2rank;
+    unordered_map<size_t,string> rank2chromosome;
 
     char c;
     size_t i;
-    size_t length;
+    size_t length, n_directories;
     int32_t first, last;
     string chromosome, buffer, current_dir;
 
@@ -449,11 +451,11 @@ int main (int argc, char* argv[]) {
     const char SEPARATOR_2 = '-';
 
 
-    Counts counts_all(tools,coverage_threshold.at(0),n_haplotypes,n_nonref_haplotypes,n_haplotype_clusters,haplotype_cluster_size,haplotype2cluster);
 
-    vector<DirectoryName> directories;
 
-    // Retrieving and sorting all directory names
+    vector<Region> directories;
+
+    // Sorting all directory names
     for (const auto& entry: directory_iterator(ROOT_DIR)) {
         if (!entry.is_directory()) continue;
         current_dir.clear(); current_dir.append(entry.path().stem().string());
@@ -468,8 +470,26 @@ int main (int argc, char* argv[]) {
         last=stoi(buffer);
         directories.emplace_back(chromosome,first,last);
     }
-    if (directories.size()>1) sort(directories.begin(),directories.end());
+    if (directories.size()>1) {
+        auto left_comparator = [](const Region& a, const Region& b){
+            if (a.name<b.name) return true;
+            else if (a.name>b.name) return false;
+            if (a.start<b.start) return true;
+            else if (a.start>b.start) return false;
+            return a.stop<b.stop;
+        };
+        sort(directories.begin(),directories.end(),left_comparator);
+    }
+    n_directories=directories.size();
 
+    // Collecting counts in canonical order
+    Counts counts(tools,coverage_threshold.at(0),n_haplotypes,n_nonref_haplotypes,n_haplotype_clusters,haplotype_cluster_size,haplotype2cluster);
+    for (i=0; i<n_directories; i++) {
+        current_dir.clear();
+        current_dir.append(rank2chromosome.at(directories.at(i).chromosome)+(SEPARATOR_1+to_string(directories.at(i).first)+SEPARATOR_2+to_string(directories.at(i).last)));
+        counts.load_directory(ROOT_DIR/current_dir);
+    }
 
+    //
 
 }
