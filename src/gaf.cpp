@@ -559,12 +559,22 @@ void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
 }
 
 
-void GafSummary::update_ref(const string& ref_name, int32_t ref_length, const CigarInterval& c, bool insert){
-    // Update the length of the node, for usage later in the pipeline.
-    // We only really need this once, but this guarantees every node has a length (simply overwrite if exists already)
-    node_lengths[ref_name] = ref_length;
+GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map){
+    variant_graph.graph.for_each_handle([&](const handle_t& h){
+        auto l = variant_graph.graph.get_length(h);
+        auto name = std::to_string(variant_graph.graph.get_id(h));
+        node_lengths[name] = int32_t(l);
+        cerr << "ADDING NODE: " << name << ' ' << l << '\n';
+    });
 
-    auto& result = ref_summaries[ref_name];
+    trans_map.for_each_read([&](const string& name, const string& sequence){
+        query_lengths[name] = int32_t(sequence.size());
+    });
+}
+
+
+void GafSummary::update_node(const string& node_name, const CigarInterval& c, bool insert){
+    auto& result = ref_summaries[node_name];
     if (insert){
         result.emplace_back();
     }
@@ -572,16 +582,91 @@ void GafSummary::update_ref(const string& ref_name, int32_t ref_length, const Ci
 }
 
 
-void GafSummary::update_query(const string& query_name, int32_t query_length, const CigarInterval& c, bool insert){
-    // Update the length of the query, for usage later in the pipeline.
-    // We only really need this once, but this guarantees every query has a length (simply overwrite if exists already)
-    query_lengths[query_name] = query_length;
-
+void GafSummary::update_query(const string& query_name, const CigarInterval& c, bool insert){
     auto& result = query_summaries[query_name];
     if (insert){
         result.emplace_back();
     }
     result.back().update(c, false);
+}
+
+
+void GafSummary::for_each_ref_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    for (const auto& [name, length]: node_lengths){
+        auto result = ref_summaries.find(name);
+
+        if (result == ref_summaries.end()){
+            f(name, length, 0, 0);
+            continue;
+        }
+
+        const auto& alignments = result->second;
+
+        AlignmentSummary total;
+        int32_t bases_not_covered = 0;
+
+        AlignmentSummary prev(0,0);
+        for (auto& a: alignments){
+            total.n_match += a.n_match;
+            total.n_mismatch += a.n_mismatch;
+            total.n_insert += a.n_insert;
+            total.n_delete += a.n_delete;
+
+            auto distance = a.start - prev.stop;
+
+            bases_not_covered += distance;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+
+            prev = a;
+        }
+
+        auto identity = total.compute_identity();
+        auto coverage = float(length - bases_not_covered) / float(length);
+
+        f(name, length, coverage, identity);
+    }
+}
+
+
+void GafSummary::for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    for (auto& [name, length]: query_lengths){
+        auto result = query_summaries.find(name);
+
+        if (result == query_summaries.end()){
+            f(name, length, 0, 0);
+            return;
+        }
+
+        const auto& alignments = result->second;
+
+        AlignmentSummary total;
+        int32_t bases_not_covered = 0;
+
+        AlignmentSummary prev(0,0);
+        for (auto& a: alignments){
+            total.n_match += a.n_match;
+            total.n_mismatch += a.n_mismatch;
+            total.n_insert += a.n_insert;
+            total.n_delete += a.n_delete;
+
+            auto distance = a.start - prev.stop;
+
+            bases_not_covered += distance;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+            prev = a;
+        }
+
+        auto identity = total.compute_identity();
+        auto coverage = float(length - bases_not_covered) / float(length);
+
+        f(name, length, coverage, identity);
+    }
 }
 
 

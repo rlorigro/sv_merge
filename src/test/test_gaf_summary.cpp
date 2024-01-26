@@ -18,13 +18,13 @@ void test_simple(){
     c.code = cigar_char_to_code.at('=');
     c.length = c.ref_stop - c.ref_start;
 
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     c.ref_start = 5;
     c.ref_stop = 15;
     c.code = cigar_char_to_code.at('X');
     c.length = c.ref_stop - c.ref_start;
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     for (const auto& [name, summaries]: g.ref_summaries){
         for (const auto& s: summaries) {
@@ -65,13 +65,13 @@ void test_reverse(){
     c.code = cigar_char_to_code.at('=');
     c.length = c.ref_stop - c.ref_start;
 
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     c.ref_start = 5;
     c.ref_stop = 15;
     c.code = cigar_char_to_code.at('X');
     c.length = c.ref_stop - c.ref_start;
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     for (const auto& [name, summaries]: g.ref_summaries){
         for (const auto& s: summaries) {
@@ -112,19 +112,19 @@ void test_coincidental(){
     c.code = cigar_char_to_code.at('=');
     c.length = c.ref_stop - c.ref_start;
 
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     c.ref_start = 5;
     c.ref_stop = 15;
     c.code = cigar_char_to_code.at('X');
     c.length = c.ref_stop - c.ref_start;
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     c.ref_start = 10;
     c.ref_stop = 20;
     c.code = cigar_char_to_code.at('D');
     c.length = c.ref_stop - c.ref_start;
-    g.update_ref("a", 20, c, true);
+    g.update_node("a", c, true);
 
     for (const auto& [name, summaries]: g.ref_summaries){
         for (const auto& s: summaries) {

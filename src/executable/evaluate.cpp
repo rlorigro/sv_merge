@@ -40,13 +40,7 @@ using std::ref;
 
 using namespace sv_merge;
 
-void compute_summaries_from_gaf(
-        const unordered_map<string,int32_t>& node_lengths,
-        const path& gaf_path,
-        int32_t flank_length,
-        GafSummary& gaf_summary
-        ){
-
+void compute_summaries_from_gaf(const path& gaf_path, GafSummary& gaf_summary){
     // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
     // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
     // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
@@ -68,7 +62,7 @@ void compute_summaries_from_gaf(
 
 //        cerr << "PARSING PATH" << '\n';
         alignment.for_step_in_path(name, [&](const string& step_name, bool is_reverse){
-            auto l = int32_t(node_lengths.at(step_name));
+            auto l = int32_t(gaf_summary.node_lengths.at(step_name));
 
             ref_intervals.emplace_back(x, x+l);
             interval_to_path_index.emplace(ref_intervals.back(), i);
@@ -116,7 +110,7 @@ void compute_summaries_from_gaf(
                 i_norm.ref_stop = stop;
             }
             else{
-                auto node_length = int32_t(node_lengths.at(node_name));
+                auto node_length = int32_t(gaf_summary.node_lengths.at(node_name));
                 i_norm.ref_start = node_length - start;
                 i_norm.ref_stop = node_length - stop;
             }
@@ -125,11 +119,9 @@ void compute_summaries_from_gaf(
             bool new_query_alignment = prev_node_name.empty();
             bool new_ref_alignment = node_name != prev_node_name;
 
-            auto ref_length = interval.second - interval.first;
-
             // Update the last alignment block in the GafSummary for ref and query
-            gaf_summary.update_ref(node_name, ref_length, i_norm, new_ref_alignment);
-            gaf_summary.update_query(name, alignment.get_query_length(), i_norm, new_query_alignment);
+            gaf_summary.update_node(node_name, i_norm, new_ref_alignment);
+            gaf_summary.update_query(name, i_norm, new_query_alignment);
 
             prev_node_name = node_name;
         },{});
@@ -195,98 +187,138 @@ void write_region_subsequences_to_file_thread_fn(
  */
 void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph& variant_graph){
     path nodes_output_path = output_dir / "nodes.csv";
+    path edges_output_path = output_dir / "edges.csv";
+    path haps_output_path = output_dir / "haps.csv";
+    path supported_output_path = output_dir / "supported.vcf";
+    path unsupported_output_path = output_dir / "unsupported.vcf";
+
     ofstream nodes_file(nodes_output_path);
     if (not nodes_file.is_open() or not nodes_file.good()){
         throw runtime_error("ERROR: file could not be written: " + nodes_output_path.string());
     }
 
-    // Write a CSV file with the format:
-    // name,length,is_ref,coverage,identity
-    // [string],[int],[bool],[float],[float]
-    nodes_file << "name,length,is_ref,coverage,identity" << '\n';
-    for (auto& [name, alignments]: gaf_summary.ref_summaries){
-        auto id = stoll(name);
-
-        auto length = gaf_summary.node_lengths.at(name);
-
-        bool is_ref = variant_graph.is_reference_node(id);
-
-        AlignmentSummary total;
-        int32_t bases_not_covered = 0;
-
-        AlignmentSummary prev(0,0);
-        for (auto& a: alignments){
-            total.n_match += a.n_match;
-            total.n_mismatch += a.n_mismatch;
-            total.n_insert += a.n_insert;
-            total.n_delete += a.n_delete;
-
-            auto distance = a.start - prev.stop;
-
-            bases_not_covered += distance;
-
-            if (distance < 0){
-                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
-            }
-
-            prev = a;
-        }
-
-        auto identity = total.compute_identity();
-        auto coverage = float(length - bases_not_covered) / float(length);
-        nodes_file << name << ',' << length << ',' << is_ref << ',' << coverage << ',' << identity << '\n';
-    }
-
-    path haps_output_path = output_dir / "haps.csv";
     ofstream haps_file(haps_output_path);
     if (not haps_file.is_open() or not haps_file.good()){
         throw runtime_error("ERROR: file could not be written: " + haps_output_path.string());
     }
 
+    // Start by writing the headers
+    nodes_file << "name,length,is_ref,coverage,identity,color" << '\n';
     haps_file << "name,length,is_ref,coverage,identity" << '\n';
 
+    string ref_color = "#7D8FE1";
+    string non_ref_color = "#FFC07E";
+    string color;
+
+    // GAF ref/target nodes
     // Write a CSV file with the format:
-    // name,length,is_ref,coverage,identity
-    // [string],[int],[bool],[float],[float]
-    for (auto& [name, alignments]: gaf_summary.query_summaries){
-        auto length = gaf_summary.query_lengths.at(name);
+    // name,length,is_ref,coverage,identity,color
+    // [string],[int],[bool],[float],[float],[string]
+    gaf_summary.for_each_ref_summary([&](const string& name, int32_t length, float identity, float coverage){
+        auto id = stoll(name);
 
-        AlignmentSummary total;
-        int32_t bases_not_covered;
-
-        AlignmentSummary prev(0,0);
-        for (auto& a: alignments){
-            total.n_match += a.n_match;
-            total.n_mismatch += a.n_mismatch;
-            total.n_insert += a.n_insert;
-            total.n_delete += a.n_delete;
-
-            auto distance = a.start - prev.stop;
-
-            bases_not_covered += distance;
-
-            if (distance < 0){
-                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
-            }
-            prev = a;
+        if (variant_graph.is_flanking_node(id)){
+            return;
         }
 
-        auto identity = total.compute_identity();
-        auto coverage = float(length - bases_not_covered) / float(length);
+        bool is_ref = variant_graph.is_reference_node(id);
+
+        color = non_ref_color;
+        if (is_ref){
+            color = ref_color;
+        }
+
+        nodes_file << name << ',' << length << ',' << is_ref << ',' << coverage << ',' << identity << ',' << color << '\n';
+    });
+
+    // GAF queries (aligned haplotypes)
+    // Write a CSV file with the format:
+    // name,length,is_ref,coverage,identity,color
+    // [string],[int],[bool],[float],[float],[string]
+    gaf_summary.for_each_query_summary([&](const string& name, int32_t length, float identity, float coverage){
         haps_file << name << ',' << length << ',' << 0 << ',' << coverage << ',' << identity << '\n';
+    });
+
+    // Iterate the edges covered by the alignments and compile some stats regarding edge coverage
+    size_t n_edges = 0;
+    size_t n_non_ref_edges = 0;
+    size_t n_non_ref_edges_covered = 0;
+
+    unordered_map<string,size_t> name_counter;
+    unordered_set <pair <handle_t, handle_t> > covered_edges;
+
+    for (const auto& [name, path]: gaf_summary.query_paths){
+        auto alignment_name = name + "_" + to_string(name_counter[name]);
+        auto p = variant_graph.graph.create_path_handle(alignment_name);
+
+        handle_t h_prev;
+        for (size_t i=0; i<path.size(); i++){
+            const auto& [step_name, is_reverse] = path[i];
+
+            nid_t id = stoll(step_name);
+            auto h = variant_graph.graph.get_handle(id,is_reverse);
+            variant_graph.graph.append_step(p,h);
+
+            if (i > 0){
+                auto canonical_edge = variant_graph.graph.edge_handle(h_prev,h);
+                covered_edges.emplace(canonical_edge);
+            }
+            h_prev = h;
+        }
+
+        name_counter[name] += 1;
     }
 
+    ofstream edges_file(edges_output_path);
+    if (not edges_file.is_open() or not edges_file.good()){
+        throw runtime_error("ERROR: file could not be written: " + edges_output_path.string());
+    }
+
+    variant_graph.graph.for_each_edge([&](const edge_t e){
+        auto is_ref = variant_graph.is_reference_edge(e);
+
+        if (not is_ref) {
+            n_non_ref_edges += 1;
+
+            if (covered_edges.find(e) != covered_edges.end()){
+                n_non_ref_edges_covered += 1;
+            }
+        }
+
+        n_edges += 1;
+    });
+
+    // Write a CSV of the format
+    // n_alignments,n_edges,n_edges_covered,n_nonref_edges,n_nonref_edges_covered
+    // [int],[int],[int],[int],[int]
+    edges_file << "n_alignments" << ',' << "n_edges" << ',' << "n_edges_covered" << ',' << "n_non_ref_edges" << ',' << "n_non_ref_edges_covered" << '\n';
+    edges_file << gaf_summary.query_paths.size() << ',' << n_edges << ',' << covered_edges.size() << ',' << n_non_ref_edges << ',' << n_non_ref_edges_covered << '\n';
+
+    // Update the VariantGraph paths to contain all the alignments
+    ofstream supported_file(supported_output_path);
+    if (not supported_file.is_open() or not supported_file.good()){
+        throw runtime_error("ERROR: file could not be written: " + supported_output_path.string());
+    }
+
+    ofstream unsupported_file(unsupported_output_path);
+    if (not unsupported_file.is_open() or not unsupported_file.good()){
+        throw runtime_error("ERROR: file could not be written: " + unsupported_output_path.string());
+    }
+
+    variant_graph.print_supported_vcf_records(supported_file, unsupported_file, false);
 }
 
 
 void generate_graph_and_run_graphaligner_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
+        const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const path& vcf,
         const path& output_dir,
         const path& fasta_filename,
-        size_t flank_length,
+        int32_t flank_length,
+        bool cluster,
         atomic<size_t>& job_index
 ){
     // TODO: finish implementing tandem track as a user input
@@ -301,27 +333,27 @@ void generate_graph_and_run_graphaligner_thread_fn(
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
+        const auto& transmap = region_transmaps.at(region);
 
         path input_subdir = output_dir / region.to_string('_');
         path output_subdir = output_dir / region.to_string('_') / vcf_name_prefix;
+
+        auto records = region_records.at(region);
 
         create_directories(output_subdir);
 
         path gfa_path = output_subdir / "graph.gfa";
 
-        auto result = region_records.find(region);
-
-        if (result == region_records.end()){
-            cerr << "WARNING: skipping empty region: " + region.to_string() + '\n';
-            i = job_index.fetch_add(1);
-            continue;
-        }
-
-        auto& records = result->second;
-
         VariantGraph variant_graph(ref_sequences, tandem_track);
 
-        variant_graph.build(records, flank_length, true);
+        if (variant_graph.would_graph_be_nontrivial(records)){
+            variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), false);
+        }
+        else{
+            cerr << "TRIVIAL REGION: " + region.to_string() << '\n';
+            // VariantGraph assumes that the flank length needs to be added to the region
+            variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
+        }
 
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
         variant_graph.to_gfa(gfa_path);
@@ -343,33 +375,62 @@ void generate_graph_and_run_graphaligner_thread_fn(
 
         i = job_index.fetch_add(1);
 
-        GafSummary gaf_summary;
+        GafSummary gaf_summary(variant_graph, transmap);
 
-        // Helper object for the GAF parser, which has no header to describe GFA node lengths
-        unordered_map<string,int32_t> node_lengths;
-
-        // Use the HashGraph object to get all the lengths
-        variant_graph.graph.for_each_handle([&](const handle_t& h) {
-            nid_t node_id = variant_graph.graph.get_id(h);
-            auto l = int32_t(variant_graph.graph.get_length(h));
-
-            // Update
-            node_lengths.emplace(to_string(node_id), l);
-        });
-
-        compute_summaries_from_gaf(
-                node_lengths,
-                gaf_path,
-                0,
-                gaf_summary);
+        compute_summaries_from_gaf(gaf_path, gaf_summary);
 
         write_summary(output_subdir, gaf_summary, variant_graph);
+
+        if (cluster){
+            using path_t = vector <pair<string,bool> >;
+            using named_path_t = pair <string, path_t>;
+
+            unordered_map <string,vector<string> > clusters;
+
+            sort(gaf_summary.query_paths.begin(), gaf_summary.query_paths.end(), [&](named_path_t& a, named_path_t& b){
+                return a.first < b.first;
+            });
+
+            size_t p = 0;
+            string prev_name;
+            vector<path_t> paths_of_query;
+            for (const auto& [name, path]: gaf_summary.query_paths){
+                if (prev_name != name or p == gaf_summary.query_paths.size() - 1){
+                    // If the query has more than one alignment, dump it into the "unknown" cluster
+                    if (paths_of_query.size() > 1){
+                        clusters["unknown"].emplace_back(prev_name);
+                    }
+                    // If it has exactly one path, then it can be clustered with all other queries of the same path
+                    else if (paths_of_query.size() == 1){
+                        string path_name;
+
+                        // Construct a string identifier for the path
+                        for (const auto& [node_name, is_reverse]: paths_of_query[0]){
+                            path_name += node_name + (is_reverse ? "-" : "+");
+                        }
+                        clusters[path_name].emplace_back(prev_name);
+                    }
+                    else{
+                        throw runtime_error("ERROR: query in gaf summary has no path: " + name);
+                    }
+
+                    // Reset the running list of paths
+                    paths_of_query = {};
+                }
+
+                // Maintain a running list of paths for each query
+                paths_of_query.emplace_back(path);
+
+                prev_name = name;
+                p++;
+            }
+        }
     }
 }
 
 
 // TODO: replace this with proper implementation when it exists
-void generate_graph_alignments(
+void compute_graph_evaluation(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
@@ -377,10 +438,12 @@ void generate_graph_alignments(
         const path& vcf,
         size_t n_threads,
         size_t flank_length,
+        bool cluster,
         const path& output_dir
         ){
 
     unordered_map<Region,vector<VcfRecord> > region_records;
+    region_records.reserve(regions.size());
 
     path fasta_filename = "haplotypes.fasta";
 
@@ -435,8 +498,6 @@ void generate_graph_alignments(
         contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
             coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
 
-            cerr << "RECORD: " << r.chrom << ' ' << record_coord.first << ',' << record_coord.second << '\n';
-
             // Check if this record exceeds the region
             if (record_coord.first < unflanked_window.first or record_coord.second > unflanked_window.second){
                 cerr << "WARNING: skipping record with that exceeds the un-flanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
@@ -449,6 +510,12 @@ void generate_graph_alignments(
         });
     });
 
+    // Before moving on, make sure every region has at least an empty vector
+    for (const auto& r: regions){
+        if (region_records.find(r) == region_records.end()){
+            region_records[r] = {};
+        }
+    }
 
     // Convert VCFs to graphs and run graph aligner
     {
@@ -464,6 +531,7 @@ void generate_graph_alignments(
                 cerr << "launching: " << n << '\n';
                 threads.emplace_back(generate_graph_and_run_graphaligner_thread_fn,
                         std::ref(region_records),
+                        std::cref(region_transmaps),
                         std::cref(ref_sequences),
                         std::cref(regions),
                         std::cref(vcf),
@@ -488,15 +556,18 @@ void generate_graph_alignments(
 
 void evaluate(
         vector<path>& vcfs,
+        path cluster_by,
         path output_dir,
-        path windows_bed,               // Override the interval graph if this is provided
+        path windows_bed,       // Override the interval graph if this is provided
         path tandem_bed,
         path bam_csv,
         path ref_fasta,
         int32_t flank_length,
+        int32_t interval_max_length,
         int32_t n_threads,
         bool debug
 ){
+    Timer t;
 
     if (ghc::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
@@ -505,29 +576,38 @@ void evaluate(
         ghc::filesystem::create_directories(output_dir);
     }
 
-    Timer t;
-
     cerr << t << "Initializing" << '\n';
 
     vector <pair <string,path> > bam_paths;
     unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
+    if (windows_bed.empty()){
+        cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
+        construct_windows_from_vcf_and_bed(tandem_bed, vcfs, flank_length, interval_max_length, regions);
 
-    cerr << t << "Reading BED file" << '\n';
-
-    load_windows_from_bed(windows_bed, regions);
+    }
+    else {
+        cerr << t << "Reading BED file" << '\n';
+        load_windows_from_bed(windows_bed, regions);
+    }
 
     // This is only used while loading VCFs to find where each record belongs
-    // TODO: consider moving out of main scope
     unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
 
+    // Log which windows were used
+    path bed_output_path = output_dir / "windows.bed";
+    ofstream output_bed_file(bed_output_path);
+
+    // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
         r.start -= flank_length;
         r.stop += flank_length;
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
+        output_bed_file << r.to_bed() << '\n';
     }
+    output_bed_file.close();
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
@@ -560,7 +640,7 @@ void evaluate(
     path staging_dir = output_dir;
     for (const auto& vcf: vcfs){
         cerr << "Generating graph alignments for VCF: " << vcf << '\n';
-        generate_graph_alignments(
+        compute_graph_evaluation(
                 contig_interval_trees,
                 region_transmaps,
                 ref_sequences,
@@ -568,11 +648,10 @@ void evaluate(
                 vcf,
                 n_threads,
                 flank_length,
+                (cluster_by == vcf),
                 output_dir
         );
     }
-
-
 
     cerr << t << "Done" << '\n';
 }
@@ -582,10 +661,12 @@ int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
     path tandem_bed;
-    path bam_csv;
+    string bam_csv;
     path ref_fasta;
+    path cluster_by;
     string vcfs_string;
-    int32_t flank_length;
+    int32_t flank_length = 150;
+    int32_t interval_max_length = 15000;
     int32_t n_threads = 1;
     bool debug = false;
 
@@ -606,7 +687,6 @@ int main (int argc, char* argv[]){
             "--windows",
             windows_bed,
             "Path to BED file containing windows to merge (inferred automatically if not provided)");
-    // TODO: make this automatic
 
     app.add_option(
             "--tandems",
@@ -615,11 +695,17 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--vcfs",
-            bam_csv,
+            vcfs_string,
             "List of VCFs to evaluate (space-separated)")
             ->required()
             ->expected(1,-1)
             ->delimiter(',');
+
+    app.add_option(
+            "--cluster_by",
+            cluster_by,
+            "Simple headerless CSV file with the format [sample_name],[hap_name],[bam_path]")
+            ->required();
 
     app.add_option(
             "--bam_csv",
@@ -639,13 +725,19 @@ int main (int argc, char* argv[]){
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
+    app.add_option(
+            "--interval_max_length",
+            interval_max_length,
+            "How much flanking sequence to use when fetching and aligning reads")
+            ->required();
+
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
     app.parse(argc, argv);
 
     auto vcfs = app.get_option("--vcfs")->as<std::vector<path> >();
 
-    evaluate(vcfs, output_dir, windows_bed, tandem_bed, bam_csv, ref_fasta, flank_length, n_threads, debug);
+    evaluate(vcfs, output_dir, windows_bed, tandem_bed, bam_csv, ref_fasta, flank_length, interval_max_length, n_threads, debug);
 
     return 0;
 }

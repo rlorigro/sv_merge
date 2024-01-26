@@ -71,4 +71,9 @@ string Region::to_string(char sep) const{
 }
 
 
+string Region::to_bed() const{
+    return name + "\t" + std::to_string(start) + "\t" + std::to_string(stop);
+}
+
+
 }

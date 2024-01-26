@@ -1,5 +1,7 @@
 #pragma once
 
+#include "TransitiveMap.hpp"
+#include "VariantGraph.hpp"
 #include "Alignment.hpp"
 
 #include <unordered_map>
@@ -132,22 +134,36 @@ public:
     vector <pair <string, vector <pair<string,bool> > > > query_paths;
 
     /**
-     * Update alignment stats, for a given ref node
-     * @param ref_name : ref node to be assigned this cigar operation
-     * @param ref_length : ref node length (NOT the full ref path length)
-     * @param c : cigar interval obtained from iterating an alignment
-     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
+     * For testing purposes only, does not properly initialize
      */
-    void update_ref(const string& ref_name, int32_t ref_length, const CigarInterval& c, bool insert);
+    GafSummary()=default;
 
     /**
-     * Update alignment stats, for a given query node
-     * @param query_name : query name to be assigned this cigar operation
-     * @param query_length : query sequence length
+     * This constructor needs some objects that can inform the GafSummary of all the lengths of the graph nodes/queries.
+     * TODO: For future applications, consider passing a GFA path, or simply a map of node/query lengths.
+     * @param variant_graph a fully built variant graph that corresponds to the graph aligned as target in the GAF
+     * @param trans_map a transitive map that contains only the reads that will be aligned to the graph
+     */
+    GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map);
+
+    /**
+     * Update alignment stats, for a given ref node
+     * @param node_name : ref node to be assigned this cigar operation
      * @param c : cigar interval obtained from iterating an alignment
      * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
      */
-    void update_query(const string& query_name, int32_t query_length, const CigarInterval& c, bool insert);
+    void update_node(const string& node_name, const CigarInterval& c, bool insert);
+
+    /**
+     * Update alignment stats, for a given query sequence
+     * @param query_name : query to be assigned this cigar operation
+     * @param c : cigar interval obtained from iterating an alignment
+     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
+     */
+    void update_query(const string& query_name, const CigarInterval& c, bool insert);
+
+    void for_each_ref_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const;
+    void for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const;
 
     void resolve_all_overlaps();
     static void resolve_overlaps(vector<AlignmentSummary>& alignments);

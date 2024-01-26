@@ -5,41 +5,52 @@
 
 namespace sv_merge{
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
-    VcfReader vcf_reader(vcf);
-    vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 0;
-    vcf_reader.progress_n_lines = 100'000;
 
-    unordered_set<int32_t> sample_ids;
-    unordered_set<string> sample_names;
-
-    coord_t coord;
+void construct_windows_from_vcf_and_bed(path tandem_bed, const vector<path>& vcfs, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
     interval_t interval;
 
     unordered_map<string,vector <pair <interval_t, bool> > > contig_intervals;
 
     cerr << "Reading BED... " << '\n';
-    // Add every tandem region with a generic name as the label
-    for_region_in_bed_file(tandem_bed, [&](const Region& r){
-        interval.first = r.start;
-        interval.second = r.stop;
-        contig_intervals[r.name].emplace_back(interval, true);
-    });
 
-    cerr << "Reading VCF... " << '\n';
-    // Add every VCF allele interval with the sample name as the label
-    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        r.get_samples_with_alt(sample_ids);
+    if (not tandem_bed.empty()){
+        // Add every tandem region with a generic name as the label
+        for_region_in_bed_file(tandem_bed, [&](const Region& r){
+            interval.first = r.start;
+            interval.second = r.stop;
+            contig_intervals[r.name].emplace_back(interval, true);
+        });
+    }
+    else{
+        cerr << "WARNING: constructing windows without a (high sensitivity) tandem BED track is not recommended" << '\n';
+    }
 
-        if (sample_ids.empty()){
-            return;
-        }
+    for (const auto& vcf: vcfs) {
+        cerr << "Reading VCF: " << vcf << '\n';
 
-        r.get_reference_coordinates(false, coord);
+        VcfReader vcf_reader(vcf);
+        vcf_reader.min_qual = numeric_limits<float>::min();
+        vcf_reader.min_sv_length = 0;
+        vcf_reader.progress_n_lines = 100'000;
 
-        contig_intervals[r.chrom].emplace_back(coord, false);
-    });
+        unordered_set<int32_t> sample_ids;
+        unordered_set<string> sample_names;
+
+        coord_t coord;
+
+        // Add every VCF allele interval with the sample name as the label
+        vcf_reader.for_record_in_vcf([&](VcfRecord &r) {
+            r.get_samples_with_alt(sample_ids);
+
+            if (sample_ids.empty()) {
+                return;
+            }
+
+            r.get_reference_coordinates(false, coord);
+
+            contig_intervals[r.chrom].emplace_back(coord, false);
+        });
+    }
 
     cerr << "Computing intervals... " << '\n';
 
@@ -63,6 +74,18 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank
             regions.emplace_back(contig, c.first, c.second);
         }
     }
+}
+
+
+void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
+    vector<path> vcfs = {vcf};
+    construct_windows_from_vcf_and_bed(
+            tandem_bed,
+            vcfs,
+            flank_length,
+            interval_max_length,
+            regions
+    );
 }
 
 
