@@ -564,7 +564,6 @@ GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& trans_
         auto l = variant_graph.graph.get_length(h);
         auto name = std::to_string(variant_graph.graph.get_id(h));
         node_lengths[name] = int32_t(l);
-        cerr << "ADDING NODE: " << name << ' ' << l << '\n';
     });
 
     trans_map.for_each_read([&](const string& name, const string& sequence){

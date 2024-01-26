@@ -131,7 +131,7 @@ public:
     unordered_map <string, vector<AlignmentSummary> > query_summaries;
 
     // Paths observed in alignments
-    vector <pair <string, vector <pair<string,bool> > > > query_paths;
+    unordered_map <string, vector <vector <pair<string,bool> > > > query_paths;
 
     /**
      * For testing purposes only, does not properly initialize

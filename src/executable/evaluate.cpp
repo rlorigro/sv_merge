@@ -72,7 +72,7 @@ void compute_summaries_from_gaf(const path& gaf_path, GafSummary& gaf_summary){
             i++;
         });
 
-        gaf_summary.query_paths.emplace_back(name, alignment.get_path());
+        gaf_summary.query_paths[name].emplace_back(alignment.get_path());
 
 //        cerr << name << '\n';
 
@@ -244,29 +244,35 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
     size_t n_non_ref_edges = 0;
     size_t n_non_ref_edges_covered = 0;
 
-    unordered_map<string,size_t> name_counter;
     unordered_set <pair <handle_t, handle_t> > covered_edges;
 
-    for (const auto& [name, path]: gaf_summary.query_paths){
-        auto alignment_name = name + "_" + to_string(name_counter[name]);
-        auto p = variant_graph.graph.create_path_handle(alignment_name);
+    // Walk through all the paths that each query had
+    for (const auto& [name, paths]: gaf_summary.query_paths){
+        // Iterate the paths (this query may have multiple alignments)
+        for (size_t j=0; j<paths.size(); j++){
+            const auto& path = paths[j];
+            auto alignment_name = name + "_" + to_string(j);
 
-        handle_t h_prev;
-        for (size_t i=0; i<path.size(); i++){
-            const auto& [step_name, is_reverse] = path[i];
+            // Create a new path in the variant graph
+            auto p = variant_graph.graph.create_path_handle(alignment_name);
 
-            nid_t id = stoll(step_name);
-            auto h = variant_graph.graph.get_handle(id,is_reverse);
-            variant_graph.graph.append_step(p,h);
+            // Iterate the path steps and append each step to the prev step
+            handle_t h_prev;
+            for (size_t i=0; i<path.size(); i++){
+                const auto& [step_name, is_reverse] = path[i];
 
-            if (i > 0){
-                auto canonical_edge = variant_graph.graph.edge_handle(h_prev,h);
-                covered_edges.emplace(canonical_edge);
+                // Convert GAF name string back into nid, and construct handle of correct orientation
+                nid_t id = stoll(step_name);
+                auto h = variant_graph.graph.get_handle(id,is_reverse);
+                variant_graph.graph.append_step(p,h);
+
+                if (i > 0){
+                    auto canonical_edge = variant_graph.graph.edge_handle(h_prev,h);
+                    covered_edges.emplace(canonical_edge);
+                }
+                h_prev = h;
             }
-            h_prev = h;
         }
-
-        name_counter[name] += 1;
     }
 
     ofstream edges_file(edges_output_path);
@@ -309,14 +315,37 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
 }
 
 
-void generate_graph_and_run_graphaligner_thread_fn(
+void get_path_clusters(GafSummary& gaf_summary, unordered_map <string,vector<string> >& clusters){
+    for (const auto& [name, paths]: gaf_summary.query_paths) {
+        // If the query has more than one alignment, dump it into the "unknown" cluster
+        if (paths.size() > 1) {
+            clusters["unknown"].emplace_back(name);
+        }
+        // If it has exactly one path, then it can be clustered with all other queries of the same path
+        else if (paths.size() == 1) {
+            string path_name;
+
+            // Construct a string identifier for the path (just use GAF convention)
+            for (const auto& [node_name, is_reverse]: paths[0]) {
+                path_name += (is_reverse ? "<" : ">") + node_name;
+            }
+
+            clusters[path_name].emplace_back(name);
+
+        } else {
+            throw runtime_error("ERROR: query in gaf summary has no path: " + name);
+        }
+    }
+}
+
+
+void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const path& vcf,
         const path& output_dir,
-        const path& fasta_filename,
         int32_t flank_length,
         bool cluster,
         atomic<size_t>& job_index
@@ -343,6 +372,7 @@ void generate_graph_and_run_graphaligner_thread_fn(
         create_directories(output_subdir);
 
         path gfa_path = output_subdir / "graph.gfa";
+        path fasta_filename = input_subdir / "haplotypes.fasta";
 
         VariantGraph variant_graph(ref_sequences, tandem_track);
 
@@ -382,54 +412,28 @@ void generate_graph_and_run_graphaligner_thread_fn(
         write_summary(output_subdir, gaf_summary, variant_graph);
 
         if (cluster){
-            using path_t = vector <pair<string,bool> >;
-            using named_path_t = pair <string, path_t>;
-
             unordered_map <string,vector<string> > clusters;
+            get_path_clusters(gaf_summary, clusters);
 
-            sort(gaf_summary.query_paths.begin(), gaf_summary.query_paths.end(), [&](named_path_t& a, named_path_t& b){
-                return a.first < b.first;
-            });
+            path clusters_path = input_subdir / "clusters.csv";
+            ofstream file(clusters_path);
 
-            size_t p = 0;
-            string prev_name;
-            vector<path_t> paths_of_query;
-            for (const auto& [name, path]: gaf_summary.query_paths){
-                if (prev_name != name or p == gaf_summary.query_paths.size() - 1){
-                    // If the query has more than one alignment, dump it into the "unknown" cluster
-                    if (paths_of_query.size() > 1){
-                        clusters["unknown"].emplace_back(prev_name);
-                    }
-                    // If it has exactly one path, then it can be clustered with all other queries of the same path
-                    else if (paths_of_query.size() == 1){
-                        string path_name;
+            if (not file.is_open() or not file.good()){
+                throw runtime_error("ERROR: could not write file: " + clusters_path.string());
+            }
 
-                        // Construct a string identifier for the path
-                        for (const auto& [node_name, is_reverse]: paths_of_query[0]){
-                            path_name += node_name + (is_reverse ? "-" : "+");
-                        }
-                        clusters[path_name].emplace_back(prev_name);
-                    }
-                    else{
-                        throw runtime_error("ERROR: query in gaf summary has no path: " + name);
-                    }
-
-                    // Reset the running list of paths
-                    paths_of_query = {};
+            file << "cluster_name,query_names" << '\n';
+            for (const auto& [cluster_name, query_names]: clusters){
+                file << cluster_name << ',';
+                for (size_t q=0; q<query_names.size(); q++){
+                    file << query_names[q] << ((q < query_names.size() - 1) ? ' ' : '\n');
                 }
-
-                // Maintain a running list of paths for each query
-                paths_of_query.emplace_back(path);
-
-                prev_name = name;
-                p++;
             }
         }
     }
 }
 
 
-// TODO: replace this with proper implementation when it exists
 void compute_graph_evaluation(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<Region,TransMap>& region_transmaps,
@@ -444,38 +448,6 @@ void compute_graph_evaluation(
 
     unordered_map<Region,vector<VcfRecord> > region_records;
     region_records.reserve(regions.size());
-
-    path fasta_filename = "haplotypes.fasta";
-
-    // Dump truth haplotypes into each region directory
-    {
-        // Thread-related variables
-        atomic<size_t> job_index = 0;
-        vector<thread> threads;
-
-        threads.reserve(n_threads);
-
-        // Launch threads
-        for (uint64_t n = 0; n < n_threads; n++) {
-            try {
-                cerr << "launching: " << n << '\n';
-                threads.emplace_back(write_region_subsequences_to_file_thread_fn,
-                        std::cref(region_transmaps),
-                        std::cref(regions),
-                        std::cref(output_dir),
-                        std::cref(fasta_filename),
-                        std::ref(job_index)
-                );
-            } catch (const exception &e) {
-                throw e;
-            }
-        }
-
-        // Wait for threads to finish
-        for (auto &n: threads) {
-            n.join();
-        }
-    }
 
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
@@ -529,16 +501,16 @@ void compute_graph_evaluation(
         for (uint64_t n = 0; n < n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
-                threads.emplace_back(generate_graph_and_run_graphaligner_thread_fn,
-                        std::ref(region_records),
-                        std::cref(region_transmaps),
-                        std::cref(ref_sequences),
-                        std::cref(regions),
-                        std::cref(vcf),
-                        std::cref(output_dir),
-                        std::cref(fasta_filename),
-                        flank_length,
-                        std::ref(job_index)
+                threads.emplace_back(compute_graph_evaluation_thread_fn,
+                                     std::ref(region_records),
+                                     std::cref(region_transmaps),
+                                     std::cref(ref_sequences),
+                                     std::cref(regions),
+                                     std::cref(vcf),
+                                     std::cref(output_dir),
+                                     flank_length,
+                                     cluster,
+                                     std::ref(job_index)
                 );
             } catch (const exception &e) {
                 throw e;
@@ -550,7 +522,6 @@ void compute_graph_evaluation(
             n.join();
         }
     }
-
 }
 
 
@@ -558,7 +529,7 @@ void evaluate(
         vector<path>& vcfs,
         path cluster_by,
         path output_dir,
-        path windows_bed,       // Override the interval graph if this is provided
+        path windows_bed,                // Override the interval graph if this is provided
         path tandem_bed,
         path bam_csv,
         path ref_fasta,
@@ -585,7 +556,6 @@ void evaluate(
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
         construct_windows_from_vcf_and_bed(tandem_bed, vcfs, flank_length, interval_max_length, regions);
-
     }
     else {
         cerr << t << "Reading BED file" << '\n';
@@ -629,17 +599,52 @@ void evaluate(
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';
 
-    // Generate GFAs and folder structure for every VCF * every region
-    // - GFAs should be stored for easy access/debugging later
-    // - GAFs should also be stored
-    // - FASTA files for extracted truth haplotypes should be optional
+    path fasta_filename = "haplotypes.fasta";
+    path staging_dir = output_dir;
+
+    // Dump truth haplotypes into each region directory
+    {
+        // Thread-related variables
+        atomic<size_t> job_index = 0;
+        vector<thread> threads;
+
+        threads.reserve(n_threads);
+
+        // Launch threads
+        for (uint64_t n = 0; n < n_threads; n++) {
+            try {
+                cerr << "launching: " << n << '\n';
+                threads.emplace_back(write_region_subsequences_to_file_thread_fn,
+                                     std::cref(region_transmaps),
+                                     std::cref(regions),
+                                     std::cref(staging_dir),
+                                     std::cref(fasta_filename),
+                                     std::ref(job_index)
+                );
+            } catch (const exception &e) {
+                throw e;
+            }
+        }
+
+        // Wait for threads to finish
+        for (auto &n: threads) {
+            n.join();
+        }
+    }
+
+    // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
     // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
     // TODO: create option to use /dev/shm/ as staging dir
     // Absolutely must delete the /dev/shm/ copy or warn the user at termination
     //
-    path staging_dir = output_dir;
     for (const auto& vcf: vcfs){
         cerr << "Generating graph alignments for VCF: " << vcf << '\n';
+
+        bool cluster = (cluster_by == vcf);
+        if (cluster){
+            cerr << "Is cluster VCF" << '\n';
+        }
+
         compute_graph_evaluation(
                 contig_interval_trees,
                 region_transmaps,
@@ -648,8 +653,8 @@ void evaluate(
                 vcf,
                 n_threads,
                 flank_length,
-                (cluster_by == vcf),
-                output_dir
+                cluster,
+                staging_dir
         );
     }
 
@@ -737,7 +742,19 @@ int main (int argc, char* argv[]){
 
     auto vcfs = app.get_option("--vcfs")->as<std::vector<path> >();
 
-    evaluate(vcfs, output_dir, windows_bed, tandem_bed, bam_csv, ref_fasta, flank_length, interval_max_length, n_threads, debug);
+    evaluate(
+        vcfs,
+        cluster_by,
+        output_dir,
+        windows_bed,
+        tandem_bed,
+        bam_csv,
+        ref_fasta,
+        flank_length,
+        interval_max_length,
+        n_threads,
+        debug
+    );
 
     return 0;
 }
