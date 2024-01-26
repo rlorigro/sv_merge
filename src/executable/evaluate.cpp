@@ -203,11 +203,12 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
     }
 
     // Start by writing the headers
-    nodes_file << "name,length,is_ref,coverage,identity,color" << '\n';
-    haps_file << "name,length,is_ref,coverage,identity" << '\n';
+    nodes_file << "name,length,is_ref,is_flank,coverage,identity,color" << '\n';
+    haps_file << "name,length,is_ref,is_flank,coverage,identity" << '\n';
 
     string ref_color = "#7D8FE1";
     string non_ref_color = "#FFC07E";
+    string flank_color = "#bebebe";   // bebe be bebe
     string color;
 
     // GAF ref/target nodes
@@ -217,18 +218,18 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
     gaf_summary.for_each_ref_summary([&](const string& name, int32_t length, float identity, float coverage){
         auto id = stoll(name);
 
-        if (variant_graph.is_flanking_node(id)){
-            return;
-        }
-
         bool is_ref = variant_graph.is_reference_node(id);
+        bool is_flank = variant_graph.is_flanking_node(id);
 
         color = non_ref_color;
         if (is_ref){
             color = ref_color;
         }
+        if (is_flank){
+            color = flank_color;
+        }
 
-        nodes_file << name << ',' << length << ',' << is_ref << ',' << coverage << ',' << identity << ',' << color << '\n';
+        nodes_file << name << ',' << length << ',' << is_ref << ',' << is_flank << ',' << coverage << ',' << identity << ',' << color << '\n';
     });
 
     // GAF queries (aligned haplotypes)
@@ -236,7 +237,7 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
     // name,length,is_ref,coverage,identity,color
     // [string],[int],[bool],[float],[float],[string]
     gaf_summary.for_each_query_summary([&](const string& name, int32_t length, float identity, float coverage){
-        haps_file << name << ',' << length << ',' << 0 << ',' << coverage << ',' << identity << '\n';
+        haps_file << name << ',' << length << ',' << 0 << ',' << 0 << ',' << coverage << ',' << identity << '\n';
     });
 
     // Iterate the edges covered by the alignments and compile some stats regarding edge coverage
@@ -341,6 +342,7 @@ void get_path_clusters(GafSummary& gaf_summary, unordered_map <string,vector<str
 
 void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
@@ -352,7 +354,7 @@ void compute_graph_evaluation_thread_fn(
 ){
     // TODO: finish implementing tandem track as a user input
     unordered_map<string,vector<interval_t>> tandem_track;
-    for (auto& [key,value]: ref_sequences){
+    for (const auto& [key,value]: ref_sequences){
         tandem_track[key] = {};
     }
 
@@ -374,7 +376,7 @@ void compute_graph_evaluation_thread_fn(
         path gfa_path = output_subdir / "graph.gfa";
         path fasta_filename = input_subdir / "haplotypes.fasta";
 
-        VariantGraph variant_graph(ref_sequences, tandem_track);
+        VariantGraph variant_graph(ref_sequences, contig_tandems);
 
         if (variant_graph.would_graph_be_nontrivial(records)){
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), false);
@@ -436,6 +438,7 @@ void compute_graph_evaluation_thread_fn(
 
 void compute_graph_evaluation(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
@@ -503,6 +506,7 @@ void compute_graph_evaluation(
                 cerr << "launching: " << n << '\n';
                 threads.emplace_back(compute_graph_evaluation_thread_fn,
                                      std::ref(region_records),
+                                     std::cref(contig_tandems),
                                      std::cref(region_transmaps),
                                      std::cref(ref_sequences),
                                      std::cref(regions),
@@ -553,9 +557,19 @@ void evaluate(
     unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
+    cerr << "Reading tandem BED" << '\n';
+
+    unordered_map<string,vector<interval_t> > contig_tandems;
+    interval_t interval;
+    for_region_in_bed_file(tandem_bed, [&](const Region& r){
+        interval.first = r.start;
+        interval.second = r.stop;
+        contig_tandems[r.name].emplace_back(interval);
+    });
+
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
-        construct_windows_from_vcf_and_bed(tandem_bed, vcfs, flank_length, interval_max_length, regions);
+        construct_windows_from_vcf_and_bed(contig_tandems, vcfs, flank_length, interval_max_length, regions);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
@@ -647,6 +661,7 @@ void evaluate(
 
         compute_graph_evaluation(
                 contig_interval_trees,
+                contig_tandems,
                 region_transmaps,
                 ref_sequences,
                 regions,

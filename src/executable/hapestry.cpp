@@ -105,10 +105,22 @@ void hapestry(
 
     cerr << t << "Constructing windows" << '\n';
 
+    cerr << "Reading tandem BED" << '\n';
+
+    unordered_map<string,vector<interval_t> > contig_tandems;
+    interval_t interval;
+    for_region_in_bed_file(tandem_bed, [&](const Region& r){
+        interval.first = r.start;
+        interval.second = r.stop;
+        contig_tandems[r.name].emplace_back(interval);
+    });
+
     if (windows_bed.empty()){
-        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, interval_max_length, regions);
+        cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
+        construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, regions);
     }
-    else{
+    else {
+        cerr << t << "Reading BED file" << '\n';
         load_windows_from_bed(windows_bed, regions);
     }
 

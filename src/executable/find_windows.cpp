@@ -58,7 +58,15 @@ void find_windows(
 
     cerr << t << "Constructing windows" << '\n';
 
-    construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, interval_max_length, regions);
+    unordered_map<string,vector<interval_t> > contig_tandems;
+    interval_t interval;
+    for_region_in_bed_file(tandem_bed, [&](const Region& r){
+        interval.first = r.start;
+        interval.second = r.stop;
+        contig_tandems[r.name].emplace_back(interval);
+    });
+
+    construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, regions);
 
     size_t r = 0;
     path output_path;

@@ -590,7 +590,54 @@ void GafSummary::update_query(const string& query_name, const CigarInterval& c, 
 }
 
 
+void compute_identity_and_coverage(const vector<AlignmentSummary>& alignments, int32_t length, pair<float,float>& result){
+    AlignmentSummary total;
+    int32_t bases_not_covered = 0;
+
+    for (size_t i=0; i<alignments.size(); i++){
+        const auto& a = alignments[i];
+
+        total.n_match += a.n_match;
+        total.n_mismatch += a.n_mismatch;
+        total.n_insert += a.n_insert;
+        total.n_delete += a.n_delete;
+
+        if (i == 0){
+            // Accumulate distance from start of sequence
+            bases_not_covered += a.start;
+//            cerr << "distance from start of sequence: " << a.start << '\n';
+        }
+        else {
+            // Accumulate distance from previous alignment end
+            auto distance = a.start - alignments[i-1].stop;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+
+            bases_not_covered += distance;
+
+//            cerr << "distance from previous alignment end: " << distance << '\n';
+        }
+
+        if (i == alignments.size() - 1){
+            // Accumulate distance from end of sequence
+            bases_not_covered += length - a.stop;
+//            cerr << "distance from end of sequence: " << length - a.stop << '\n';
+        }
+
+//        cerr << i << ' ' << a.start << ',' << a.stop << ' ' << bases_not_covered << '\n';
+//        cerr << '\n';
+    }
+
+    result.first = total.compute_identity();
+    result.second = float(length - bases_not_covered) / float(length);
+}
+
+
 void GafSummary::for_each_ref_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    pair<float,float> identity_and_coverage;
+
     for (const auto& [name, length]: node_lengths){
         auto result = ref_summaries.find(name);
 
@@ -601,36 +648,16 @@ void GafSummary::for_each_ref_summary(const function<void(const string& name, in
 
         const auto& alignments = result->second;
 
-        AlignmentSummary total;
-        int32_t bases_not_covered = 0;
+        compute_identity_and_coverage(alignments, length, identity_and_coverage);
 
-        AlignmentSummary prev(0,0);
-        for (auto& a: alignments){
-            total.n_match += a.n_match;
-            total.n_mismatch += a.n_mismatch;
-            total.n_insert += a.n_insert;
-            total.n_delete += a.n_delete;
-
-            auto distance = a.start - prev.stop;
-
-            bases_not_covered += distance;
-
-            if (distance < 0){
-                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
-            }
-
-            prev = a;
-        }
-
-        auto identity = total.compute_identity();
-        auto coverage = float(length - bases_not_covered) / float(length);
-
-        f(name, length, coverage, identity);
+        f(name, length, identity_and_coverage.first, identity_and_coverage.second);
     }
 }
 
 
 void GafSummary::for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    pair<float,float> identity_and_coverage;
+
     for (auto& [name, length]: query_lengths){
         auto result = query_summaries.find(name);
 
@@ -641,30 +668,9 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
 
         const auto& alignments = result->second;
 
-        AlignmentSummary total;
-        int32_t bases_not_covered = 0;
+        compute_identity_and_coverage(alignments, length, identity_and_coverage);
 
-        AlignmentSummary prev(0,0);
-        for (auto& a: alignments){
-            total.n_match += a.n_match;
-            total.n_mismatch += a.n_mismatch;
-            total.n_insert += a.n_insert;
-            total.n_delete += a.n_delete;
-
-            auto distance = a.start - prev.stop;
-
-            bases_not_covered += distance;
-
-            if (distance < 0){
-                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
-            }
-            prev = a;
-        }
-
-        auto identity = total.compute_identity();
-        auto coverage = float(length - bases_not_covered) / float(length);
-
-        f(name, length, coverage, identity);
+        f(name, length, identity_and_coverage.first, identity_and_coverage.second);
     }
 }
 

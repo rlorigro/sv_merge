@@ -6,23 +6,15 @@
 namespace sv_merge{
 
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, const vector<path>& vcfs, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
+void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interval_t> >& contig_tandems, const vector<path>& vcfs, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
     interval_t interval;
 
     unordered_map<string,vector <pair <interval_t, bool> > > contig_intervals;
 
-    cerr << "Reading BED... " << '\n';
-
-    if (not tandem_bed.empty()){
-        // Add every tandem region with a generic name as the label
-        for_region_in_bed_file(tandem_bed, [&](const Region& r){
-            interval.first = r.start;
-            interval.second = r.stop;
-            contig_intervals[r.name].emplace_back(interval, true);
-        });
-    }
-    else{
-        cerr << "WARNING: constructing windows without a (high sensitivity) tandem BED track is not recommended" << '\n';
+    for (const auto& [name, tandems]: contig_tandems){
+        for (auto& t: tandems){
+            contig_intervals[name].emplace_back(t, true);
+        }
     }
 
     for (const auto& vcf: vcfs) {
@@ -77,10 +69,10 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, const vector<path>& vcf
 }
 
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
+void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interval_t> >& contig_tandems, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
     vector<path> vcfs = {vcf};
     construct_windows_from_vcf_and_bed(
-            tandem_bed,
+            contig_tandems,
             vcfs,
             flank_length,
             interval_max_length,
