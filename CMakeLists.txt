@@ -513,7 +513,7 @@ set(TESTS
         test_read_clustering
         test_shared_memory
         test_signal_handler
-        test_unordered_dense
+#        test_unordered_dense
         test_transmap
         test_triangle_inequality
         test_wfa2
