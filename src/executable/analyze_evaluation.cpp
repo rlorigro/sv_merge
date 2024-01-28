@@ -1,12 +1,13 @@
 #include "Filesystem.hpp"
 #include "Region.hpp"
 #include "VcfReader.hpp"
-#include "CLI11.hpp"
-#include "misc.hpp"
 #include "bed.hpp"
+#include "CLI11.hpp"
 
 using ghc::filesystem::path;
 using ghc::filesystem::directory_iterator;
+using ghc::filesystem::exists;
+using ghc::filesystem::create_directory;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
 using sv_merge::Region;
@@ -30,26 +31,32 @@ using std::ofstream;
 using namespace sv_merge;
 
 
+/**
+ * Reads window directories and prints the values of all windows
+ */
 class Counts {
 public:
     /**
+     * Allocates output arrays
+     *
      * @param coverage_threshold fraction above which a node or haplotype is considered fully covered;
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space.
      */
-    explicit Counts(vector<string>& tools, double coverage_threshold, size_t n_haplotypes, size_t n_nonref_haplotypes, size_t n_haplotype_clusters, const vector<size_t>& haplotype_cluster_size, const unordered_map<string,size_t>& haplotype2cluster, size_t n_windows = 1e6):
-        tools(tools),
+    explicit Counts(const vector<string>& tools, double coverage_threshold, size_t n_windows = 1e6):
+        TOOLS(tools),
         N_TOOLS(tools.size()),
-        coverage_threshold(coverage_threshold),
-        n_haplotypes(n_haplotypes),
-        n_nonref_haplotypes(n_nonref_haplotypes),
-        n_haplotype_clusters(n_haplotype_clusters),
-        haplotype_cluster_size(haplotype_cluster_size),
-        haplotype2cluster(haplotype2cluster)
+        coverage_threshold(coverage_threshold)
     {
         size_t i;
 
         n_alignments.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { n_alignments.emplace_back(); n_alignments.at(i).reserve(n_windows); }
+
+        n_haplotypes.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { n_haplotypes.emplace_back(); n_haplotypes.at(i).reserve(n_windows); }
+        n_nonref_haplotypes.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { n_nonref_haplotypes.emplace_back(); n_nonref_haplotypes.at(i).reserve(n_windows); }
+        n_haplotype_clusters.reserve(n_windows);
 
         haplotype_coverage_avg.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { haplotype_coverage_avg.emplace_back(); haplotype_coverage_avg.at(i).reserve(n_windows); }
@@ -102,83 +109,110 @@ public:
         for (i=0; i<N_TOOLS; i++) { supported_dup.emplace_back(); supported_dup.at(i).reserve(n_windows); }
         unsupported_dup.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { unsupported_dup.emplace_back(); unsupported_dup.at(i).reserve(n_windows); }
-    }
+    };
 
 
     /**
      * Adds to the lists of measures all the values in the directory of a window.
      *
-     * @param directory assumed structure:
+     * @param directory assumed structure (every one of these files must be present, unless otherwise noted):
+     *
+     * DIRECTORY
+     * ├── `CLUSTERS_FILE`: for every cluster (row): `cluster_id,haplotype_ìds`, where `haplotype_ìds` is a space-
+     * │   separated list; this file might be absent, and some haplotypes might be missing.
      * ├── TOOL_ID_1
      * │   ├── `NODES_FILE`: for every node (rows): `id,length,is_reference (0/1),coverage,identity`.
-     * │   ├── `HAPLOTYPES_FILE`: for every haplotype(row): `id,length,is_reference (0/1),coverage,identity`.
+     * │   ├── `HAPLOTYPES_FILE`: for every haplotype (row): `id,length,is_reference (0/1),coverage,identity`.
      * │   ├── `OTHER_COUNTS_FILE`: `total_n_alignments,n_nonreference_edges,n_nonreference_edges_covered`.
-     * │   ├── `SUPPORTED_VCF_FILE`: contains only calls that are fully supported by some alignment.
-     * │   └── `UNSUPPORTED_VCF_FILE`: contains only calls that are not fully supported by any alignment.
+     * │   ├── `SUPPORTED_VCF_FILE`: contains only calls that are fully supported by some alignment; can be empty;
+     * │   └── `UNSUPPORTED_VCF_FILE`: contains only calls that are not fully supported by any alignment; can be empty.
      * ├── TOOL_ID_2
      * │   ├── ...
      * ... ...
+     *
+     * @return FALSE if the optional clusters file is missing from `directory`.
      */
-    void load_directory(const path& directory) {
+    bool load_window(const path& directory) {
+        bool out;
         char c;
-        size_t i, j;
+        size_t i;
         size_t field;
-        string buffer;
         path input_file;
         ifstream file;
 
         n_windows++;
+
+        // Haplotype clusters (optional)
+        input_file=directory/CLUSTERS_FILE;
+        file.clear(); file.open(input_file);
+        on_init_clusters();
+        if (!file.good() || !file.is_open()) out=false;
+        else {
+            out=true;
+            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+            field=0;
+            while (file.get(c)) {
+                if (c==LINE_DELIMITER) { on_field_end_clusters(++field,tmp_buffer_1); on_line_end_clusters(tmp_buffer_2); tmp_buffer_1.clear(); field=0; }
+                else if (c==CSV_DELIMITER) { on_field_end_clusters(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
+                else tmp_buffer_1.push_back(c);
+            }
+            if (!tmp_buffer_1.empty()) { on_field_end_clusters(++field,tmp_buffer_1); on_line_end_clusters(tmp_buffer_2); }
+            file.close();
+        }
+        on_window_end_clusters();
+
         for (i=0; i<N_TOOLS; i++) {
             // Node counts
-            input_file=directory/tools.at(i)/NODES_FILE;
+            input_file=directory/TOOLS.at(i)/NODES_FILE;
             file.clear(); file.open(input_file);
             if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
             on_init_nodes();
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_line_end_nodes(); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
+                if (c==LINE_DELIMITER) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(); tmp_buffer_1.clear(); field=0; }
+                else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
+                else tmp_buffer_1.push_back(c);
             }
-            if (!buffer.empty()) { on_field_end_nodes(++field,buffer); on_line_end_nodes(); }
+            if (!tmp_buffer_1.empty()) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(); }
             file.close();
             on_window_end_nodes(i);
 
             // Haplotype counts
-            input_file=directory/tools.at(i)/HAPLOTYPES_FILE;
+            input_file=directory/TOOLS.at(i)/HAPLOTYPES_FILE;
             file.clear(); file.open(input_file);
             if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
             on_init_haplotypes();
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_line_end_haplotypes(); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
+                if (c==LINE_DELIMITER) { on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(); tmp_buffer_1.clear(); field=0; }
+                else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
+                else tmp_buffer_1.push_back(c);
             }
-            if (!buffer.empty()) { on_field_end_haplotypes(++field,buffer); on_line_end_haplotypes(); }
+            if (!tmp_buffer_1.empty()) { on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(); }
             file.close();
             on_window_end_haplotypes(i);
 
-            // Remaining counts
-            input_file=directory/tools.at(i)/OTHER_COUNTS_FILE;
+            // Edge counts
+            input_file=directory/TOOLS.at(i)/EDGE_COUNTS_FILE;
             file.clear(); file.open(input_file);
             if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_window_end_other_counts(i); buffer.clear(); }
-                else if (c==CSV_DELIMITER) { on_field_end_other_counts(++field,buffer); buffer.clear(); }
-                else buffer.push_back(c);
+                if (c==LINE_DELIMITER) { on_field_end_edge_counts(++field,tmp_buffer_1); on_window_end_edge_counts(i); tmp_buffer_1.clear(); field=0; }
+                else if (c==CSV_DELIMITER) { on_field_end_edge_counts(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
+                else tmp_buffer_1.push_back(c);
             }
-            if (!buffer.empty()) { on_field_end_other_counts(++field,buffer); on_window_end_other_counts(i); }
+            if (!tmp_buffer_1.empty()) { on_field_end_edge_counts(++field,tmp_buffer_1); on_window_end_edge_counts(i); }
             file.close();
 
             // VCF counts
-            input_file=directory/tools.at(i)/SUPPORTED_VCF_FILE;
-            for (j=0; j<vcf_counts_supported.size(); j++) vcf_counts_supported.at(j)=0;
+            input_file=directory/TOOLS.at(i)/SUPPORTED_VCF_FILE;
+            on_init_vcf_counts();
             VcfReader reader1(input_file);
+            reader1.n_samples_to_load=1;
             reader1.for_record_in_vcf([&](VcfRecord& record) {
                 vcf_counts_supported.at(0)++;
                 if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_supported.at(1)++;
@@ -186,9 +220,9 @@ public:
                 else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_supported.at(3)++;
                 else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_supported.at(4)++;
             });
-            input_file=directory/tools.at(i)/UNSUPPORTED_VCF_FILE;
-            for (j=0; j<vcf_counts_unsupported.size(); j++) vcf_counts_unsupported.at(j)=0;
+            input_file=directory/TOOLS.at(i)/UNSUPPORTED_VCF_FILE;
             VcfReader reader2(input_file);
+            reader2.n_samples_to_load=1;
             reader2.for_record_in_vcf([&](VcfRecord& record) {
                 vcf_counts_unsupported.at(0)++;
                 if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_unsupported.at(1)++;
@@ -196,101 +230,202 @@ public:
                 else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_unsupported.at(3)++;
                 else if (record.sv_type==VcfReader::TYPE_DUPLICATION) vcf_counts_unsupported.at(4)++;
             });
-            on_window_end_vcf_counts(i,vcf_counts_supported,vcf_counts_unsupported);
+            on_window_end_vcf_counts(i);
         }
+        return out;
+    }
+
+
+    /**
+     * Prints every measure as a separate file in `output_dir`. Every file contains a list numbers (one number per
+     * window in `windows_to_print`) sorted in non-decreasing order. Only fractional values whose denominator is nonzero
+     * are printed.
+     *
+     * Directory structure:
+     *
+     * OUTPUT_DIR
+     * ├── TOOL_ID_1
+     * │   ├── measure_1.txt
+     * │   ├── measure_2.txt
+     * │   ├── ...
+     * ├── TOOL_ID_2
+     * │   ├── ...
+     * ... ...
+     */
+    void print_windows(const path& output_dir, const vector<size_t>& windows_to_print) const {
+        const size_t N_WINDOWS = windows_to_print.size();
+        const string SUFFIX = ".txt";
+        size_t i, j;
+        vector<size_t> tmp_vector_1;
+        vector<double> tmp_vector_2;
+        vector<vector<ofstream>> out;
+        const vector<string> FILE_NAMES = {
+                "n_alignments",
+                "n_haplotypes",
+                "n_nonref_haplotypes",  // Fraction
+                "n_haplotype_clusters",
+                "haplotype_coverage_avg","nonref_haplotype_coverage_avg","cluster_coverage_avg",
+                "alignment_identity_avg","nonref_alignment_identity_avg","cluster_alignment_identity_avg",
+                "nonref_nodes",
+                "nonref_nodes_fully_covered","nonref_nodes_partially_covered",  // Fractions
+                "nonref_nodes_bps",
+                "nonref_nodes_bps_covered",  // Fraction
+                "nonref_edges",
+                "nonref_edges_covered",  // Fraction
+                "supported_vcf_records","unsupported_vcf_records","supported_del","unsupported_del","supported_ins","unsupported_ins","supported_inv","unsupported_inv","supported_dup","unsupported_dup"  // Fractions
+        };
+        tmp_vector_1.reserve(N_WINDOWS); tmp_vector_2.reserve(N_WINDOWS);
+
+        create_directory(output_dir);
+        for (i=0; i<N_TOOLS; i++) {
+            const string tool_name = TOOLS.at(i);
+            create_directory(output_dir/tool_name);
+            out.emplace_back();
+            for (j=0; j<FILE_NAMES.size(); j++) {
+                out.at(i).emplace_back(output_dir/tool_name/(FILE_NAMES.at(j)+SUFFIX));
+                if (!out.at(i).at(j).good() || !out.at(i).at(j).is_open()) throw runtime_error("ERROR: cannot create files in directory "+(output_dir/tool_name).string());
+            }
+        }
+        print_windows_impl(n_alignments,windows_to_print,0,out,false,tmp_vector_1);
+        print_windows_impl(n_haplotypes,windows_to_print,1,out,false,tmp_vector_1);
+        print_windows_impl_normalized(n_nonref_haplotypes,n_haplotypes,windows_to_print,2,out,true,tmp_vector_2);
+        print_windows_impl(n_haplotype_clusters,windows_to_print,3,out,false,tmp_vector_1);
+        print_windows_impl(haplotype_coverage_avg,windows_to_print,4,out,false,tmp_vector_2);
+        print_windows_impl(nonref_haplotype_coverage_avg,windows_to_print,5,out,false,tmp_vector_2);
+        print_windows_impl(cluster_coverage_avg,windows_to_print,6,out,false,tmp_vector_2);
+        print_windows_impl(alignment_identity_avg,windows_to_print,7,out,false,tmp_vector_2);
+        print_windows_impl(nonref_alignment_identity_avg,windows_to_print,8,out,false,tmp_vector_2);
+        print_windows_impl(cluster_alignment_identity_avg,windows_to_print,9,out,false,tmp_vector_2);
+        print_windows_impl(nonref_nodes,windows_to_print,10,out,false,tmp_vector_1);
+        print_windows_impl_normalized(nonref_nodes_fully_covered,nonref_nodes,windows_to_print,11,out,true,tmp_vector_2);
+        print_windows_impl_normalized(nonref_nodes_partially_covered,nonref_nodes,windows_to_print,12,out,true,tmp_vector_2);
+        print_windows_impl(nonref_nodes_bps,windows_to_print,13,out,false,tmp_vector_1);
+        print_windows_impl_normalized(nonref_nodes_bps_covered,nonref_nodes_bps,windows_to_print,14,out,true,tmp_vector_2);
+        print_windows_impl(nonref_edges,windows_to_print,15,out,false,tmp_vector_1);
+        print_windows_impl_normalized(nonref_edges_covered,nonref_edges,windows_to_print,16,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(supported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,17,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(unsupported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,18,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(supported_del,supported_del,unsupported_del,windows_to_print,19,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(unsupported_del,supported_del,unsupported_del,windows_to_print,20,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(supported_ins,supported_ins,unsupported_ins,windows_to_print,21,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(unsupported_ins,supported_ins,unsupported_ins,windows_to_print,22,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(supported_inv,supported_inv,unsupported_inv,windows_to_print,23,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(unsupported_inv,supported_inv,unsupported_inv,windows_to_print,24,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(supported_dup,supported_dup,unsupported_dup,windows_to_print,25,out,true,tmp_vector_2);
+        print_windows_impl_binormalized(unsupported_dup,supported_dup,unsupported_dup,windows_to_print,26,out,true,tmp_vector_2);
     }
 
 
 private:
     const string NODES_FILE = "nodes.csv";
-    const string HAPLOTYPES_FILE = "haplotypes.csv";
-    const string OTHER_COUNTS_FILE = "counts.txt";
+    const string HAPLOTYPES_FILE = "haps.csv";
+    const string CLUSTERS_FILE = "clusters.csv";
+    const string EDGE_COUNTS_FILE = "edges.csv";
     const string SUPPORTED_VCF_FILE = "supported.vcf";
     const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
     const char CSV_DELIMITER = ',';
     const char LINE_DELIMITER = '\n';
-    const int32_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
+    const char CLUSTER_DELIMITER = ' ';
+    const size_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
-    const vector<string>& tools;
+    const vector<string>& TOOLS;
     const size_t N_TOOLS;
     const double coverage_threshold;
-    const size_t n_haplotypes, n_nonref_haplotypes, n_haplotype_clusters;
-    const vector<size_t>& haplotype_cluster_size;
-    const unordered_map<string,size_t>& haplotype2cluster;
 
     size_t n_windows;
+
+    /**
+     * Output measures: alignments.
+     */
     vector<vector<size_t>> n_alignments;
 
     /**
-     * Haplotype averages. Every haplotype contributes equally.
+     * Output measures: haplotypes.
+     */
+    vector<vector<size_t>> n_haplotypes, n_nonref_haplotypes;
+    vector<size_t> n_haplotype_clusters;
+
+    /**
+     * Output measures: haplotype averages. Every haplotype contributes equally.
      */
     vector<vector<double>> haplotype_coverage_avg, alignment_identity_avg;
 
     /**
-     * Haplotype averages. Every haplotype contributes equally. Haplotypes marked as reference do not contribute.
+     * Output measures: haplotype averages. Every haplotype contributes equally. Haplotypes marked as reference do not
+     * contribute.
      */
     vector<vector<double>> nonref_haplotype_coverage_avg, nonref_alignment_identity_avg;
 
     /**
-     * Haplotype cluster measures. Assume that every haplotype is assigned to a cluster. The following measures are
-     * computed by averaging over all the haplotypes in the same cluster, and then by computing the average over all
+     * Output measures: haplotype clusters. Assume that every haplotype is assigned to a cluster. The following measures
+     * are computed by averaging over all the haplotypes in the same cluster, and then by computing the average over all
      * clusters. Every cluster contributes equally to the measure, regardless of the number of haplotypes it contains.
      */
     vector<vector<double>> cluster_coverage_avg, cluster_alignment_identity_avg;
 
     /**
-     * Graph measures
+     * Output measures: graph.
      */
     vector<vector<size_t>> nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered;
     vector<vector<size_t>> nonref_nodes_bps, nonref_nodes_bps_covered;
     vector<vector<size_t>> nonref_edges, nonref_edges_covered;
 
     /**
-     * VCF measures
+     * Output measures: VCF.
      */
     vector<vector<size_t>> supported_vcf_records, unsupported_vcf_records;
     vector<vector<size_t>> supported_del, unsupported_del, supported_ins, unsupported_ins, supported_inv, unsupported_inv, supported_dup, unsupported_dup;
 
     /**
-     * Reused temporary space, storing the current line of a CSV file.
+     * Reused temporary space: stores the current line of a CSV file.
      */
-    string name;
-    int32_t length;
-    bool is_ref;
+    bool is_ref, is_flank;
+    size_t length, n_alignments_in_window, n_edges, n_nonref_edges, n_edges_covered, n_nonref_edges_covered;
     double coverage, identity;
-    size_t n_alignments_in_window, n_nonref_edges, n_nonref_edges_covered;
+    string name, names, cluster_id, color;
+    string tmp_buffer_1, tmp_buffer_2;
 
     /**
-     * Reused temporary space, for cumulating counts over the current file.
+     * Reused temporary space: cumulates counts over the current file.
      */
     vector<size_t> node_counts;
-    vector<double> haplotype_counts, nonref_haplotype_counts;
-    vector<vector<double>> cluster_counts;
+
+    size_t n_clusters;
+    unordered_map<string,string> hap2cluster;
+    unordered_map<string,size_t> cluster_size;
+    unordered_map<string,vector<double>> cluster_counts;
+
+    size_t n_haps, n_nonref_haps;
+    vector<double> hap_counts, nonref_hap_counts;
+
     vector<size_t> vcf_counts_supported, vcf_counts_unsupported;
 
 
+    /**
+     * `node_counts` has the following content:
+     * nonref_nodes
+     * nonref_nodes_fully_covered
+     * nonref_nodes_partially_covered
+     * nonref_nodes_bps
+     * nonref_nodes_bps_covered
+     */
     void on_init_nodes() {
-        const size_t size = node_counts.size();
-        for (size_t i=0; i<size; i++) node_counts.at(i)=0;
+        node_counts={0,0,0,0,0};
     }
-
 
     void on_field_end_nodes(size_t field, const string& buffer) {
         switch (field) {
             case 1: name=buffer; break;
-            case 2: length=stoi(buffer); break;
+            case 2: length=stol(buffer); break;
             case 3: is_ref=stoi(buffer)==1; break;
-            case 4: coverage=stod(buffer); break;
-            case 5: identity=stod(buffer); break;
-            default: return;
+            case 4: is_flank=stoi(buffer)==1; break;
+            case 5: coverage=stod(buffer); break;
+            case 6: identity=stod(buffer); break;
+            case 7: color=buffer; break;
+            default: throw runtime_error("ERROR: node CSV field not recognized: "+to_string(field));
         }
     }
 
-
-    /**
-     * @param counts nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered, nonref_nodes_bps,
-     * nonref_nodes_bps_covered;
-     */
     void on_line_end_nodes() {
         if (is_ref) return;
         node_counts.at(0)++;
@@ -300,11 +435,6 @@ private:
         node_counts.at(4)+=(size_t)(coverage*length);
     }
 
-
-    /**
-     * @param counts nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered, nonref_nodes_bps,
-     * nonref_nodes_bps_covered;
-     */
     void on_window_end_nodes(size_t tool_id) {
         nonref_nodes.at(tool_id).emplace_back(node_counts.at(0));
         nonref_nodes_fully_covered.at(tool_id).emplace_back(node_counts.at(1));
@@ -314,74 +444,119 @@ private:
     }
 
 
-    void on_init_haplotypes() {
-        size_t i, j;
+    void on_init_clusters() {
+        hap2cluster.clear(); cluster_size.clear(); cluster_counts.clear();
+    }
 
-        for (i=0; i<haplotype_counts.size(); i++) haplotype_counts.at(i)=0;
-        for (i=0; i<nonref_haplotype_counts.size(); i++) nonref_haplotype_counts.at(i)=0;
-        for (i=0; i<n_haplotype_clusters; i++) {
-            for (j=0; j<cluster_counts.at(j).size(); j++) cluster_counts.at(i).at(j)=0;
+    void on_field_end_clusters(size_t field, const string& buffer) {
+        switch (field) {
+            case 1: cluster_id=buffer; break;
+            case 2: names=buffer; break;
+            default: throw runtime_error("ERROR: clusters CSV field not recognized: "+to_string(field));
         }
     }
 
+    void on_line_end_clusters(string& buffer) {
+        char c;
+        size_t i;
+
+        buffer.clear();
+        for (i=0; i<names.size(); i++) {
+            c=names.at(i);
+            if (c==CLUSTER_DELIMITER) { hap2cluster.emplace(buffer,cluster_id); buffer.clear(); }
+            else buffer.push_back(c);
+        }
+        hap2cluster.emplace(buffer,cluster_id);
+    }
+
+    void on_window_end_clusters() {
+        n_clusters=0;
+        for (auto& [haplotype_id,cluster_id]: hap2cluster) {
+            if (!cluster_size.contains(cluster_id)) {
+                n_clusters++;
+                cluster_size[cluster_id]=1;
+                cluster_counts[cluster_id]={0,0};
+            }
+            else cluster_size.at(cluster_id)++;
+        }
+        n_haplotype_clusters.emplace_back(n_clusters);
+    }
+
+
+    /**
+     * `hap_counts` and `nonref_hap_counts` have the following content:
+     * coverage_sum
+     * alignment_identity_sum
+     */
+    void on_init_haplotypes() {
+        n_haps=0; n_nonref_haps=0;
+        hap_counts={0,0}; nonref_hap_counts={0,0};
+    }
 
     void on_field_end_haplotypes(size_t field, const string& buffer) {
         switch (field) {
             case 1: name=buffer; break;
             case 2: length=stoi(buffer); break;
             case 3: is_ref=stoi(buffer)==1; break;
-            case 4: coverage=stod(buffer); break;
-            case 5: identity=stod(buffer); break;
-            default: return;
+            case 4: is_flank=stoi(buffer)==1; break;
+            case 5: coverage=stod(buffer); break;
+            case 6: identity=stod(buffer); break;
+            default: throw runtime_error("ERROR: haplotypes CSV field not recognized: "+to_string(field));
         }
     }
 
-
-    /**
-     * @param *_counts coverage_sum, alignment_identity_sum.
-     */
     void on_line_end_haplotypes() {
-        haplotype_counts.at(0)+=coverage;
-        haplotype_counts.at(1)+=identity;
+        n_haps++;
+        hap_counts.at(0)+=coverage;
+        hap_counts.at(1)+=identity;
         if (!is_ref) {
-            nonref_haplotype_counts.at(0)+=coverage;
-            nonref_haplotype_counts.at(1)+=identity;
+            n_nonref_haps++;
+            nonref_hap_counts.at(0)+=coverage;
+            nonref_hap_counts.at(1)+=identity;
         }
-        const size_t cluster_id = haplotype2cluster.at(name);
-        cluster_counts.at(cluster_id).at(0)+=coverage;
-        cluster_counts.at(cluster_id).at(1)+=identity;
+        string id;
+        if (hap2cluster.contains(name)) id=hap2cluster.at(name);
+        else {  // A haplotype without a cluster is assigned to its own singleton cluster
+            id=name;
+            cluster_size[name]=1;
+            n_clusters++;
+        }
+        if (cluster_counts.contains(id)) {
+            cluster_counts.at(id).at(0)+=coverage;
+            cluster_counts.at(id).at(1)+=identity;
+        }
+        else cluster_counts[id]={coverage,identity};
     }
 
-
-    /**
-     * @param *_counts coverage_sum, alignment_identity_sum.
-     */
     void on_window_end_haplotypes(size_t tool_id) {
-        const size_t cluster_id = haplotype2cluster.at(name);
-        const size_t cluster_size = haplotype_cluster_size.at(cluster_id);
-
-        haplotype_coverage_avg.at(tool_id).emplace_back(haplotype_counts.at(0)/((double)n_haplotypes));
-        alignment_identity_avg.at(tool_id).emplace_back(haplotype_counts.at(1)/((double)n_haplotypes));
-        if (!is_ref) {
-            nonref_haplotype_coverage_avg.at(tool_id).emplace_back(nonref_haplotype_counts.at(0)/((double)n_haplotypes));
-            nonref_alignment_identity_avg.at(tool_id).emplace_back(nonref_haplotype_counts.at(1)/((double)n_haplotypes));
+        n_haplotypes.at(tool_id).emplace_back(n_haps);
+        n_nonref_haplotypes.at(tool_id).emplace_back(n_nonref_haps);
+        haplotype_coverage_avg.at(tool_id).emplace_back(n_haps>0?hap_counts.at(0)/((double)n_haps):0);
+        alignment_identity_avg.at(tool_id).emplace_back(n_haps>0?hap_counts.at(1)/((double)n_haps):0);
+        nonref_haplotype_coverage_avg.at(tool_id).emplace_back(n_nonref_haps>0?nonref_hap_counts.at(0)/((double)n_nonref_haps):0);
+        nonref_alignment_identity_avg.at(tool_id).emplace_back(n_nonref_haps>0?nonref_hap_counts.at(1)/((double)n_nonref_haps):0);
+        double sum1 = 0; double sum2 = 0;
+        for (const auto& [id, size]: cluster_size) {
+            sum1+=cluster_counts.at(id).at(0)/((double)size);
+            sum2+=cluster_counts.at(id).at(1)/((double)size);
         }
-        cluster_coverage_avg.at(tool_id).emplace_back(cluster_counts.at(cluster_id).at(0)/((double)cluster_size));
-        cluster_alignment_identity_avg.at(tool_id).emplace_back(cluster_counts.at(cluster_id).at(1)/((double)cluster_size));
+        cluster_coverage_avg.at(tool_id).emplace_back(n_clusters>0?sum1/n_clusters:0);
+        cluster_alignment_identity_avg.at(tool_id).emplace_back(n_clusters>0?sum2/n_clusters:0);
     }
 
 
-    void on_field_end_other_counts(size_t field, const string& buffer) {
+    void on_field_end_edge_counts(size_t field, const string& buffer) {
         switch (field) {
             case 1: n_alignments_in_window=stoi(buffer); break;
-            case 2: n_nonref_edges=stoi(buffer); break;
-            case 3: n_nonref_edges_covered=stoi(buffer)==1; break;
-            default: return;
+            case 2: n_edges=stoi(buffer); break;
+            case 3: n_edges_covered=stoi(buffer); break;
+            case 4: n_nonref_edges=stoi(buffer); break;
+            case 5: n_nonref_edges_covered=stoi(buffer); break;
+            default: throw runtime_error("ERROR: edges CSV field not recognized: "+to_string(field));
         }
     }
 
-
-    void on_window_end_other_counts(size_t tool_id) {
+    void on_window_end_edge_counts(size_t tool_id) {
         n_alignments.at(tool_id).emplace_back(n_alignments_in_window);
         nonref_edges.at(tool_id).emplace_back(n_nonref_edges);
         nonref_edges_covered.at(tool_id).emplace_back(n_nonref_edges_covered);
@@ -389,9 +564,19 @@ private:
 
 
     /**
-     * @param vcf_counts_* total_records, del, ins, inv, dup.
+     * `vcf_counts_supported` and `vcf_counts_unsupported` have the following content:
+     * total_records
+     * DEL
+     * INS
+     * INV
+     * DUP
      */
-    void on_window_end_vcf_counts(size_t tool_id, const vector<size_t>& vcf_counts_supported, const vector<size_t>& vcf_counts_unsupported) {
+    void on_init_vcf_counts() {
+        vcf_counts_supported={0,0,0,0,0};
+        vcf_counts_unsupported={0,0,0,0,0};
+    }
+
+    void on_window_end_vcf_counts(size_t tool_id) {
         supported_vcf_records.at(tool_id).emplace_back(vcf_counts_supported.at(0));
         supported_del.at(tool_id).emplace_back(vcf_counts_supported.at(1));
         supported_ins.at(tool_id).emplace_back(vcf_counts_supported.at(2));
@@ -407,118 +592,185 @@ private:
 
 
     /**
-     * @param directories window coordinates associated with each call to `load_directory()`, in the order in which the
-     * calls were issued; format: [start..stop);
-     * @param intervals in the same order along the reference as the calls to `load_directory()`; format: [start..stop);
-     * @param min_covered_fraction prints only windows with at least this fraction of bases covered by elements of
-     * `intervals`;
-     * @param out a matrix of output files; for each tool (rows), the following output files (columns):
-     * n_alignments
-     * haplotype_coverage_avg
-     * alignment_identity_avg
-     * nonref_haplotype_coverage_avg
-     * nonref_alignment_identity_avg
-     * cluster_coverage_avg
-     * cluster_alignment_identity_avg
-     * nonref_nodes
-     * nonref_nodes_fully_covered
-     * nonref_nodes_partially_covered
-     * nonref_nodes_bps
-     * nonref_nodes_bps_covered
-     * nonref_edges
-     * nonref_edges_covered
-     * supported_vcf_records
-     * unsupported_vcf_records
-     * supported_del
-     * unsupported_del
-     * supported_ins
-     * unsupported_ins
-     * supported_inv
-     * unsupported_inv
-     * supported_dup
-     * unsupported_dup
+     * Prints the same array of values for every tool
      */
-    void print_counts(const vector<Region> directories, const vector<Region>& intervals, double min_covered_fraction, vector<vector<ofstream>>& out) {
-        const size_t N_DIRECTORIES = directories.size();
-        const size_t N_INTERVALS = intervals.size();
-        size_t i, j, first_j_for_next_i;
-        size_t surface;
-        int32_t first, last, current_directory_start, current_directory_stop;
-        string current_directory_name;
-        Region current_directory, current_interval;
-        vector<Region> current_intervals;
-
-        j=0; first_j_for_next_i=UINT64_MAX;
-        for (i=0; i<N_DIRECTORIES; i++) {
-            current_directory=directories.at(i);
-            current_directory_name=current_directory.name;
-            current_directory_start=current_directory.start;
-            current_directory_stop=current_directory.stop;
-            current_intervals.clear();
-            while (j<N_INTERVALS) {
-                current_interval=intervals.at(j);
-                if (first_j_for_next_i==UINT64_MAX && i<N_DIRECTORIES-1 && current_interval.name==directories.at(i+1).name && current_interval.stop>directories.at(i+1).start && current_interval.start<directories.at(i+1).stop) first_j_for_next_i=j;
-                if (current_interval.name!=current_directory_name || current_interval.start>=current_directory_stop) break;
-                if (current_interval.stop<=current_directory_start) { j++; continue; }
-                current_intervals.emplace_back(current_interval);
+    template<class T> void print_windows_impl(const vector<T>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
+        tmp_vector.clear();
+        for (auto& value: windows_to_print) tmp_vector.emplace_back(source.at(value));
+        sort(tmp_vector.begin(),tmp_vector.end());
+        const size_t n_elements = tmp_vector.size();
+        for (size_t i=0; i<N_TOOLS; i++) {
+            for (size_t j=0; j<n_elements; j++) {
+                if (!nonzeros_only || tmp_vector.at(j)!=0) out.at(i).at(column) << to_string(tmp_vector.at(j)) << '\n';
             }
-            if (current_intervals.size()!=0) {
-                surface=0;
-                first=current_intervals.at(0).start; last=current_intervals.at(0).stop-1;
-                for (j=1; j<current_intervals.size(); j++) {
-                    if (current_intervals.at(j).start>last) {
-                        surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
-                        first=current_intervals.at(j).start; last=current_intervals.at(j).stop-1;
-                    }
-                    else last=max(last,current_intervals.at(j).stop-1);
-                }
-                surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
-                if (surface>=min_covered_fraction*(current_directory_stop-current_directory_start)) {
-                    // Print to output window all of i's measures...
-                    // -------------->
-
-
-                }
-            }
-            if (first_j_for_next_i!=UINT64_MAX) j=first_j_for_next_i;
-            first_j_for_next_i=UINT64_MAX;
+            out.at(i).at(column).close();
         }
     }
 
+
+    template<class T> void print_windows_impl(const vector<vector<T>>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
+        size_t n_elements;
+        for (size_t i=0; i<N_TOOLS; i++) {
+            tmp_vector.clear();
+            for (auto& value: windows_to_print) tmp_vector.emplace_back(source.at(i).at(value));
+            sort(tmp_vector.begin(),tmp_vector.end());
+            n_elements=tmp_vector.size();
+            for (size_t j=0; j<n_elements; j++) {
+                if (!nonzeros_only || tmp_vector.at(j)!=0) out.at(i).at(column) << to_string(tmp_vector.at(j)) << '\n';
+            }
+            out.at(i).at(column).close();
+        }
+    }
+
+
+    /**
+     * @param nonzero_denom_only FALSE: prints a zero for every fraction with zero denominator.
+     */
+    template<class T> void print_windows_impl_normalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
+        size_t n_elements;
+        for (size_t i=0; i<N_TOOLS; i++) {
+            tmp_vector.clear();
+            for (auto& value: windows_to_print) {
+                const T denom = denominator.at(i).at(value);
+                if (denom!=0 || !nonzero_denom_only) tmp_vector.emplace_back(denom!=0?((double)(numerator.at(i).at(value)))/denom:0);
+            }
+            sort(tmp_vector.begin(),tmp_vector.end());
+            n_elements=tmp_vector.size();
+            for (size_t j=0; j<n_elements; j++) out.at(i).at(column) << to_string(tmp_vector.at(j)) << '\n';
+            out.at(i).at(column).close();
+        }
+    }
+
+
+    /**
+     * @param nonzero_denom_only FALSE: prints a zero for every fraction with zero denominator.
+     */
+    template<class T> void print_windows_impl_binormalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator1, const vector<vector<size_t>>& denominator2, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
+        size_t n_elements;
+        for (size_t i=0; i<N_TOOLS; i++) {
+            tmp_vector.clear();
+            for (auto& value: windows_to_print) {
+                const T denom = denominator1.at(i).at(value)+denominator2.at(i).at(value);
+                if (denom!=0 || !nonzero_denom_only) tmp_vector.emplace_back(denom!=0?((double)(numerator.at(i).at(value)))/denom:0);
+            }
+            sort(tmp_vector.begin(),tmp_vector.end());
+            n_elements=tmp_vector.size();
+            for (size_t j=0; j<n_elements; j++) out.at(i).at(column) << to_string(tmp_vector.at(j)) << '\n';
+            out.at(i).at(column).close();
+        }
+    }
 };
 
 
+/**
+ * @param directories window coordinates associated with each call to `load_directory()`, in the order in which the
+ * calls were issued; format: [start..stop);
+ * @param intervals in the same order along the reference as the calls to `load_directory()`; format: [start..stop);
+ * @param min_covered_fraction the function returns only windows that intersect with some element of `intervals`; if
+ * this value is nonzero, the procedure returns only windows with at least this fraction of bases covered by
+ * elements of `intervals`.
+ */
+void get_windows_to_print(const vector<Region>& directories, const vector<Region>& intervals, double min_covered_fraction, vector<size_t>& out) {
+    const size_t N_DIRECTORIES = directories.size();
+    const size_t N_INTERVALS = intervals.size();
+    size_t i, j, first_j_for_next_i;
+    size_t surface;
+    int32_t first, last, current_directory_start, current_directory_stop;
+    string current_directory_name;
+    Region current_directory, current_interval;
+    vector<Region> current_intervals;
 
-
-
-
-
-
+    out.clear();
+    j=0; first_j_for_next_i=UINT64_MAX;
+    for (i=0; i<N_DIRECTORIES; i++) {
+        current_directory=directories.at(i);
+        current_directory_name=current_directory.name;
+        current_directory_start=current_directory.start;
+        current_directory_stop=current_directory.stop;
+        current_intervals.clear();
+        while (j<N_INTERVALS) {
+            current_interval=intervals.at(j);
+            if (first_j_for_next_i==UINT64_MAX && i<N_DIRECTORIES-1 && current_interval.name==directories.at(i+1).name && current_interval.stop>directories.at(i+1).start && current_interval.start<directories.at(i+1).stop) first_j_for_next_i=j;
+            if (current_interval.name!=current_directory_name || current_interval.start>=current_directory_stop) break;
+            if (current_interval.stop<=current_directory_start) { j++; continue; }
+            current_intervals.emplace_back(current_interval);
+        }
+        if (!current_intervals.empty()) {
+            surface=0;
+            first=current_intervals.at(0).start; last=current_intervals.at(0).stop-1;
+            for (j=1; j<current_intervals.size(); j++) {
+                if (current_intervals.at(j).start>last) {
+                    surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
+                    first=current_intervals.at(j).start; last=current_intervals.at(j).stop-1;
+                }
+                else last=max(last,current_intervals.at(j).stop-1);
+            }
+            surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
+            if (surface>=min_covered_fraction*(current_directory_stop-current_directory_start)) out.emplace_back(i);
+        }
+        if (first_j_for_next_i!=UINT64_MAX) j=first_j_for_next_i;
+        first_j_for_next_i=UINT64_MAX;
+    }
+}
 
 
 int main (int argc, char* argv[]) {
-    const path ROOT_DIR;
-    vector<string>& tools;
-    vector<double> coverage_threshold;
-    const size_t n_haplotypes;
-    const size_t n_nonref_haplotypes;
-    const size_t n_haplotype_clusters;
-    const vector<size_t> haplotype_cluster_size;
-    const unordered_map<string,size_t> haplotype2cluster;
-    vector<path> bed_files;
+    const string SUBDIR_PREFIX = "chr";
+    const char SUBDIR_SEPARATOR_1 = '_';
+    const char SUBDIR_SEPARATOR_2 = '-';
+    const string SUBDIR_ALL_WINDOWS = "all_windows";
+    const size_t PROGRESS_N_DIRS = 100;  // Arbitrary
 
+    bool all_cluster_files_present;
     char c;
     size_t i;
     size_t length, n_directories;
     int32_t first, last;
-    string chromosome, buffer, current_dir;
+    string chromosome, current_dir, buffer;
+    vector<size_t> windows_to_print;
+    vector<Region> directories, intervals;
 
-    const char SEPARATOR_1 = '_';
-    const char SEPARATOR_2 = '-';
+    // Parsing the input
+    CLI::App app{"Evaluates VCFs using assemblies aligned to a variation graph"};
+    path INPUT_DIR, OUTPUT_DIR;
+    vector<string> TOOLS;
+    vector<path> BED_FILES;
+    double ALIGNMENT_COVERAGE_THRESHOLD = 0.95;
+    double BED_COVERAGE_THRESHOLD = 0.1;
+    app.add_option(
+            "--input_dir",
+            INPUT_DIR,
+            "Input directory, with one subdirectory per window.")
+            ->required();
+    app.add_option(
+            "--output_dir",
+            OUTPUT_DIR,
+            "Output directory. Must not already exist.")
+            ->required();
+    app.add_option(
+            "--tools",
+            TOOLS,
+            "List of tools to be evaluated. These names are matched to subdirectories of the input directory.")
+            ->expected(1,-1)
+            ->required();
+    app.add_option(
+            "--beds",
+            BED_FILES,
+            "List of BED files to select windows for evaluation. No file = Run the evaluation over all windows.")
+            ->expected(1,-1);
+    app.add_option(
+            "--min_alignment_coverage",
+            ALIGNMENT_COVERAGE_THRESHOLD,
+            "Count a node or haplotype as fully covered iff at least this fraction of it is covered by alignments (default: 0.95).")
+            ->capture_default_str();
+    app.add_option(
+            "--min_bed_coverage",
+            BED_COVERAGE_THRESHOLD,
+            "Use a window for evaluation iff at least this fraction of it is covered by BED intervals. 0=Iff even a single basepair of the window is covered by BED intervals.")
+            ->capture_default_str();
+    app.parse(argc,argv);
 
-
-
-
+    // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
         if (a.name<b.name) return true;
         else if (a.name>b.name) return false;
@@ -526,46 +778,49 @@ int main (int argc, char* argv[]) {
         else if (a.start>b.start) return false;
         return a.stop<b.stop;
     };
-
-
-    vector<Region> directories, intervals;
-
-    // Sorting all directories by coordinate
-    for (const auto& entry: directory_iterator(ROOT_DIR)) {
+    for (const auto& entry: directory_iterator(INPUT_DIR)) {
         if (!entry.is_directory()) continue;
         current_dir.clear(); current_dir.append(entry.path().stem().string());
-        if (!current_dir.starts_with("chr")) continue;
-        buffer=""; length=current_dir.length();
+        if (!current_dir.starts_with(SUBDIR_PREFIX)) continue;
+        buffer=""; length=current_dir.length(); first=-1;
         for (i=0; i<length; i++) {
             c=current_dir.at(i);
-            if (c==SEPARATOR_1) { chromosome.clear(); chromosome.append(buffer); buffer.clear(); }
-            else if (c==SEPARATOR_2) { first=stoi(buffer); buffer.clear(); }
+            if (c==SUBDIR_SEPARATOR_1) { chromosome.clear(); chromosome.append(buffer); buffer.clear(); }
+            else if (c==SUBDIR_SEPARATOR_2) { first=stoi(buffer); buffer.clear(); }
             else buffer.push_back(c);
         }
         last=stoi(buffer);
         directories.emplace_back(chromosome,first,last);
     }
-    if (directories.size()>1) sort(directories.begin(),directories.end(),region_comparator);
     n_directories=directories.size();
+    if (n_directories>1) sort(directories.begin(),directories.end(),region_comparator);
 
     // Collecting counts in canonical order
-    Counts counts(tools,coverage_threshold.at(0),n_haplotypes,n_nonref_haplotypes,n_haplotype_clusters,haplotype_cluster_size,haplotype2cluster);
+    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD);
+    all_cluster_files_present=true;
     for (i=0; i<n_directories; i++) {
         current_dir.clear();
-        current_dir.append(directories.at(i).name+SEPARATOR_1+to_string(directories.at(i).start)+SEPARATOR_2+to_string(directories.at(i).stop));
-        counts.load_directory(ROOT_DIR/current_dir);
+        current_dir.append(directories.at(i).name+SUBDIR_SEPARATOR_1+to_string(directories.at(i).start)+SUBDIR_SEPARATOR_2+to_string(directories.at(i).stop));
+        all_cluster_files_present&=counts.load_window(INPUT_DIR/current_dir);
+        if ((i+1)%PROGRESS_N_DIRS==0) cerr << "Loaded " << to_string(i+1) << " directories\n";
     }
+    cerr << "Loaded " << to_string(n_directories) << " directories\n";
+    if (!all_cluster_files_present) cerr << "WARNING: some cluster files are missing.\n";
 
-    // Processing each BED file
-    for (auto& file: bed_files) {
-        intervals.clear();
-        for_region_in_bed_file(file, [&](const Region &r) { intervals.emplace_back(r); });
-        if (intervals.size()>1) sort(intervals.begin(),intervals.end(),region_comparator);
-
-
-
+    // Processing each BED file in canonical order
+    if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
+    create_directory(OUTPUT_DIR);
+    if (BED_FILES.empty()) {
+        for (i=0; i<n_directories; i++) windows_to_print.emplace_back(i);
+        counts.print_windows(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,windows_to_print);
     }
-}
-
-
+    else {
+        for (auto& bed_file: BED_FILES) {
+            intervals.clear();
+            for_region_in_bed_file(bed_file,[&](const Region &r) { intervals.emplace_back(r); });
+            if (intervals.size()>1) sort(intervals.begin(),intervals.end(),region_comparator);
+            get_windows_to_print(directories,intervals,BED_COVERAGE_THRESHOLD,windows_to_print);
+            counts.print_windows(OUTPUT_DIR/bed_file.stem(),windows_to_print);
+        }
+    }
 }
