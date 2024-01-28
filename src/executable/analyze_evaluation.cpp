@@ -674,7 +674,7 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
     const size_t N_DIRECTORIES = directories.size();
     const size_t N_INTERVALS = intervals.size();
     size_t i, j, first_j_for_next_i;
-    size_t surface;
+    size_t surface, current_intervals_size;
     int32_t first, last, current_directory_start, current_directory_stop;
     string current_directory_name;
     Region current_directory, current_interval;
@@ -694,11 +694,13 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
             if (current_interval.name!=current_directory_name || current_interval.start>=current_directory_stop) break;
             if (current_interval.stop<=current_directory_start) { j++; continue; }
             current_intervals.emplace_back(current_interval);
+            j++;
         }
         if (!current_intervals.empty()) {
             surface=0;
             first=current_intervals.at(0).start; last=current_intervals.at(0).stop-1;
-            for (j=1; j<current_intervals.size(); j++) {
+            current_intervals_size=current_intervals.size();
+            for (j=1; j<current_intervals_size; j++) {
                 if (current_intervals.at(j).start>last) {
                     surface+=min(last,current_directory_stop-1)-max(first,current_directory_start)+1;
                     first=current_intervals.at(j).start; last=current_intervals.at(j).stop-1;
@@ -756,7 +758,7 @@ int main (int argc, char* argv[]) {
     app.add_option(
             "--beds",
             BED_FILES,
-            "List of BED files to select windows for evaluation. No file = Run the evaluation over all windows.")
+            "List of BED files to select windows for evaluation. No file = Run the evaluation over all windows. BED files can contain overlapping intervals and might not be sorted.")
             ->expected(1,-1);
     app.add_option(
             "--min_alignment_coverage",
