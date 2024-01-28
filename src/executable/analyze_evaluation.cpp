@@ -739,37 +739,12 @@ int main (int argc, char* argv[]) {
     vector<path> BED_FILES;
     double ALIGNMENT_COVERAGE_THRESHOLD = 0.95;
     double BED_COVERAGE_THRESHOLD = 0.1;
-    app.add_option(
-            "--input_dir",
-            INPUT_DIR,
-            "Input directory, with one subdirectory per window.")
-            ->required();
-    app.add_option(
-            "--output_dir",
-            OUTPUT_DIR,
-            "Output directory. Must not already exist.")
-            ->required();
-    app.add_option(
-            "--tools",
-            TOOLS,
-            "List of tools to be evaluated. These names are matched to subdirectories of the input directory.")
-            ->expected(1,-1)
-            ->required();
-    app.add_option(
-            "--beds",
-            BED_FILES,
-            "List of BED files to select windows for evaluation. No file = Run the evaluation over all windows. BED files can contain overlapping intervals and might not be sorted.")
-            ->expected(1,-1);
-    app.add_option(
-            "--min_alignment_coverage",
-            ALIGNMENT_COVERAGE_THRESHOLD,
-            "Count a node or haplotype as fully covered iff at least this fraction of it is covered by alignments (default: 0.95).")
-            ->capture_default_str();
-    app.add_option(
-            "--min_bed_coverage",
-            BED_COVERAGE_THRESHOLD,
-            "Use a window for evaluation iff at least this fraction of it is covered by BED intervals. 0=Iff even a single basepair of the window is covered by BED intervals.")
-            ->capture_default_str();
+    app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
+    app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
+    app.add_option("--tools",TOOLS,"List of tools to be evaluated. These names are matched to subdirectories of the input directory.")->expected(1,-1)->required();
+    app.add_option("--beds",BED_FILES,"List of BED files to select windows for evaluation. No file = Run the evaluation over all windows. BED files can contain overlapping intervals and might not be sorted.")->expected(1,-1);
+    app.add_option("--min_alignment_coverage",ALIGNMENT_COVERAGE_THRESHOLD,"Count a node or haplotype as fully covered iff at least this fraction of it is covered by alignments (default: 0.95).")->capture_default_str();
+    app.add_option("--min_bed_coverage",BED_COVERAGE_THRESHOLD,"Use a window for evaluation iff at least this fraction of it is covered by BED intervals. 0=Iff even a single basepair of the window is covered by BED intervals.")->capture_default_str();
     app.parse(argc,argv);
 
     // Sorting all directories by coordinate
