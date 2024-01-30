@@ -22,6 +22,7 @@ using std::unordered_map;
 using std::ifstream;
 using std::runtime_error;
 using std::sort;
+using std::reverse;
 using std::to_string;
 using std::max;
 using std::min;
@@ -36,16 +37,24 @@ using namespace sv_merge;
  */
 class Counts {
 public:
+    static const char SUBDIR_SEPARATOR_1 = '_';
+    static const char SUBDIR_SEPARATOR_2 = '-';
+
     /**
      * Allocates output arrays
      *
      * @param coverage_threshold fraction above which a node or haplotype is considered fully covered;
-     * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space.
+     * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space;
+     * @param log_* keeps track of every window that satisfies at least one of these low-support thresholds.
      */
-    explicit Counts(const vector<string>& tools, double coverage_threshold, size_t n_windows = 1e6):
+    explicit Counts(const vector<string>& tools, double coverage_threshold, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, size_t n_windows = 1e6):
         TOOLS(tools),
         N_TOOLS(tools.size()),
-        coverage_threshold(coverage_threshold)
+        coverage_threshold(coverage_threshold),
+        log_nodes_fully_covered_leq(log_nodes_fully_covered_leq),
+        log_edges_covered_leq(log_edges_covered_leq),
+        log_vcf_records_supported_leq(log_vcf_records_supported_leq),
+        log_alignment_identity_leq(log_alignment_identity_leq)
     {
         size_t i;
 
@@ -119,7 +128,8 @@ public:
      *
      * DIRECTORY
      * ├── `CLUSTERS_FILE`: for every cluster (row): `cluster_id,haplotype_ìds`, where `haplotype_ìds` is a space-
-     * │   separated list; this file might be absent, and some haplotypes might be missing.
+     * │   separated list; this file might be absent, and some haplotypes might be missing; `cluster_id` might be a GAF
+     * │   path in some graph (not necessarily in the local graph), but the procedure does not try to parse it.
      * ├── TOOL_ID_1
      * │   ├── `NODES_FILE`: for every node (rows): `id,length,is_reference (0/1),coverage,identity`.
      * │   ├── `HAPLOTYPES_FILE`: for every haplotype (row): `id,length,is_reference (0/1),coverage,identity`.
@@ -252,7 +262,7 @@ public:
      * │   ├── ...
      * ... ...
      */
-    void print_windows(const path& output_dir, const vector<size_t>& windows_to_print) const {
+    void print_measures(const path& output_dir, const vector<size_t>& windows_to_print) const {
         const size_t N_WINDOWS = windows_to_print.size();
         const string SUFFIX = ".txt";
         size_t i, j;
@@ -286,33 +296,50 @@ public:
                 if (!out.at(i).at(j).good() || !out.at(i).at(j).is_open()) throw runtime_error("ERROR: cannot create files in directory "+(output_dir/tool_name).string());
             }
         }
-        print_windows_impl(n_alignments,windows_to_print,0,out,false,tmp_vector_1);
-        print_windows_impl(n_haplotypes,windows_to_print,1,out,false,tmp_vector_1);
-        print_windows_impl_normalized(n_nonref_haplotypes,n_haplotypes,windows_to_print,2,out,true,tmp_vector_2);
-        print_windows_impl(n_haplotype_clusters,windows_to_print,3,out,false,tmp_vector_1);
-        print_windows_impl(haplotype_coverage_avg,windows_to_print,4,out,false,tmp_vector_2);
-        print_windows_impl(nonref_haplotype_coverage_avg,windows_to_print,5,out,false,tmp_vector_2);
-        print_windows_impl(cluster_coverage_avg,windows_to_print,6,out,false,tmp_vector_2);
-        print_windows_impl(alignment_identity_avg,windows_to_print,7,out,false,tmp_vector_2);
-        print_windows_impl(nonref_alignment_identity_avg,windows_to_print,8,out,false,tmp_vector_2);
-        print_windows_impl(cluster_alignment_identity_avg,windows_to_print,9,out,false,tmp_vector_2);
-        print_windows_impl(nonref_nodes,windows_to_print,10,out,false,tmp_vector_1);
-        print_windows_impl_normalized(nonref_nodes_fully_covered,nonref_nodes,windows_to_print,11,out,true,tmp_vector_2);
-        print_windows_impl_normalized(nonref_nodes_partially_covered,nonref_nodes,windows_to_print,12,out,true,tmp_vector_2);
-        print_windows_impl(nonref_nodes_bps,windows_to_print,13,out,false,tmp_vector_1);
-        print_windows_impl_normalized(nonref_nodes_bps_covered,nonref_nodes_bps,windows_to_print,14,out,true,tmp_vector_2);
-        print_windows_impl(nonref_edges,windows_to_print,15,out,false,tmp_vector_1);
-        print_windows_impl_normalized(nonref_edges_covered,nonref_edges,windows_to_print,16,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(supported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,17,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(unsupported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,18,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(supported_del,supported_del,unsupported_del,windows_to_print,19,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(unsupported_del,supported_del,unsupported_del,windows_to_print,20,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(supported_ins,supported_ins,unsupported_ins,windows_to_print,21,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(unsupported_ins,supported_ins,unsupported_ins,windows_to_print,22,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(supported_inv,supported_inv,unsupported_inv,windows_to_print,23,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(unsupported_inv,supported_inv,unsupported_inv,windows_to_print,24,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(supported_dup,supported_dup,unsupported_dup,windows_to_print,25,out,true,tmp_vector_2);
-        print_windows_impl_binormalized(unsupported_dup,supported_dup,unsupported_dup,windows_to_print,26,out,true,tmp_vector_2);
+        print_measures_impl(n_alignments,windows_to_print,0,out,false,tmp_vector_1);
+        print_measures_impl(n_haplotypes,windows_to_print,1,out,false,tmp_vector_1);
+        print_measures_impl_normalized(n_nonref_haplotypes,n_haplotypes,windows_to_print,2,out,true,tmp_vector_2);
+        print_measures_impl(n_haplotype_clusters,windows_to_print,3,out,false,tmp_vector_1);
+        print_measures_impl(haplotype_coverage_avg,windows_to_print,4,out,false,tmp_vector_2);
+        print_measures_impl(nonref_haplotype_coverage_avg,windows_to_print,5,out,false,tmp_vector_2);
+        print_measures_impl(cluster_coverage_avg,windows_to_print,6,out,false,tmp_vector_2);
+        print_measures_impl(alignment_identity_avg,windows_to_print,7,out,false,tmp_vector_2);
+        print_measures_impl(nonref_alignment_identity_avg,windows_to_print,8,out,false,tmp_vector_2);
+        print_measures_impl(cluster_alignment_identity_avg,windows_to_print,9,out,false,tmp_vector_2);
+        print_measures_impl(nonref_nodes,windows_to_print,10,out,false,tmp_vector_1);
+        print_measures_impl_normalized(nonref_nodes_fully_covered,nonref_nodes,windows_to_print,11,out,true,tmp_vector_2);
+        print_measures_impl_normalized(nonref_nodes_partially_covered,nonref_nodes,windows_to_print,12,out,true,tmp_vector_2);
+        print_measures_impl(nonref_nodes_bps,windows_to_print,13,out,false,tmp_vector_1);
+        print_measures_impl_normalized(nonref_nodes_bps_covered,nonref_nodes_bps,windows_to_print,14,out,true,tmp_vector_2);
+        print_measures_impl(nonref_edges,windows_to_print,15,out,false,tmp_vector_1);
+        print_measures_impl_normalized(nonref_edges_covered,nonref_edges,windows_to_print,16,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(supported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,17,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(unsupported_vcf_records,supported_vcf_records,unsupported_vcf_records,windows_to_print,18,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(supported_del,supported_del,unsupported_del,windows_to_print,19,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(unsupported_del,supported_del,unsupported_del,windows_to_print,20,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(supported_ins,supported_ins,unsupported_ins,windows_to_print,21,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(unsupported_ins,supported_ins,unsupported_ins,windows_to_print,22,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(supported_inv,supported_inv,unsupported_inv,windows_to_print,23,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(unsupported_inv,supported_inv,unsupported_inv,windows_to_print,24,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(supported_dup,supported_dup,unsupported_dup,windows_to_print,25,out,true,tmp_vector_2);
+        print_measures_impl_binormalized(unsupported_dup,supported_dup,unsupported_dup,windows_to_print,26,out,true,tmp_vector_2);
+    }
+
+
+    /**
+     * Stores a list of anomalous windows for each tool.
+     *
+     * @param directories all input directories examined.
+     */
+    void log_anomalous_windows(const path& output_dir, const vector<Region>& directories) {
+        for (auto& [tool_id, windows]: logged_windows) {
+            sort(windows.begin(),windows.end());
+            const auto iterator = unique(windows.begin(),windows.end());
+            windows.resize(distance(windows.begin(),iterator));
+            ofstream out(output_dir/TOOLS.at(tool_id)/LOGGED_WINDOWS_FILE);
+            for (auto w: windows) out << directories.at(w).name+SUBDIR_SEPARATOR_1+to_string(directories.at(w).start)+SUBDIR_SEPARATOR_2+to_string(directories.at(w).stop) << '\n';
+            out.close();
+        }
     }
 
 
@@ -323,6 +350,9 @@ private:
     const string EDGE_COUNTS_FILE = "edges.csv";
     const string SUPPORTED_VCF_FILE = "supported.vcf";
     const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
+    const string LOGGED_WINDOWS_FILE = "anomalous_windows.log";
+    const char GAF_FWD_CHAR = '>';
+    const char GAF_REV_CHAR = '<';
     const char CSV_DELIMITER = ',';
     const char LINE_DELIMITER = '\n';
     const char CLUSTER_DELIMITER = ' ';
@@ -331,6 +361,7 @@ private:
     const vector<string>& TOOLS;
     const size_t N_TOOLS;
     const double coverage_threshold;
+    const double log_nodes_fully_covered_leq, log_edges_covered_leq, log_vcf_records_supported_leq, log_alignment_identity_leq;
 
     size_t n_windows;
 
@@ -375,6 +406,11 @@ private:
      */
     vector<vector<size_t>> supported_vcf_records, unsupported_vcf_records;
     vector<vector<size_t>> supported_del, unsupported_del, supported_ins, unsupported_ins, supported_inv, unsupported_inv, supported_dup, unsupported_dup;
+
+    /**
+     * Output log: row=toolID, column=window.
+     */
+    unordered_map<size_t,vector<size_t>> logged_windows;
 
     /**
      * Reused temporary space: stores the current line of a CSV file.
@@ -441,6 +477,11 @@ private:
         nonref_nodes_partially_covered.at(tool_id).emplace_back(node_counts.at(2));
         nonref_nodes_bps.at(tool_id).emplace_back(node_counts.at(3));
         nonref_nodes_bps_covered.at(tool_id).emplace_back(node_counts.at(4));
+
+        if (node_counts.at(0)>0 && node_counts.at(1)<=log_nodes_fully_covered_leq*node_counts.at(0)) {
+            if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(nonref_nodes.at(tool_id).size()-1);
+            else logged_windows[tool_id]={nonref_nodes.at(tool_id).size()-1};
+        }
     }
 
 
@@ -514,13 +555,8 @@ private:
             nonref_hap_counts.at(0)+=coverage;
             nonref_hap_counts.at(1)+=identity;
         }
-        string id;
-        if (hap2cluster.contains(name)) id=hap2cluster.at(name);
-        else {  // A haplotype without a cluster is assigned to its own singleton cluster
-            id=name;
-            cluster_size[name]=1;
-            n_clusters++;
-        }
+        if (!hap2cluster.contains(name)) return;  // Haplotypes without a cluster do not contribute to clustering stats
+        const string id = hap2cluster.at(name);
         if (cluster_counts.contains(id)) {
             cluster_counts.at(id).at(0)+=coverage;
             cluster_counts.at(id).at(1)+=identity;
@@ -542,6 +578,11 @@ private:
         }
         cluster_coverage_avg.at(tool_id).emplace_back(n_clusters>0?sum1/n_clusters:0);
         cluster_alignment_identity_avg.at(tool_id).emplace_back(n_clusters>0?sum2/n_clusters:0);
+
+        if (n_haps>0 && hap_counts.at(1)<=log_alignment_identity_leq*n_haps) {
+            if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(n_haplotypes.at(tool_id).size()-1);
+            else logged_windows[tool_id]={n_haplotypes.at(tool_id).size()-1};
+        }
     }
 
 
@@ -560,6 +601,11 @@ private:
         n_alignments.at(tool_id).emplace_back(n_alignments_in_window);
         nonref_edges.at(tool_id).emplace_back(n_nonref_edges);
         nonref_edges_covered.at(tool_id).emplace_back(n_nonref_edges_covered);
+
+        if (n_nonref_edges>0 && n_nonref_edges_covered<=log_edges_covered_leq*n_nonref_edges) {
+            if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(n_alignments.at(tool_id).size()-1);
+            else logged_windows[tool_id]={n_alignments.at(tool_id).size()-1};
+        }
     }
 
 
@@ -588,13 +634,19 @@ private:
         unsupported_ins.at(tool_id).emplace_back(vcf_counts_unsupported.at(2));
         unsupported_inv.at(tool_id).emplace_back(vcf_counts_unsupported.at(3));
         unsupported_dup.at(tool_id).emplace_back(vcf_counts_unsupported.at(4));
+
+        const size_t total = vcf_counts_supported.at(0)+vcf_counts_unsupported.at(0);
+        if (total>0 && vcf_counts_supported.at(0)<=log_vcf_records_supported_leq*total) {
+            if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(supported_vcf_records.at(tool_id).size()-1);
+            else logged_windows[tool_id]={supported_vcf_records.at(tool_id).size()-1};
+        }
     }
 
 
     /**
      * Prints the same array of values for every tool
      */
-    template<class T> void print_windows_impl(const vector<T>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
+    template<class T> void print_measures_impl(const vector<T>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
         tmp_vector.clear();
         for (auto& value: windows_to_print) tmp_vector.emplace_back(source.at(value));
         sort(tmp_vector.begin(),tmp_vector.end());
@@ -608,7 +660,7 @@ private:
     }
 
 
-    template<class T> void print_windows_impl(const vector<vector<T>>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
+    template<class T> void print_measures_impl(const vector<vector<T>>& source, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzeros_only, vector<T> tmp_vector) const {
         size_t n_elements;
         for (size_t i=0; i<N_TOOLS; i++) {
             tmp_vector.clear();
@@ -626,7 +678,7 @@ private:
     /**
      * @param nonzero_denom_only FALSE: prints a zero for every fraction with zero denominator.
      */
-    template<class T> void print_windows_impl_normalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
+    template<class T> void print_measures_impl_normalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
         size_t n_elements;
         for (size_t i=0; i<N_TOOLS; i++) {
             tmp_vector.clear();
@@ -645,7 +697,7 @@ private:
     /**
      * @param nonzero_denom_only FALSE: prints a zero for every fraction with zero denominator.
      */
-    template<class T> void print_windows_impl_binormalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator1, const vector<vector<size_t>>& denominator2, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
+    template<class T> void print_measures_impl_binormalized(const vector<vector<T>>& numerator, const vector<vector<size_t>>& denominator1, const vector<vector<size_t>>& denominator2, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out, bool nonzero_denom_only, vector<double> tmp_vector) const {
         size_t n_elements;
         for (size_t i=0; i<N_TOOLS; i++) {
             tmp_vector.clear();
@@ -691,8 +743,8 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
         while (j<N_INTERVALS) {
             current_interval=intervals.at(j);
             if (first_j_for_next_i==UINT64_MAX && i<N_DIRECTORIES-1 && current_interval.name==directories.at(i+1).name && current_interval.stop>directories.at(i+1).start && current_interval.start<directories.at(i+1).stop) first_j_for_next_i=j;
-            if (current_interval.name!=current_directory_name || current_interval.start>=current_directory_stop) break;
-            if (current_interval.stop<=current_directory_start) { j++; continue; }
+            if (current_interval.name>current_directory_name || (current_interval.name==current_directory_name && current_interval.start>=current_directory_stop)) break;
+            if (current_interval.name<current_directory_name || (current_interval.name==current_directory_name && current_interval.stop<=current_directory_start)) { j++; continue; }
             current_intervals.emplace_back(current_interval);
             j++;
         }
@@ -718,8 +770,6 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
 
 int main (int argc, char* argv[]) {
     const string SUBDIR_PREFIX = "chr";
-    const char SUBDIR_SEPARATOR_1 = '_';
-    const char SUBDIR_SEPARATOR_2 = '-';
     const string SUBDIR_ALL_WINDOWS = "all_windows";
     const size_t PROGRESS_N_DIRS = 100;  // Arbitrary
 
@@ -739,12 +789,20 @@ int main (int argc, char* argv[]) {
     vector<path> BED_FILES;
     double ALIGNMENT_COVERAGE_THRESHOLD = 0.95;
     double BED_COVERAGE_THRESHOLD = 0.1;
+    double LOG_NODES_FULLY_COVERED_LEQ = 0.8;
+    double LOG_EDGES_COVERED_LEQ = 0.8;
+    double LOG_VCF_RECORDS_SUPPORTED_LEQ = 0.8;
+    double LOG_ALIGNMENT_IDENTITY_LEQ = 0.8;
     app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
     app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
     app.add_option("--tools",TOOLS,"List of tools to be evaluated. These names are matched to subdirectories of the input directory.")->expected(1,-1)->required();
     app.add_option("--beds",BED_FILES,"List of BED files to select windows for evaluation. No file = Run the evaluation over all windows. BED files can contain overlapping intervals and might not be sorted.")->expected(1,-1);
     app.add_option("--min_alignment_coverage",ALIGNMENT_COVERAGE_THRESHOLD,"Count a node or haplotype as fully covered iff at least this fraction of it is covered by alignments (default: 0.95).")->capture_default_str();
     app.add_option("--min_bed_coverage",BED_COVERAGE_THRESHOLD,"Use a window for evaluation iff at least this fraction of it is covered by BED intervals. 0=Iff even a single basepair of the window is covered by BED intervals.")->capture_default_str();
+    app.add_option("--log_nodes_fully_covered",LOG_NODES_FULLY_COVERED_LEQ,"Stores in a file the name of every input directory whose fraction of nodes fully covered is at most this.")->capture_default_str();
+    app.add_option("--log_edges_covered",LOG_EDGES_COVERED_LEQ,"Stores in a file the name of every input directory whose fraction of covered edges is at most this.")->capture_default_str();
+    app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the name of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
+    app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the name of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
     app.parse(argc,argv);
 
     // Sorting all directories by coordinate
@@ -762,8 +820,8 @@ int main (int argc, char* argv[]) {
         buffer=""; length=current_dir.length(); first=-1;
         for (i=0; i<length; i++) {
             c=current_dir.at(i);
-            if (c==SUBDIR_SEPARATOR_1) { chromosome.clear(); chromosome.append(buffer); buffer.clear(); }
-            else if (c==SUBDIR_SEPARATOR_2) { first=stoi(buffer); buffer.clear(); }
+            if (c==Counts::SUBDIR_SEPARATOR_1) { chromosome.clear(); chromosome.append(buffer); buffer.clear(); }
+            else if (c==Counts::SUBDIR_SEPARATOR_2) { first=stoi(buffer); buffer.clear(); }
             else buffer.push_back(c);
         }
         last=stoi(buffer);
@@ -773,11 +831,11 @@ int main (int argc, char* argv[]) {
     if (n_directories>1) sort(directories.begin(),directories.end(),region_comparator);
 
     // Collecting counts in canonical order
-    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD);
+    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ);
     all_cluster_files_present=true;
     for (i=0; i<n_directories; i++) {
         current_dir.clear();
-        current_dir.append(directories.at(i).name+SUBDIR_SEPARATOR_1+to_string(directories.at(i).start)+SUBDIR_SEPARATOR_2+to_string(directories.at(i).stop));
+        current_dir.append(directories.at(i).name+Counts::SUBDIR_SEPARATOR_1+to_string(directories.at(i).start)+Counts::SUBDIR_SEPARATOR_2+to_string(directories.at(i).stop));
         all_cluster_files_present&=counts.load_window(INPUT_DIR/current_dir);
         if ((i+1)%PROGRESS_N_DIRS==0) cerr << "Loaded " << to_string(i+1) << " directories\n";
     }
@@ -787,17 +845,14 @@ int main (int argc, char* argv[]) {
     // Processing each BED file in canonical order
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
     create_directory(OUTPUT_DIR);
-    if (BED_FILES.empty()) {
-        for (i=0; i<n_directories; i++) windows_to_print.emplace_back(i);
-        counts.print_windows(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,windows_to_print);
-    }
-    else {
-        for (auto& bed_file: BED_FILES) {
-            intervals.clear();
-            for_region_in_bed_file(bed_file,[&](const Region &r) { intervals.emplace_back(r); });
-            if (intervals.size()>1) sort(intervals.begin(),intervals.end(),region_comparator);
-            get_windows_to_print(directories,intervals,BED_COVERAGE_THRESHOLD,windows_to_print);
-            counts.print_windows(OUTPUT_DIR/bed_file.stem(),windows_to_print);
-        }
+    for (i=0; i<n_directories; i++) windows_to_print.emplace_back(i);
+    counts.print_measures(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,windows_to_print);
+    counts.log_anomalous_windows(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,directories);
+    for (auto& bed_file: BED_FILES) {
+        intervals.clear();
+        for_region_in_bed_file(bed_file,[&](const Region &r) { intervals.emplace_back(r); });
+        if (intervals.size()>1) sort(intervals.begin(),intervals.end(),region_comparator);
+        get_windows_to_print(directories,intervals,BED_COVERAGE_THRESHOLD,windows_to_print);
+        counts.print_measures(OUTPUT_DIR/bed_file.stem(),windows_to_print);
     }
 }
