@@ -40,6 +40,13 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
 
             r.get_reference_coordinates(false, coord);
 
+            // Skip large events in the population
+            // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
+            // for very large events
+            if (coord.second - coord.first > interval_max_length){
+                return;
+            }
+
             contig_intervals[r.chrom].emplace_back(coord, false);
         });
     }
