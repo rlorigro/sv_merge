@@ -560,14 +560,20 @@ void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
 
 
 GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map){
+    cerr << "constructing GafSummary" << '\n';
     variant_graph.graph.for_each_handle([&](const handle_t& h){
         auto l = variant_graph.graph.get_length(h);
         auto name = std::to_string(variant_graph.graph.get_id(h));
+
+        cerr << "ADDING ref: " << name << ' ' << l << '\n';
+
         node_lengths[name] = int32_t(l);
     });
 
     trans_map.for_each_read([&](const string& name, const string& sequence){
         query_lengths[name] = int32_t(sequence.size());
+
+        cerr << "ADDING query: " << name << ' ' << sequence.size() << '\n';
     });
 }
 
@@ -638,10 +644,14 @@ void compute_identity_and_coverage(const vector<AlignmentSummary>& alignments, i
 void GafSummary::for_each_ref_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
     pair<float,float> identity_and_coverage;
 
+    cerr << "iterating ref summaries" << '\n';
     for (const auto& [name, length]: node_lengths){
+        cerr << name << ' ' << length << '\n';
+
         auto result = ref_summaries.find(name);
 
         if (result == ref_summaries.end()){
+            cerr << "not found" << '\n';
             f(name, length, 0, 0);
             continue;
         }
