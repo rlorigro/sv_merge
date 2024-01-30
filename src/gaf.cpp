@@ -663,7 +663,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
 
         if (result == query_summaries.end()){
             f(name, length, 0, 0);
-            return;
+            continue;
         }
 
         const auto& alignments = result->second;
