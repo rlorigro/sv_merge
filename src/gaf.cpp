@@ -668,10 +668,12 @@ void GafSummary::for_each_ref_summary(const function<void(const string& name, in
 void GafSummary::for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
     pair<float,float> identity_and_coverage;
 
+    cerr << "iterating ref summaries" << '\n';
     for (auto& [name, length]: query_lengths){
         auto result = query_summaries.find(name);
 
         if (result == query_summaries.end()){
+            cerr << "not found" << '\n';
             f(name, length, 0, 0);
             return;
         }
