@@ -669,7 +669,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
     pair<float,float> identity_and_coverage;
 
     cerr << "iterating query summaries" << '\n';
-    for (auto& [name, length]: query_lengths){
+    for (const auto& [name, length]: query_lengths){
         cerr << name << ' ' << length << '\n';
 
         auto result = query_summaries.find(name);
@@ -677,7 +677,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
         if (result == query_summaries.end()){
             cerr << "not found" << '\n';
             f(name, length, 0, 0);
-            return;
+            continue;
         }
 
         const auto& alignments = result->second;
