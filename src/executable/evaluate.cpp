@@ -316,7 +316,7 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
 }
 
 
-void get_path_clusters(GafSummary& gaf_summary, unordered_map <string,vector<string> >& clusters){
+void get_path_clusters(GafSummary& gaf_summary, const VariantGraph& variant_graph, unordered_map <string,vector<string> >& clusters){
     for (const auto& [name, paths]: gaf_summary.query_paths) {
         // If the query has more than one alignment, dump it into the "unknown" cluster
         if (paths.size() > 1) {
@@ -325,10 +325,23 @@ void get_path_clusters(GafSummary& gaf_summary, unordered_map <string,vector<str
         // If it has exactly one path, then it can be clustered with all other queries of the same path
         else if (paths.size() == 1) {
             string path_name;
+            auto& path = paths.front();
 
-            // Construct a string identifier for the path (just use GAF convention)
-            for (const auto& [node_name, is_reverse]: paths[0]) {
-                path_name += (is_reverse ? "<" : ">") + node_name;
+            nid_t id_front = stoll(path.front().first);
+            nid_t id_back = stoll(path.back().first);
+
+            // Lord help us
+            bool front_is_dangling = variant_graph.is_dangling_node(id_front);
+            bool back_is_dangling = variant_graph.is_dangling_node(id_back);
+
+            if (not front_is_dangling or not back_is_dangling){
+                path_name = "unknown";
+            }
+            else {
+                // Construct a string identifier for the path (just use GAF convention)
+                for (const auto &[node_name, is_reverse]: path) {
+                    path_name += (is_reverse ? "<" : ">") + node_name;
+                }
             }
 
             clusters[path_name].emplace_back(name);
@@ -415,7 +428,7 @@ void compute_graph_evaluation_thread_fn(
 
         if (cluster){
             unordered_map <string,vector<string> > clusters;
-            get_path_clusters(gaf_summary, clusters);
+            get_path_clusters(gaf_summary, variant_graph, clusters);
 
             path clusters_path = input_subdir / "clusters.csv";
             ofstream file(clusters_path);
@@ -501,7 +514,7 @@ void compute_graph_evaluation(
         threads.reserve(n_threads);
 
         // Launch threads
-        for (uint64_t n = 0; n < n_threads; n++) {
+        for (size_t n=0; n<n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
                 threads.emplace_back(compute_graph_evaluation_thread_fn,
@@ -549,6 +562,10 @@ void evaluate(
     }
     else{
         ghc::filesystem::create_directories(output_dir);
+    }
+
+    if (std::find(vcfs.begin(), vcfs.end(), cluster_by) == vcfs.end()){
+        throw runtime_error("ERROR: --cluster_by parameter must match one of the paths provided by --vcfs");
     }
 
     cerr << t << "Initializing" << '\n';
@@ -625,7 +642,7 @@ void evaluate(
         threads.reserve(n_threads);
 
         // Launch threads
-        for (uint64_t n = 0; n < n_threads; n++) {
+        for (size_t n=0; n<n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
                 threads.emplace_back(write_region_subsequences_to_file_thread_fn,
