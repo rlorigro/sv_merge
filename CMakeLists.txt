@@ -478,6 +478,12 @@ message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
 # ------- Misc -------
 
+find_program(GRAPHALIGNER_FOUND "GraphAligner")
+
+if (NOT GRAPHALIGNER_FOUND)
+    message(WARNING "GraphAligner not found in PATH, please install GraphAligner before continuing")
+endif ()
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
