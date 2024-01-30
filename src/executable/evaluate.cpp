@@ -683,7 +683,7 @@ void evaluate(
                 ref_sequences,
                 regions,
                 vcf,
-                n_threads,
+                1,
                 flank_length,
                 cluster,
                 staging_dir
