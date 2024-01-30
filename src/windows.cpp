@@ -40,6 +40,8 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
 
             r.get_reference_coordinates(false, coord);
 
+            cerr << coord.first << ',' << coord.second << '\n';
+
             // Skip large events in the population
             // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
             // for very large events
@@ -134,6 +136,10 @@ void get_overlapping_components(int32_t min_gap_length, vector <pair <interval_t
 
         // Return the stored interval to original state
         interval.second -= min_gap_length;
+    }
+
+    if (not has_non_tandem_interval){
+        result.pop_back();
     }
 
     for (auto& item: result){
