@@ -574,6 +574,7 @@ endforeach()
 
 set(EXECUTABLES
         a
+        analyze_evaluation
         hapestry
         find_windows
         evaluate
