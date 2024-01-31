@@ -54,7 +54,7 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
             }
 
             if (coord.first == coord.second){
-                throw runtime_error("ERROR: VCF record coord start == stop: " + vcf.string() + ": " + r.chrom + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
+                throw runtime_error("ERROR: VCF record coord start == stop: " + vcf.string() + ": " + r.id + ' ' + r.chrom + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
             }
 
             contig_intervals[r.chrom].emplace_back(coord, false);
