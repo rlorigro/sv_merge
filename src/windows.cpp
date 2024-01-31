@@ -15,6 +15,10 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
         for (auto& t: tandems){
             contig_intervals[name].emplace_back(t, true);
         }
+
+        if (interval.first == interval.second){
+            throw runtime_error("ERROR: tandem BED interval start == stop: " + name + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
+        }
     }
 
     for (const auto& vcf: vcfs) {
@@ -47,6 +51,10 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
             // for very large events
             if (coord.second - coord.first > interval_max_length){
                 return;
+            }
+
+            if (interval.first == interval.second){
+                throw runtime_error("ERROR: VCF record coord start == stop: " + vcf.string() + ": " + r.chrom + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
             }
 
             contig_intervals[r.chrom].emplace_back(coord, false);
