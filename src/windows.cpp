@@ -59,10 +59,6 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
     for (auto& [contig, intervals]: contig_intervals){
         cerr << "\tStarting: " << contig << '\n';
 
-        if (contig != "chr20"){
-            continue;
-        }
-
         vector<interval_t> components;
 
         get_overlapping_components(flank_length, intervals, components);
