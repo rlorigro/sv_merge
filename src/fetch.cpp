@@ -904,6 +904,9 @@ void fetch_reads_from_clipped_bam(
 
                 transmap.add_read_with_move(name, s);
                 transmap.add_edge(sample_id, transmap.get_id(name), 0);
+
+                // If there are multiple sequences, only choose the first sequence arbitrarily
+                break;
             }
         }
     }
