@@ -13,11 +13,11 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
 
     for (const auto& [name, tandems]: contig_tandems){
         for (auto& t: tandems){
-            contig_intervals[name].emplace_back(t, true);
-        }
+            if (t.first == t.second){
+                throw runtime_error("ERROR: tandem BED interval start == stop: " + name + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
+            }
 
-        if (interval.first == interval.second){
-            throw runtime_error("ERROR: tandem BED interval start == stop: " + name + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
+            contig_intervals[name].emplace_back(t, true);
         }
     }
 
