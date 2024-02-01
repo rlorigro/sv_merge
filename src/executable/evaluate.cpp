@@ -458,6 +458,7 @@ void compute_graph_evaluation(
         const path& vcf,
         size_t n_threads,
         size_t flank_length,
+        size_t interval_max_length,
         bool cluster,
         const path& output_dir
         ){
@@ -486,9 +487,16 @@ void compute_graph_evaluation(
         contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
             coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
 
+            // Skip large events in the population
+            // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
+            // for very large events
+            if (record_coord.second - record_coord.first > interval_max_length){
+                return true;
+            }
+
             // Check if this record exceeds the region
             if (record_coord.first < unflanked_window.first or record_coord.second > unflanked_window.second){
-                cerr << "WARNING: skipping record with that exceeds the un-flanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
+                cerr << "WARNING: skipping record that exceeds the un-flanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
                 return true;
             }
 
@@ -685,6 +693,7 @@ void evaluate(
                 vcf,
                 n_threads,
                 flank_length,
+                interval_max_length,
                 cluster,
                 staging_dir
         );
