@@ -54,8 +54,8 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
             }
 
             if (coord.first == coord.second){
-                coord.first -= 1;
-                coord.first += 1;
+                coord.first = std::max(0,coord.first - 1);
+                coord.second += 1;   // TODO: need to check if exceeds contig limit?
             }
 
             contig_intervals[r.chrom].emplace_back(coord, false);
