@@ -457,8 +457,8 @@ void compute_graph_evaluation(
         const vector<Region>& regions,
         const path& vcf,
         size_t n_threads,
-        size_t flank_length,
-        size_t interval_max_length,
+        int32_t flank_length,
+        int32_t interval_max_length,
         bool cluster,
         const path& output_dir
         ){
@@ -469,7 +469,7 @@ void compute_graph_evaluation(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 0;
+    vcf_reader.min_sv_length = 1;
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
