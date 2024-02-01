@@ -272,6 +272,8 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         info.append(field);
         set_sv_type(tmp_buffer);
         set_sv_length(tmp_buffer);
+        const auto alt_length = (int32_t)alt.length();
+        if (sv_type==VcfReader::TYPE_INSERTION && !is_symbolic && sv_length!=alt_length-1) sv_length=alt_length-1;
         if (sv_type==-1 || sv_length<min_sv_length) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
