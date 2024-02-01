@@ -324,12 +324,14 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
     if (get_info_field(VcfReader::SVLEN_STR,0,tmp_buffer)!=string::npos) {
         const int32_t length = stoi(tmp_buffer);
         sv_length=length<0?-length:length;
+        if (sv_length>0) return;
     }
-    else if (get_info_field(VcfReader::END_STR,0,tmp_buffer)!=string::npos) {
+    if (get_info_field(VcfReader::END_STR,0,tmp_buffer)!=string::npos) {
         const int32_t end = stoi(tmp_buffer);
         sv_length=end-pos;
+        if (sv_length>0) return;
     }
-    else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=INT32_MAX;
+    if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=INT32_MAX;
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_length=INT32_MAX;
     else {
         const size_t ref_length = ref.length();
