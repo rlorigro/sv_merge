@@ -125,7 +125,7 @@ void hapestry(
     }
 
     for (auto& r: regions) {
-        r.start -= flank_length;
+        r.start = max(0,r.start - flank_length);
         r.stop += flank_length;
     }
 
