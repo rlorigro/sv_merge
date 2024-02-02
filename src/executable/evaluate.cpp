@@ -185,7 +185,7 @@ void write_region_subsequences_to_file_thread_fn(
  * @param variant_graph cannot be const, but is effectively const in this context. This object is used to determine
  * if alignments cover variants in the graph
  */
-void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph& variant_graph){
+void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph& variant_graph, const VcfReader& vcf_reader){
     path nodes_output_path = output_dir / "nodes.csv";
     path edges_output_path = output_dir / "edges.csv";
     path haps_output_path = output_dir / "haps.csv";
@@ -312,6 +312,8 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
         throw runtime_error("ERROR: file could not be written: " + unsupported_output_path.string());
     }
 
+    vcf_reader.print_minimal_header(supported_file);
+    vcf_reader.print_minimal_header(unsupported_file);
     variant_graph.print_supported_vcf_records(supported_file, unsupported_file, false);
 }
 
@@ -359,7 +361,7 @@ void compute_graph_evaluation_thread_fn(
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
-        const path& vcf,
+        const VcfReader& vcf_reader,
         const path& output_dir,
         int32_t flank_length,
         bool cluster,
@@ -373,6 +375,8 @@ void compute_graph_evaluation_thread_fn(
 
     size_t i = job_index.fetch_add(1);
 
+    path vcf;
+    vcf_reader.get_file_path(vcf);
     string vcf_name_prefix = get_name_prefix_of_vcf(vcf);
 
     while (i < regions.size()){
@@ -424,7 +428,7 @@ void compute_graph_evaluation_thread_fn(
 
         compute_summaries_from_gaf(gaf_path, gaf_summary);
 
-        write_summary(output_subdir, gaf_summary, variant_graph);
+        write_summary(output_subdir, gaf_summary, variant_graph, vcf_reader);
 
         if (cluster){
             unordered_map <string,vector<string> > clusters;
@@ -531,7 +535,7 @@ void compute_graph_evaluation(
                                      std::cref(region_transmaps),
                                      std::cref(ref_sequences),
                                      std::cref(regions),
-                                     std::cref(vcf),
+                                     std::cref(vcf_reader),
                                      std::cref(output_dir),
                                      flank_length,
                                      cluster,

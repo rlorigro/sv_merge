@@ -401,7 +401,10 @@ public:
     /**
      * Prints just the last line of the VCF header: `#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT SAMPLE`.
      */
-    void print_minimal_header(ofstream& out);
+    void print_minimal_header(ofstream& out) const;
+    void get_minimal_header(string& out) const;
+
+    void get_file_path(path& out) const;
 
 private:
     /**

@@ -765,8 +765,18 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
 }
 
 
-void VcfReader::print_minimal_header(ofstream& out) {
+void VcfReader::print_minimal_header(ofstream& out) const {
     out << vcf_header << '\n';
+}
+
+
+void VcfReader::get_minimal_header(string& out) const {
+    out = vcf_header;
+}
+
+
+void VcfReader::get_file_path(path& out) const {
+    out = vcf_path;
 }
 
 }
