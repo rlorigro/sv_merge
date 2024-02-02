@@ -27,6 +27,7 @@ using std::to_string;
 using std::max;
 using std::min;
 using std::ofstream;
+using std::pair;
 
 
 using namespace sv_merge;
@@ -96,7 +97,10 @@ public:
         for (i=0; i<N_TOOLS; i++) { nonref_edges.emplace_back(); nonref_edges.at(i).reserve(n_windows); }
         nonref_edges_covered.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { nonref_edges_covered.emplace_back(); nonref_edges_covered.at(i).reserve(n_windows); }
-
+        nonref_node_length_vs_coverage.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_node_length_vs_coverage.emplace_back(); nonref_node_length_vs_coverage.at(i).reserve(n_windows); }
+        nonref_node_length_vs_identity.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_node_length_vs_identity.emplace_back(); nonref_node_length_vs_identity.at(i).reserve(n_windows); }
         supported_vcf_records.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { supported_vcf_records.emplace_back(); supported_vcf_records.at(i).reserve(n_windows); }
         unsupported_vcf_records.reserve(N_TOOLS);
@@ -118,6 +122,10 @@ public:
         for (i=0; i<N_TOOLS; i++) { supported_dup.emplace_back(); supported_dup.at(i).reserve(n_windows); }
         unsupported_dup.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { unsupported_dup.emplace_back(); unsupported_dup.at(i).reserve(n_windows); }
+        sv_length_supported.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { sv_length_supported.emplace_back(); sv_length_supported.at(i).reserve(n_windows); }
+        sv_length_unsupported.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { sv_length_unsupported.emplace_back(); sv_length_unsupported.at(i).reserve(n_windows); }
     };
 
 
@@ -180,11 +188,11 @@ public:
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(); tmp_buffer_1.clear(); field=0; }
+                if (c==LINE_DELIMITER) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(i); tmp_buffer_1.clear(); field=0; }
                 else if (c==CSV_DELIMITER) { on_field_end_nodes(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
                 else tmp_buffer_1.push_back(c);
             }
-            if (!tmp_buffer_1.empty()) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(); }
+            if (!tmp_buffer_1.empty()) { on_field_end_nodes(++field,tmp_buffer_1); on_line_end_nodes(i); }
             file.close();
             on_window_end_nodes(i);
 
@@ -222,9 +230,10 @@ public:
             input_file=directory/TOOLS.at(i)/SUPPORTED_VCF_FILE;
             on_init_vcf_counts();
             VcfReader reader1(input_file);
-            reader1.n_samples_to_load=1;
+            reader1.progress_n_lines=0;
             reader1.for_record_in_vcf([&](VcfRecord& record) {
                 vcf_counts_supported.at(0)++;
+                if (record.sv_length>0 && record.sv_length<INT32_MAX) sv_length_supported.at(i).emplace_back(record.sv_length);
                 if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_supported.at(1)++;
                 else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_supported.at(2)++;
                 else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_supported.at(3)++;
@@ -232,9 +241,10 @@ public:
             });
             input_file=directory/TOOLS.at(i)/UNSUPPORTED_VCF_FILE;
             VcfReader reader2(input_file);
-            reader2.n_samples_to_load=1;
+            reader2.progress_n_lines=0;
             reader2.for_record_in_vcf([&](VcfRecord& record) {
                 vcf_counts_unsupported.at(0)++;
+                if (record.sv_length>0 && record.sv_length<INT32_MAX) sv_length_unsupported.at(i).emplace_back(record.sv_length);
                 if (record.sv_type==VcfReader::TYPE_DELETION) vcf_counts_unsupported.at(1)++;
                 else if (record.sv_type==VcfReader::TYPE_INSERTION) vcf_counts_unsupported.at(2)++;
                 else if (record.sv_type==VcfReader::TYPE_INVERSION) vcf_counts_unsupported.at(3)++;
@@ -262,7 +272,7 @@ public:
      * │   ├── ...
      * ... ...
      */
-    void print_measures(const path& output_dir, const vector<size_t>& windows_to_print) const {
+    void print_measures(const path& output_dir, const vector<size_t>& windows_to_print) {
         const size_t N_WINDOWS = windows_to_print.size();
         const string SUFFIX = ".txt";
         size_t i, j;
@@ -282,7 +292,9 @@ public:
                 "nonref_nodes_bps_covered",  // Fraction
                 "nonref_edges",
                 "nonref_edges_covered",  // Fraction
-                "supported_vcf_records","unsupported_vcf_records","supported_del","unsupported_del","supported_ins","unsupported_ins","supported_inv","unsupported_inv","supported_dup","unsupported_dup"  // Fractions
+                "supported_vcf_records","unsupported_vcf_records","supported_del","unsupported_del","supported_ins","unsupported_ins","supported_inv","unsupported_inv","supported_dup","unsupported_dup",  // Fractions
+                "nonref_node_length_vs_coverage","nonref_node_length_vs_identity",  // Pairs
+                "sv_length_supported","sv_length_unsupported"
         };
         tmp_vector_1.reserve(N_WINDOWS); tmp_vector_2.reserve(N_WINDOWS);
 
@@ -323,6 +335,10 @@ public:
         print_measures_impl_binormalized(unsupported_inv,supported_inv,unsupported_inv,windows_to_print,24,out,true,tmp_vector_2);
         print_measures_impl_binormalized(supported_dup,supported_dup,unsupported_dup,windows_to_print,25,out,true,tmp_vector_2);
         print_measures_impl_binormalized(unsupported_dup,supported_dup,unsupported_dup,windows_to_print,26,out,true,tmp_vector_2);
+        print_measures_impl_pair(nonref_node_length_vs_coverage,27,out);
+        print_measures_impl_pair(nonref_node_length_vs_coverage,28,out);
+        print_measures_impl_basic(sv_length_supported,29,out);
+        print_measures_impl_basic(sv_length_unsupported,30,out);
     }
 
 
@@ -400,12 +416,15 @@ private:
     vector<vector<size_t>> nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered;
     vector<vector<size_t>> nonref_nodes_bps, nonref_nodes_bps_covered;
     vector<vector<size_t>> nonref_edges, nonref_edges_covered;
+    vector<vector<pair<size_t,double>>> nonref_node_length_vs_coverage;
+    vector<vector<pair<size_t,double>>> nonref_node_length_vs_identity;
 
     /**
      * Output measures: VCF.
      */
     vector<vector<size_t>> supported_vcf_records, unsupported_vcf_records;
     vector<vector<size_t>> supported_del, unsupported_del, supported_ins, unsupported_ins, supported_inv, unsupported_inv, supported_dup, unsupported_dup;
+    vector<vector<size_t>> sv_length_supported, sv_length_unsupported;
 
     /**
      * Output log: row=toolID, column=window.
@@ -462,13 +481,15 @@ private:
         }
     }
 
-    void on_line_end_nodes() {
+    void on_line_end_nodes(size_t tool_id) {
         if (is_ref) return;
         node_counts.at(0)++;
         if (coverage>=coverage_threshold) node_counts.at(1)++;
         else node_counts.at(2)++;
         node_counts.at(3)+=length;
         node_counts.at(4)+=(size_t)(coverage*length);
+        nonref_node_length_vs_coverage.at(tool_id).emplace_back(length,coverage);
+        nonref_node_length_vs_identity.at(tool_id).emplace_back(length,identity);
     }
 
     void on_window_end_nodes(size_t tool_id) {
@@ -711,6 +732,24 @@ private:
             out.at(i).at(column).close();
         }
     }
+
+
+    void print_measures_impl_pair(const vector<vector<pair<size_t,double>>>& source, size_t column, vector<vector<ofstream>>& out) const {
+        for (size_t i=0; i<N_TOOLS; i++) {
+            for (auto& measure: source.at(i)) out.at(i).at(column) << to_string(measure.first) << ',' << to_string(measure.second) << '\n';
+            out.at(i).at(column).close();
+        }
+    }
+
+
+    void print_measures_impl_basic(vector<vector<size_t>>& source, size_t column, vector<vector<ofstream>>& out) const {
+        for (size_t i=0; i<N_TOOLS; i++) {
+            if (source.at(i).size()>1) sort(source.at(i).begin(),source.at(i).end());
+            for (auto& measure: source.at(i)) out.at(i).at(column) << to_string(measure) << '\n';
+            out.at(i).at(column).close();
+        }
+    }
+
 };
 
 
@@ -804,6 +843,7 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the name of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
     app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the name of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
     app.parse(argc,argv);
+    if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
@@ -843,7 +883,6 @@ int main (int argc, char* argv[]) {
     if (!all_cluster_files_present) cerr << "WARNING: some cluster files are missing.\n";
 
     // Processing each BED file in canonical order
-    if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
     create_directory(OUTPUT_DIR);
     for (i=0; i<n_directories; i++) windows_to_print.emplace_back(i);
     counts.print_measures(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,windows_to_print);
