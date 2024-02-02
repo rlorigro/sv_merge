@@ -33,6 +33,27 @@ string Timer::elapsed() const {
 }
 
 
+string Timer::to_csv() const {
+    auto d = std::chrono::steady_clock::now() - start;
+
+    const auto h = duration_cast<hours>(d);
+    const auto m = duration_cast<minutes>(d - h);
+    const auto s = duration_cast<seconds>(d - h - m);
+    const auto ms = duration_cast<milliseconds>(d - h - m - s);
+
+    string ds;
+    ds.append(to_string(h.count()));
+    ds.append(",");
+    ds.append(to_string(m.count()));
+    ds.append(",");
+    ds.append(to_string(s.count()));
+    ds.append(",");
+    ds.append(to_string(ms.count()));
+
+    return ds;
+}
+
+
 void Timer::reset() {
     start = std::chrono::steady_clock::now();
 }

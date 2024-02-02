@@ -503,6 +503,7 @@ endif()
 set(TESTS
         test_bam
         test_bed
+        test_command_timeout
         test_fasta
         test_gaf
         test_gaf_summary

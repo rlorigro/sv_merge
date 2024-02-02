@@ -103,6 +103,42 @@ void run_command(string& command, bool redirect_stderr){
 }
 
 
+bool run_command(string command, bool redirect_stderr, float timeout){
+    if (redirect_stderr){
+        command += " 2>&1";
+    }
+
+    command = "timeout " + to_string(timeout) + ' ' + command;
+
+    cerr << "RUNNING: " << command << '\n';
+
+    array<char, 128> buffer;
+
+    FILE* pipe = popen(command.c_str(), "r");
+
+    if (!pipe){
+        throw runtime_error("Pipe could not be opened: " + command);
+    }
+
+    while (fgets(buffer.data(), 128, pipe) != nullptr){
+        cerr << buffer.data();
+    }
+
+    int result = pclose(pipe);
+
+    int return_code = WEXITSTATUS(result);
+
+    if (return_code == 124){
+        return false;
+    }
+    else if (return_code != 0){
+        throw runtime_error("Command failed: " + command);
+    }
+
+    return true;
+}
+
+
 // https://stackoverflow.com/questions/6163611/compare-two-files
 bool files_equal(path p1, path p2) {
     std::ifstream f1(p1.string(), std::ifstream::binary|std::ifstream::ate);

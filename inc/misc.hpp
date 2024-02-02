@@ -43,6 +43,17 @@ void run_command(string& command, path output_path);
 
 void run_command(string& command, bool redirect_stderr=true);
 
+
+/**
+ * Run a command with a timeout
+ * @param command
+ * @param redirect_stderr whether or not to redirect the output of the command to the stderr of this executable
+ * @param timeout duration in seconds to allow the command to run
+ * @return a boolean indicating true if the command ran to completion, false if it was timed out. An exception is thrown
+ * if the command itself failed, so there will be no return value in that case.
+ */
+bool run_command(string command, bool redirect_stderr, float timeout);
+
 system_clock::time_point get_current_time();
 
 bool files_equal(path p1, path p2);

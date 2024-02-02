@@ -355,6 +355,31 @@ void get_path_clusters(GafSummary& gaf_summary, const VariantGraph& variant_grap
 }
 
 
+/**
+ * Append a log file and write the header if it hasn't been written yet
+ * @param output_dir
+ * @param vcf_name_prefix
+ * @param time_csv result of calling Timer::to_csv() immediately after task exits
+ * @param success whether or not the task timed out
+ */
+void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
+    // Begin the logging process
+    path log_path = output_dir / "log.csv";
+
+    // Check if the log file needs to have a header written to it or not
+    bool exists = ghc::filesystem::exists(log_path);
+
+    ofstream file(log_path, std::ios_base::app);
+
+    // Write the header
+    if (not exists){
+        file << "name,h,m,s,ms,success" << '\n';
+    }
+    // Write the results for this region/tool
+    file << vcf_name_prefix << ',' << time_csv << ',' << success << '\n';
+}
+
+
 void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -395,6 +420,7 @@ void compute_graph_evaluation_thread_fn(
 
         VariantGraph variant_graph(ref_sequences, contig_tandems);
 
+        // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)){
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), false);
         }
@@ -420,16 +446,30 @@ void compute_graph_evaluation_thread_fn(
                   " -g " + gfa_path.string() +
                   " -f " + fasta_path.string();
 
-        run_command(command, true);
+        // Run GraphAligner and check how long it takes, if it times out
+        Timer t;
+        bool success = run_command(command, true, 90);
+        string time_csv = t.to_csv();
 
-        i = job_index.fetch_add(1);
+        write_time_log(input_subdir, vcf_name_prefix, time_csv, success);
 
+        // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
+        if (not success) {
+            cerr << "WARNING: Command timed out: " << command << '\n';
+            i = job_index.fetch_add(1);
+            continue;
+        }
+
+        // Do the bulk of the Gaf parsing work here
         GafSummary gaf_summary(variant_graph, transmap);
-
         compute_summaries_from_gaf(gaf_path, gaf_summary);
 
+        // Write out all the alignment dependent results for this region
         write_summary(output_subdir, gaf_summary, variant_graph, vcf_reader);
 
+        // Write some additional info about the "cluster" that each haplotype belongs to in case it is desired and
+        // this vcf happens to be the one that was assigned as the one to cluster by.
+        // In this case each "cluster" is just a non-redundant path observed in the GAF,
         if (cluster){
             unordered_map <string,vector<string> > clusters;
             get_path_clusters(gaf_summary, variant_graph, clusters);
@@ -449,6 +489,8 @@ void compute_graph_evaluation_thread_fn(
                 }
             }
         }
+
+        i = job_index.fetch_add(1);
     }
 }
 

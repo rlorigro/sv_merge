@@ -25,6 +25,7 @@ class Timer{
 public:
     Timer();
     string elapsed() const;
+    string to_csv() const;
     void reset();
 };
 
