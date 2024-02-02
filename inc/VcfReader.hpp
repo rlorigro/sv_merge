@@ -32,6 +32,7 @@ using std::ostream;
 using std::cerr;
 using std::ceil;
 using std::runtime_error;
+using std::ofstream;
 
 namespace sv_merge {
 
@@ -397,11 +398,17 @@ public:
      */
     void for_record_in_vcf(const function<void(VcfRecord& record)>& callback);
 
+    /**
+     * Prints just the last line of the VCF header: `#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT SAMPLE`.
+     */
+    void print_minimal_header(ofstream& out);
+
 private:
     /**
      * Internal state of VcfReader
      */
     string vcf_path;
+    string vcf_header;  // Just the last line: #CHROM POS ID REF ALT QUAL FILTER INFO FORMAT SAMPLE
 };
 
 }

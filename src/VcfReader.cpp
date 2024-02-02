@@ -274,7 +274,7 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         set_sv_length(tmp_buffer);
         const auto alt_length = (int32_t)alt.length();
         if (sv_type==VcfReader::TYPE_INSERTION && !is_symbolic && sv_length!=alt_length-1) sv_length=alt_length-1;
-        if (sv_type==-1 || sv_length<min_sv_length) {
+        if (sv_type==-1 || sv_length<min_sv_length || sv_length==0) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -712,7 +712,7 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
 
     file.open(vcf_path,std::ifstream::in);
     if (!file.is_open() || !file.good()) throw runtime_error("ERROR: could not read file: " + vcf_path);
-    n_lines=0;
+    n_lines=0; vcf_header.clear();
     while (!file.eof()) {
         c=(char)file.peek();
         if (c==VCF_COMMENT) {
@@ -720,8 +720,10 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             for (i=0; i<VCF_HEADER_PREFIX_LENGTH; i++) {
                 file.get(c);
                 if (toupper(c)!=VCF_HEADER_PREFIX.at(i)) { is_header=false; break; }
+                else vcf_header.push_back(c);
             }
             if (!is_header) {
+                vcf_header.clear();
                 file.ignore(VcfRecord::STREAMSIZE_MAX,LINE_END);
                 continue;
             }
@@ -737,8 +739,12 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
                     n_fields++;
                     if (n_fields>N_NONSAMPLE_FIELDS_VCF) sample_ids.push_back(buffer);
                     buffer.clear();
+                    vcf_header.push_back(c);
                 }
-                else buffer+=c;
+                else {
+                    buffer+=c;
+                    vcf_header.push_back(c);
+                }
             }
             n_samples_in_vcf=n_fields-N_NONSAMPLE_FIELDS_VCF;
             n_samples_to_load=min(n_samples_to_load,n_samples_in_vcf);
@@ -756,6 +762,11 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
     }
     file.close();
     if (progress_n_lines!=0) cerr << "Scanned " << n_lines << " total records\n";
+}
+
+
+void VcfReader::print_minimal_header(ofstream& out) {
+    out << vcf_header << '\n';
 }
 
 }
