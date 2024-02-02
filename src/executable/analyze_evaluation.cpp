@@ -359,20 +359,67 @@ public:
     }
 
 
+    /**
+     * @return TRUE iff every tool completed evaluation in `directory`, according to the execution log file.
+     */
+    static bool was_execution_successful(const path& directory) {
+        char c;
+        size_t field;
+        string buffer;
+        ifstream file;
+
+        bool success;
+        string name;
+        size_t h, m, s, ms;
+
+        auto on_field_end = [&]() {
+            field++;
+            switch (field) {
+                case 1: name=buffer; break;
+                case 2: h=stoul(buffer); break;
+                case 3: m=stoul(buffer); break;
+                case 4: s=stoul(buffer); break;
+                case 5: ms=stoul(buffer); break;
+                case 6: success=stoi(buffer)==1; break;
+            }
+            buffer.clear();
+        };
+        file.open(directory/EXECUTION_FILE);
+        file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+        field=0;
+        while (file.get(c)) {
+            if (c==LINE_DELIMITER) {
+                on_field_end();
+                if (!success) return false;
+                field=0;
+            }
+            else if (c==CSV_DELIMITER) on_field_end();
+            else buffer.push_back(c);
+        }
+        if (!buffer.empty()) {
+            on_field_end();
+            if (!success) return false;
+        }
+        file.close();
+        return true;
+    }
+
+
 private:
-    const string NODES_FILE = "nodes.csv";
-    const string HAPLOTYPES_FILE = "haps.csv";
-    const string CLUSTERS_FILE = "clusters.csv";
-    const string EDGE_COUNTS_FILE = "edges.csv";
-    const string SUPPORTED_VCF_FILE = "supported.vcf";
-    const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
-    const string LOGGED_WINDOWS_FILE = "anomalous_windows.log";
-    const char GAF_FWD_CHAR = '>';
-    const char GAF_REV_CHAR = '<';
-    const char CSV_DELIMITER = ',';
-    const char LINE_DELIMITER = '\n';
-    const char CLUSTER_DELIMITER = ' ';
-    const size_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
+    inline static const string NODES_FILE = "nodes.csv";
+    inline static const string HAPLOTYPES_FILE = "haps.csv";
+    inline static const string CLUSTERS_FILE = "clusters.csv";
+    inline static const string EDGE_COUNTS_FILE = "edges.csv";
+    inline static const string SUPPORTED_VCF_FILE = "supported.vcf";
+    inline static const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
+    inline static const string LOGGED_WINDOWS_FILE = "anomalous_windows.log";
+    inline static const string EXECUTION_FILE = "log.csv";
+    static const char GAF_FWD_CHAR = '>';
+    static const char GAF_REV_CHAR = '<';
+    static const char CSV_DELIMITER = ',';
+    static const char LINE_DELIMITER = '\n';
+    static const char CLUSTER_DELIMITER = ' ';
+    static const size_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
     const vector<string>& TOOLS;
     const size_t N_TOOLS;
@@ -807,6 +854,11 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
 }
 
 
+
+
+
+
+
 int main (int argc, char* argv[]) {
     const string SUBDIR_PREFIX = "chr";
     const string SUBDIR_ALL_WINDOWS = "all_windows";
@@ -819,6 +871,7 @@ int main (int argc, char* argv[]) {
     int32_t first, last;
     string chromosome, current_dir, buffer;
     vector<size_t> windows_to_print;
+    vector<string> unsuccessful_directories;
     vector<Region> directories, intervals;
 
     // Parsing the input
@@ -845,6 +898,8 @@ int main (int argc, char* argv[]) {
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
+    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ);
+
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
         if (a.name<b.name) return true;
@@ -857,6 +912,10 @@ int main (int argc, char* argv[]) {
         if (!entry.is_directory()) continue;
         current_dir.clear(); current_dir.append(entry.path().stem().string());
         if (!current_dir.starts_with(SUBDIR_PREFIX)) continue;
+        if (!Counts::was_execution_successful(entry.path())) {
+            unsuccessful_directories.push_back(current_dir);
+            continue;
+        }
         buffer=""; length=current_dir.length(); first=-1;
         for (i=0; i<length; i++) {
             c=current_dir.at(i);
@@ -871,7 +930,6 @@ int main (int argc, char* argv[]) {
     if (n_directories>1) sort(directories.begin(),directories.end(),region_comparator);
 
     // Collecting counts in canonical order
-    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ);
     all_cluster_files_present=true;
     for (i=0; i<n_directories; i++) {
         current_dir.clear();
@@ -894,4 +952,8 @@ int main (int argc, char* argv[]) {
         get_windows_to_print(directories,intervals,BED_COVERAGE_THRESHOLD,windows_to_print);
         counts.print_measures(OUTPUT_DIR/bed_file.stem(),windows_to_print);
     }
+
+    // Reporting
+    cerr << "Skipped " << to_string(unsuccessful_directories.size()) << " directories (out of " << to_string(n_directories) << " total directories) where the evaluation did not complete:\n";
+    for (const auto& directory: unsuccessful_directories) cerr << directory << '\n';
 }
