@@ -1,6 +1,6 @@
 #pragma once
 #include "TransitiveMap.hpp"
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 #include <unordered_map>
 #include <unordered_set>

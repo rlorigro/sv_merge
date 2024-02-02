@@ -194,6 +194,13 @@ void TransMap::get_read_sample(int64_t read_id, string& result) const{
 }
 
 
+void TransMap::for_each_read(const function<void(const string& name, const string& sequence)>& f) const{
+    graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
+        f(neighbor.name, sequences.at(id));
+    });
+}
+
+
 void TransMap::for_each_read(const function<void(const string& name, int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, id);
