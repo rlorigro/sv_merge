@@ -128,6 +128,5 @@ RUN cd /hapestry/GraphAligner \
     && bin/GraphAligner --help && echo 0 || echo 1
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
 
+# Conda would install version 1.0.13, which is from 2021: 
 #RUN /miniconda3/bin/conda install -c bioconda graphaligner
-
-
