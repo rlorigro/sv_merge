@@ -894,6 +894,7 @@ void fetch_reads_from_clipped_bam(
 
                 if (l > max_hap_length){
                     cerr << "Warning: skipping reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
+                    continue;
                 }
 
                 const auto& seq = sample_queries.at(sample_name).at(name);
