@@ -669,7 +669,7 @@ void evaluate(
     // The container to store all fetched reads and their relationships to samples/paths
     unordered_map<Region,TransMap> region_transmaps;
 
-    fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, true, region_transmaps);
+    fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, interval_max_length, true, region_transmaps);
 
     cerr << t << "Loading reference sequences" << '\n';
 

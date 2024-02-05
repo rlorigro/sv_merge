@@ -798,6 +798,7 @@ void fetch_reads_from_clipped_bam(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
+        int32_t interval_max_length,
         bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps
 ){
@@ -878,6 +879,8 @@ void fetch_reads_from_clipped_bam(
         item.reserve_edges(n_reads * n_samples);
     }
 
+    auto max_hap_length = size_t(float(interval_max_length) * 2.5);
+
     // Move the downloaded data into a transmap, construct edges for sample->read
     for (auto& [sample_name,item]: sample_to_region_coords){
         for (auto& [region,named_coords]: item){
@@ -888,6 +891,10 @@ void fetch_reads_from_clipped_bam(
             for (auto& [name,coord]: named_coords) {
                 auto i = size_t(coord.query_start);
                 auto l = size_t(coord.query_stop - coord.query_start);
+
+                if (l > max_hap_length){
+                    cerr << "Warning: skipping reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
+                }
 
                 const auto& seq = sample_queries.at(sample_name).at(name);
 

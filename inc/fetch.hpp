@@ -60,6 +60,7 @@ void fetch_reads_from_clipped_bam(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
+        int32_t interval_max_length,
         bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps
 );

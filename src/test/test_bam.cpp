@@ -305,6 +305,7 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
             regions,
             bam_csv,
             n_threads,
+            100'000,
             true,
             region_transmaps);
 
