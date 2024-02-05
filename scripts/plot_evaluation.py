@@ -55,7 +55,6 @@ def plot_distributions(histograms: dict):
             if is_reverse[series_label]:
                 cdf = 1 - cdf
 
-
             print(bins[:10])
             print(bins[-10:])
             print(cdf[:10])
@@ -189,4 +188,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.i)
+    print(args)
+
+    main(args.input_dir)
