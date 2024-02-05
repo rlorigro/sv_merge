@@ -48,14 +48,15 @@ public:
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space;
      * @param log_* keeps track of every window that satisfies at least one of these low-support thresholds.
      */
-    explicit Counts(const vector<string>& tools, double coverage_threshold, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, size_t n_windows = 1e6):
+    explicit Counts(const vector<string>& tools, double coverage_threshold, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t n_windows = 1e6):
         TOOLS(tools),
         N_TOOLS(tools.size()),
         coverage_threshold(coverage_threshold),
         log_nodes_fully_covered_leq(log_nodes_fully_covered_leq),
         log_edges_covered_leq(log_edges_covered_leq),
         log_vcf_records_supported_leq(log_vcf_records_supported_leq),
-        log_alignment_identity_leq(log_alignment_identity_leq)
+        log_alignment_identity_leq(log_alignment_identity_leq),
+        log_hap_coverage_leq(log_hap_coverage_leq)
     {
         size_t i;
 
@@ -424,7 +425,7 @@ private:
     const vector<string>& TOOLS;
     const size_t N_TOOLS;
     const double coverage_threshold;
-    const double log_nodes_fully_covered_leq, log_edges_covered_leq, log_vcf_records_supported_leq, log_alignment_identity_leq;
+    const double log_nodes_fully_covered_leq, log_edges_covered_leq, log_vcf_records_supported_leq, log_alignment_identity_leq, log_hap_coverage_leq;
 
     size_t n_windows;
 
@@ -647,7 +648,8 @@ private:
         cluster_coverage_avg.at(tool_id).emplace_back(n_clusters>0?sum1/n_clusters:0);
         cluster_alignment_identity_avg.at(tool_id).emplace_back(n_clusters>0?sum2/n_clusters:0);
 
-        if (n_haps>0 && hap_counts.at(1)<=log_alignment_identity_leq*n_haps) {
+        if (n_haps>0 && ( (hap_counts.at(0)<=0.96*n_haps && hap_counts.at(0)>=0.92*n_haps) || hap_counts.at(1)<=log_alignment_identity_leq*n_haps)) {
+//if (n_haps>0 && (hap_counts.at(0)<=log_hap_coverage_leq*n_haps || hap_counts.at(1)<=log_alignment_identity_leq*n_haps)) {
             if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(n_haplotypes.at(tool_id).size()-1);
             else logged_windows[tool_id]={n_haplotypes.at(tool_id).size()-1};
         }
@@ -881,10 +883,11 @@ int main (int argc, char* argv[]) {
     vector<path> BED_FILES;
     double ALIGNMENT_COVERAGE_THRESHOLD = 0.95;
     double BED_COVERAGE_THRESHOLD = 0.1;
-    double LOG_NODES_FULLY_COVERED_LEQ = 0.8;
-    double LOG_EDGES_COVERED_LEQ = 0.8;
-    double LOG_VCF_RECORDS_SUPPORTED_LEQ = 0.8;
-    double LOG_ALIGNMENT_IDENTITY_LEQ = 0.8;
+    double LOG_NODES_FULLY_COVERED_LEQ = -1;//0.8;
+    double LOG_EDGES_COVERED_LEQ = -1;//0.8;
+    double LOG_VCF_RECORDS_SUPPORTED_LEQ = -1;//0.8;
+    double LOG_ALIGNMENT_IDENTITY_LEQ = -1;//0.8;
+    double LOG_HAP_COVERAGE_LEQ = 0.97;
     app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
     app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
     app.add_option("--tools",TOOLS,"List of tools to be evaluated. These names are matched to subdirectories of the input directory.")->expected(1,-1)->required();
@@ -895,10 +898,11 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_edges_covered",LOG_EDGES_COVERED_LEQ,"Stores in a file the name of every input directory whose fraction of covered edges is at most this.")->capture_default_str();
     app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the name of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
     app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the name of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
+    app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the name of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
-    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ);
+    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);
 
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
