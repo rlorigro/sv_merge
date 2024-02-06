@@ -1151,7 +1151,7 @@ int main(int argc, char* argv[]) {
 
     cerr << "Testing constructors with no VCF records...\n";
     if (graph.would_graph_be_nontrivial(no_records)) throw runtime_error("would_graph_be_nontrivial() failed on emtpy VCF records");
-    graph.build(no_records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);  // Testing that build() does not crash with no VCF records
+    graph.build(no_records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);  // Testing that build() does not crash with no VCF records
     graph.build("chr2",60,186,20);  // Testing trivial graph
     graph.to_gfa(TEST_GFA);
     ofstream truth_gfa_trivial(TRUTH_GFA_2.string());
@@ -1170,7 +1170,7 @@ int main(int argc, char* argv[]) {
         vector<VcfRecord> records_prime = records;
         std::shuffle(std::begin(records_prime),std::end(records_prime),rng);
         if (!graph.would_graph_be_nontrivial(records_prime)) throw runtime_error("would_graph_be_nontrivial() failed on non-emtpy VCF records");
-        graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
+        graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
 
         cerr << "Testing print_supported_vcf_records() (all records)...\n";
         ofstream truth_vcf(TRUTH_VCF.string());
@@ -1211,7 +1211,7 @@ int main(int argc, char* argv[]) {
     print_truth_vcf_header(truth_vcf);
     print_truth_vcf(2,false/*Arbitrary*/,truth_vcf);
     truth_vcf.close();
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
 
     cerr << "DEL...\n";
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
@@ -1364,7 +1364,7 @@ int main(int argc, char* argv[]) {
            ) return;
         records.push_back(record);
     });
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
     ofstream test_vcf2(TEST_VCF_2.string());
     unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
     print_truth_vcf_header(test_vcf2); print_truth_vcf_header(unsupported_vcf);
@@ -1397,7 +1397,7 @@ int main(int argc, char* argv[]) {
            ) return;
         records.push_back(record);
     });
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,false,caller_ids);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
     truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
     print_truth_gfa(true,true,true,true,true,true,truth_gfa);
     truth_gfa.close();
