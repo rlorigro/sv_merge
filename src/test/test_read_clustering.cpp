@@ -1,5 +1,5 @@
 #include "TransitiveMap.hpp"
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 using sv_merge::TransMap;
 

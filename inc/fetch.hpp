@@ -42,12 +42,39 @@ using std::ref;
 
 namespace sv_merge{
 
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
+using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
+
 void fetch_reads(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
+        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps
+);
+
+
+void fetch_reads_from_clipped_bam(
+        Timer& t,
+        vector<Region>& regions,
+        path bam_csv,
+        int64_t n_threads,
+        int32_t interval_max_length,
+        bool require_spanning,
+        unordered_map<Region,TransMap>& region_transmaps
+);
+
+
+void extract_subregion_coords_from_sample(
+        GoogleAuthenticator& authenticator,
+        mutex& authenticator_mutex,
+        sample_region_coord_map_t& sample_to_region_coords,
+        const string& sample_name,
+        const vector<Region>& subregions,
+        bool require_spanning,
+        bool unclip_coords,
+        path bam_path
 );
 
 }

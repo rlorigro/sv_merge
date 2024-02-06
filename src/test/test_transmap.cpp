@@ -5,7 +5,7 @@ using std::runtime_error;
 using std::exception;
 using std::cerr;
 
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "TransitiveMap.hpp"
 #include "path_optimizer.hpp"
 
