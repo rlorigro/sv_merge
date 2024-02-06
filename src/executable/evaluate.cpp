@@ -285,10 +285,7 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
         // We want to skip ref-ref edges in the evaluation
         auto is_ref = variant_graph.is_reference_edge(e);
 
-        // Even if the edges is a ref-ref edge, we should still count it if it's from one flank to the other
-        bool is_flank_flank = variant_graph.is_flanking_node(e.first) and variant_graph.is_flanking_node(e.second);
-
-        if ((not is_ref) or is_flank_flank) {
+        if (not is_ref) {
             n_non_ref_edges += 1;
 
             if (covered_edges.find(e) != covered_edges.end()){
