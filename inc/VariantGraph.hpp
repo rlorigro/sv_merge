@@ -87,16 +87,20 @@ public:
      * created; otherwise, a single node [A..B) is created; this is useful to avoid creating long nodes when the
      * breakpoints of a chromosome form clusters that are far away from one another; this parameter should be set to a
      * small multiple of average read length;
+     * @param x,y (zero-based) if these are specified, and if `x` is smaller (resp. `y` is greater) than all the
+     * breakpoints in `records` on the chromosome in the CHROM field: compute flanks based on `x` and `y` rather than on
+     * the leftmost/rightmost breakpoints in `records`;
      * @param deallocate_ref_alt TRUE: the procedure deallocates every REF and ALT field in `records`; this can be
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record in order to be considered.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
 
     /**
-     * Builds a trivial graph that contains one node for string `chromosome[p..q)` (zero-based) and one node for each
-     * of its flanking sequences (if they exist).
+     * If `p<q` (zero-based), the procedure builds a trivial graph that contains one node for string `chromosome[p..q)`
+     * and one node for each of its flanking sequences (if they exist). If `p=q`, the central node is replaced by a
+     * single edge.
      *
      * @param flank_length ensures that an interval of this length, with no overlap to the tandem track, is present
      * before `p` and at or after `q`.

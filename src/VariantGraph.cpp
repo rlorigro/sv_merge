@@ -132,7 +132,7 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
 }
 
 
-void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers) {
+void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers) {
     graph.clear();
     n_vcf_records=records.size();
     if (n_vcf_records!=0) this->vcf_records=std::move(records);
@@ -246,7 +246,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         vector<handle_t>& handles = node_handles.at(chromosome);
         handles.clear();
         p=first_positions.at(0);
-        first_pos=get_flank_boundary_left(chromosome,p,flank_length);
+        first_pos=get_flank_boundary_left(chromosome,x!=INT32_MAX&&x<p&&chromosome==main_chromosome?x:p,flank_length);
         if (first_pos==INT32_MAX) first_pos=0;
         if (p!=first_pos) {
             const handle_t reference_handle = graph.create_handle(chrom_sequence.substr(first_pos,p-first_pos));
@@ -289,7 +289,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         p=first_positions.at(n_positions-1);
         first_positions_new.emplace_back(p);
         if (p<chrom_length) {
-            last_pos=get_flank_boundary_right(chromosome,p,flank_length);
+            last_pos=get_flank_boundary_right(chromosome,y!=INT32_MAX&&y>p&&chromosome==main_chromosome?y:p,flank_length);
             if (last_pos==INT32_MAX) last_pos=(int32_t)(chrom_length-1);
             const handle_t reference_handle = graph.create_handle(chrom_sequence.substr(p,last_pos+1-p));
             handles.emplace_back(reference_handle);
@@ -428,7 +428,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     main_chromosome_length=(int32_t)main_chromosome_sequence.length();
     if (p<0 || p>=main_chromosome_length) throw runtime_error("Invalid p");
     if (q<0 || q>=main_chromosome_length) throw runtime_error("Invalid q");
-    if (p>=q) throw runtime_error("Invalid p and q");
+    if (p>q) throw runtime_error("Invalid p and q");
 
     graph.clear();
     n_vcf_records=0; vcf_records.clear();
@@ -457,13 +457,15 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     }
     else previous_handle_exists=false;
 
-    // [p..q)
-    reference_handle=graph.create_handle(main_chromosome_sequence.substr(p,q-p));
-    handles.emplace_back(reference_handle);
-    first_positions.emplace_back(p);
-    node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,p);
-    if (previous_handle_exists) graph.create_edge(previous_handle,reference_handle);
-    previous_handle=reference_handle;
+    // [p..q), if any.
+    if (p<q) {
+        reference_handle=graph.create_handle(main_chromosome_sequence.substr(p,q-p));
+        handles.emplace_back(reference_handle);
+        first_positions.emplace_back(p);
+        node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,p);
+        if (previous_handle_exists) graph.create_edge(previous_handle,reference_handle);
+        previous_handle=reference_handle;
+    }
 
     // Right flank
     if (q<main_chromosome_length) {
@@ -473,7 +475,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
         handles.emplace_back(reference_handle);
         first_positions.emplace_back(q);
         node_to_chromosome[graph.get_id(reference_handle)]=pair<string,int32_t>(chromosome,q);
-        graph.create_edge(previous_handle,reference_handle);
+        if (previous_handle_exists) graph.create_edge(previous_handle,reference_handle);
     }
 
     chunk_first.clear(); chunk_first.emplace(chromosome,first_positions);
