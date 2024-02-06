@@ -449,7 +449,7 @@ void compute_graph_evaluation_thread_fn(
 
         // Run GraphAligner and check how long it takes, if it times out
         Timer t;
-        bool success = run_command(command, true, 90);
+        bool success = run_command(command, false, 90);
         string time_csv = t.to_csv();
 
         write_time_log(input_subdir, vcf_name_prefix, time_csv, success);

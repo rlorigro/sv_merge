@@ -108,8 +108,7 @@ task EvaluateChromosome {
             --ref ~{reference_fa} \
             --interval_max_length ~{interval_max_length} \
             --flank_length ~{flank_length} \
-            --debug \
-            2> ~{chromosome}_errors.txt
+            --debug
         mkdir ./${ANALYSIS_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ./${EVALUATION_NAME} \
@@ -125,7 +124,6 @@ task EvaluateChromosome {
     output {
         File analysis = work_dir + "/" + chromosome + "_analysis.tar.gz"
         File evaluation = work_dir + "/" + chromosome + "_evaluation.tar.gz"
-        File evaluation_errors = work_dir + "/" + chromosome + "_errors.txt"
     }
     runtime {
         docker: "fcunial/hapestry"
