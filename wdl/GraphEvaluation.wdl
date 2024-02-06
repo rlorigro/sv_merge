@@ -94,7 +94,7 @@ task EvaluateChromosome {
         
         # Evaluating
         EVALUATION_BEDS=~{sep=',' evaluation_bed}
-        EVALUATION_BEDS=$(tr ',' ' ' ${EVALUATION_BEDS})
+        EVALUATION_BEDS=$(echo ${EVALUATION_BEDS} | tr ',' ' ')
         EVALUATION_NAME="~{chromosome}_evaluation"
         ANALYSIS_NAME="~{chromosome}_analysis"
         mkdir ./${EVALUATION_NAME}
