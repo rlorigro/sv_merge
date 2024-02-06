@@ -282,9 +282,13 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
     }
 
     variant_graph.graph.for_each_edge([&](const edge_t e){
+        // We want to skip ref-ref edges in the evaluation
         auto is_ref = variant_graph.is_reference_edge(e);
 
-        if (not is_ref) {
+        // Even if the edges is a ref-ref edge, we should still count it if it's from one flank to the other
+        bool is_flank_flank = variant_graph.is_flanking_node(e.first) and variant_graph.is_flanking_node(e.second);
+
+        if ((not is_ref) or is_flank_flank) {
             n_non_ref_edges += 1;
 
             if (covered_edges.find(e) != covered_edges.end()){
@@ -422,7 +426,7 @@ void compute_graph_evaluation_thread_fn(
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)){
-            variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), false);
+            variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
         }
         else{
             cerr << "TRIVIAL REGION: " + region.to_string() << '\n';

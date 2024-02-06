@@ -44,18 +44,11 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
 
             r.get_reference_coordinates(false, coord);
 
-            cerr << coord.first << ',' << coord.second << '\n';
-
             // Skip large events in the population
             // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
             // for very large events
             if (coord.second - coord.first > interval_max_length){
                 return;
-            }
-
-            if (coord.first == coord.second){
-                coord.first -= 1;
-                coord.second += 1;   // TODO: need to check if exceeds contig limit?
             }
 
             // Just do one check at the end to fix any negative coords

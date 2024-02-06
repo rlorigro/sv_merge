@@ -371,6 +371,7 @@ void for_alignment_in_bam_subregions(
         ){
 
     // Don't want to rely on user compliance with documentation to guarantee that these are sorted
+    // TODO: fix the requirement for contiguous region!!
     Region r_prev = subregions[0];
     for (const auto& r: subregions){
         if (r_prev.start > r.start){
