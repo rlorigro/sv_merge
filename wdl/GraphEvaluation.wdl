@@ -36,7 +36,6 @@ workflow GraphEvaluation {
     output {
         Array[File] analysis = EvaluateChromosome.analysis
         Array[File] evaluation = EvaluateChromosome.evaluation
-        Array[File] evaluation_errors = EvaluateChromosome.evaluation_errors
     }
 }
 
