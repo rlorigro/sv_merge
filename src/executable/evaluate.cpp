@@ -296,11 +296,16 @@ void write_summary(path output_dir, const GafSummary& gaf_summary, VariantGraph&
         n_edges += 1;
     });
 
+    size_t n_alignments = 0;
+    for (const auto& [name, paths]: gaf_summary.query_paths){
+        n_alignments += paths.size();
+    }
+
     // Write a CSV of the format
     // n_alignments,n_edges,n_edges_covered,n_nonref_edges,n_nonref_edges_covered
     // [int],[int],[int],[int],[int]
     edges_file << "n_alignments" << ',' << "n_edges" << ',' << "n_edges_covered" << ',' << "n_non_ref_edges" << ',' << "n_non_ref_edges_covered" << '\n';
-    edges_file << gaf_summary.query_paths.size() << ',' << n_edges << ',' << covered_edges.size() << ',' << n_non_ref_edges << ',' << n_non_ref_edges_covered << '\n';
+    edges_file << n_alignments << ',' << n_edges << ',' << covered_edges.size() << ',' << n_non_ref_edges << ',' << n_non_ref_edges_covered << '\n';
 
     // Update the VariantGraph paths to contain all the alignments
     ofstream supported_file(supported_output_path);
