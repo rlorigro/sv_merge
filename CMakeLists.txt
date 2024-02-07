@@ -12,7 +12,7 @@ message(STATUS "Use the following flags for special configuration options E.g.: 
     ------------    ----------------------------------------------------------------------------------------
     no_ortools:     skip all portions of the project that involve ortools (including the main hapestry exe)
     debug:          invoke less optimization and more transparency for debugging (including ASan)
-    no_san:         skip AddressSanitizer (only relevant when using debug=1)
+    no_san:         skip AddressSanitizer and other sanitizers (only relevant when using debug=1)
     dev:            skip fetching external projects (must not be invoked on first compilation)")
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
