@@ -104,9 +104,10 @@ RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_versi
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip install cmake --upgrade
+ARG HAPESTRY_COMMIT=6eb9bc25177adca4b1795c0d865bac5134c706c6
 RUN git clone https://github.com/rlorigro/sv_merge.git \
     && cd sv_merge \
-    && git checkout dev \
+    && git checkout ${HAPESTRY_COMMIT} \
     && mkdir build \
     && cd build \
     && cmake .. \
@@ -127,6 +128,12 @@ RUN cd /hapestry/GraphAligner \
     && make -j 12 bin/GraphAligner \
     && bin/GraphAligner --help && echo 0 || echo 1
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
+COPY ./limits.conf /etc/security/limits.conf
+#SHELL ["echo", "root soft nofile unlimited", ">", "/etc/security/limits.conf"]
+#SHELL ["echo", "root hard nofile unlimited", ">>", "/etc/security/limits.conf"]
+
+# RUN echo "root soft nofile unlimited" > /etc/security/limits.conf \
+#     && echo "root hard nofile unlimited" >> /etc/security/limits.conf
 
 # Conda would install version 1.0.13, which is from 2021: 
 #RUN /miniconda3/bin/conda install -c bioconda graphaligner
