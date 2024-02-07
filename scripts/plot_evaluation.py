@@ -24,6 +24,10 @@ def plot_distributions(histograms: dict):
     }
 
     is_reverse = {
+        "nonref_alignment_identity_avg":True,
+        "nonref_haplotype_coverage_avg":True,
+        "cluster_alignment_identity_avg":True,
+        "cluster_coverage_avg":True,
         "alignment_identity_avg":True,
         "haplotype_coverage_avg":True,
         "n_alignments":False,

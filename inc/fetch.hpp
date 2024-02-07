@@ -1,6 +1,5 @@
 #pragma once
 
-#include "read_cluster_optimizer.hpp"
 #include "TransitiveMap.hpp"
 #include "IntervalGraph.hpp"
 #include "Authenticator.hpp"

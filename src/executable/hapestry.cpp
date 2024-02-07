@@ -1,4 +1,4 @@
-#include "read_cluster_optimizer.hpp"
+#include "optimize/read_cluster_optimizer.hpp"
 #include "TransitiveMap.hpp"
 #include "windows.hpp"
 #include "Timer.hpp"
