@@ -7,8 +7,13 @@
 cmake_minimum_required(VERSION 3.22)
 project(sv_merge VERSION 0.0.0)
 
-find_package(StandardMathLibrary)
-message(STATUS "StandardMathLibrary: ${StandardMathLibrary}")
+message(STATUS "Use the following flags for special configuration options E.g.: cmake .. -D[flag]=1 -D[flag2]=1
+    FLAG            RESULT
+    ------------    ----------------------------------------------------------------------------------------
+    no_ortools:     skip all portions of the project that involve ortools (including the main hapestry exe)
+    debug:          invoke less optimization and more transparency for debugging (including ASan)
+    no_san:         skip AddressSanitizer (only relevant when using debug=1)
+    dev:            skip fetching external projects (must not be invoked on first compilation)")
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
