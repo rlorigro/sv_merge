@@ -49,6 +49,11 @@ void compute_summaries_from_gaf(const path& gaf_path, GafSummary& gaf_summary){
     vector<interval_t> query_intervals = {};
 
     for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
+        // Skip nonsensical alignments
+        if (alignment.get_map_quality() == 0){
+            return;
+        }
+
         string name;
         alignment.get_query_name(name);
 
@@ -447,6 +452,7 @@ void compute_graph_evaluation_thread_fn(
 
         string command = "GraphAligner"
                   " -x " "vg"
+                  " --multimap-score-fraction " "1"
                   " -t " "1"
                   " -a " + gaf_path.string() +
                   " -g " + gfa_path.string() +

@@ -13,7 +13,7 @@ message(STATUS "Use the following flags for special configuration options E.g.: 
     no_ortools:     skip all portions of the project that involve ortools (including the main hapestry exe)
     debug:          invoke less optimization and more transparency for debugging (including ASan)
     no_san:         skip AddressSanitizer and other sanitizers (only relevant when using debug=1)
-    dev:            skip fetching external projects (must not be invoked on first compilation)")
+    dev:            skip fetching external projects (must NOT be invoked on first compilation)")
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
@@ -43,7 +43,8 @@ if (debug)
 
     if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
         set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
