@@ -96,7 +96,6 @@ task EvaluateChromosome {
         EVALUATION_BEDS=$(echo ${EVALUATION_BEDS} | tr ',' ' ')
         EVALUATION_NAME="~{chromosome}_evaluation"
         ANALYSIS_NAME="~{chromosome}_analysis"
-        mkdir ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
             --n_threads ${N_THREADS} \
             --output_dir ./${EVALUATION_NAME} \
