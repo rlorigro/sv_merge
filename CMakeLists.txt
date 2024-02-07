@@ -546,7 +546,7 @@ set(TESTS
 if (NOT no_ortools OR NOT DEFINED no_ortools)
     list(APPEND TESTS
             test_ortools
-            test_ooptimize
+            test_optimize
             test_read_clustering
             test_triangle_inequality
     )
