@@ -110,7 +110,6 @@ task EvaluateChromosome {
             --interval_max_length ~{interval_max_length} \
             --flank_length ~{flank_length} \
             --debug
-        mkdir ./${ANALYSIS_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ./${EVALUATION_NAME} \
             --output_dir ./${ANALYSIS_NAME} \
