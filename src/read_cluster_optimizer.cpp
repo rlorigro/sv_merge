@@ -1,4 +1,4 @@
-#include "optimize/read_cluster_optimizer.hpp"
+#include "read_cluster_optimizer.hpp"
 
 #include <cmath>
 

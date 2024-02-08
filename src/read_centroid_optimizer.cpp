@@ -1,4 +1,4 @@
-#include "optimize/read_centroid_optimizer.hpp"
+#include "read_centroid_optimizer.hpp"
 
 
 namespace sv_merge{

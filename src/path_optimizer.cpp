@@ -1,4 +1,4 @@
-#include "optimize/path_optimizer.hpp"
+#include "path_optimizer.hpp"
 
 
 namespace sv_merge{

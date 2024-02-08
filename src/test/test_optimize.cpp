@@ -7,7 +7,7 @@ using std::cerr;
 
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "TransitiveMap.hpp"
-#include "optimize/path_optimizer.hpp"
+#include "path_optimizer.hpp"
 
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
