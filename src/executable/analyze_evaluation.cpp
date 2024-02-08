@@ -382,7 +382,7 @@ public:
                 case 3: m=stoul(buffer); break;
                 case 4: s=stoul(buffer); break;
                 case 5: ms=stoul(buffer); break;
-                case 6: success=stoi(buffer)==1; break;
+                case 6: success=buffer=="1"; break;
             }
             buffer.clear();
         };
@@ -639,17 +639,17 @@ private:
     void on_window_end_haplotypes(size_t tool_id, const path& input_file) {
         n_haplotypes.at(tool_id).emplace_back(n_haps);
         n_nonref_haplotypes.at(tool_id).emplace_back(n_nonref_haps);
-        if (n_haps>0) haplotype_coverage_avg.at(tool_id).emplace_back(hap_counts.at(0)/((double)n_haps));
-        if (n_haps>0) alignment_identity_avg.at(tool_id).emplace_back(hap_counts.at(1)/((double)n_haps));
-        if (n_nonref_haps>0) nonref_haplotype_coverage_avg.at(tool_id).emplace_back(nonref_hap_counts.at(0)/((double)n_nonref_haps));
-        if (n_nonref_haps>0) nonref_alignment_identity_avg.at(tool_id).emplace_back(nonref_hap_counts.at(1)/((double)n_nonref_haps));
+        haplotype_coverage_avg.at(tool_id).emplace_back(n_haps>0?hap_counts.at(0)/((double)n_haps):-1);
+        alignment_identity_avg.at(tool_id).emplace_back(n_haps>0?hap_counts.at(1)/((double)n_haps):-1);
+        nonref_haplotype_coverage_avg.at(tool_id).emplace_back(n_nonref_haps>0?nonref_hap_counts.at(0)/((double)n_nonref_haps):-1);
+        nonref_alignment_identity_avg.at(tool_id).emplace_back(n_nonref_haps>0?nonref_hap_counts.at(1)/((double)n_nonref_haps):-1);
         double sum1 = 0; double sum2 = 0;
         for (const auto& [id, size]: cluster_size) {
             sum1+=cluster_counts.at(id).at(0)/((double)size);
             sum2+=cluster_counts.at(id).at(1)/((double)size);
         }
-        if (n_clusters>0) cluster_coverage_avg.at(tool_id).emplace_back(sum1/n_clusters);
-        if (n_clusters>0) cluster_alignment_identity_avg.at(tool_id).emplace_back(sum2/n_clusters);
+        cluster_coverage_avg.at(tool_id).emplace_back(n_clusters>0?sum1/n_clusters:-1);
+        cluster_alignment_identity_avg.at(tool_id).emplace_back(n_clusters>0?sum2/n_clusters:-1);
         if (n_haps>0 && (hap_counts.at(0)<=log_hap_coverage_leq*n_haps || hap_counts.at(1)<=log_alignment_identity_leq*n_haps)) {
             if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(n_haplotypes.at(tool_id).size()-1);
             else logged_windows[tool_id]={n_haplotypes.at(tool_id).size()-1};
@@ -884,7 +884,7 @@ int main (int argc, char* argv[]) {
     vector<path> BED_FILES;
     double ALIGNMENT_COVERAGE_THRESHOLD = 0.95;
     double BED_COVERAGE_THRESHOLD = 0.1;
-    size_t MAX_HAP_LENGTH = 75000;
+    size_t MAX_HAP_LENGTH = 100000;
     double LOG_NODES_FULLY_COVERED_LEQ = 0.8;
     double LOG_EDGES_COVERED_LEQ = 0.8;
     double LOG_VCF_RECORDS_SUPPORTED_LEQ = 0.8;
