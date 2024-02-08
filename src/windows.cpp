@@ -26,7 +26,7 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
 
         VcfReader vcf_reader(vcf);
         vcf_reader.min_qual = numeric_limits<float>::min();
-        vcf_reader.min_sv_length = 50;
+        vcf_reader.min_sv_length = 1;
         vcf_reader.progress_n_lines = 100'000;
 
         unordered_set<int32_t> sample_ids;
