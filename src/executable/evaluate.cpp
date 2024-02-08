@@ -527,7 +527,7 @@ void compute_graph_evaluation(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 1;
+    vcf_reader.min_sv_length = 50;
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
