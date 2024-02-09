@@ -112,7 +112,7 @@ task EvaluateChromosome {
             --debug
 
         # directory names don't have '.' in them
-        TOOLS = $(echo ${TOOLS} | tr '.' '_')
+        TOOLS = $(echo "${TOOLS}" | tr '.' '_')
 
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ./${EVALUATION_NAME} \
