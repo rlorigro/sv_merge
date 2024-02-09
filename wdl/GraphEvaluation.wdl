@@ -93,7 +93,7 @@ task EvaluateChromosome {
                 TOOLS="${TOOLS} ${TOOL_ID}"
             fi
         done < ${LIST_FILE}
-        
+
         # Evaluating
         EVALUATION_BEDS=~{sep=',' evaluation_bed}
         EVALUATION_BEDS=$(echo ${EVALUATION_BEDS} | tr ',' ' ')
@@ -110,6 +110,10 @@ task EvaluateChromosome {
             --interval_max_length ~{interval_max_length} \
             --flank_length ~{flank_length} \
             --debug
+
+        # directory names don't have '.' in them
+        TOOLS = $(echo ${TOOLS} | tr '.' '_')
+
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ./${EVALUATION_NAME} \
             --output_dir ./${ANALYSIS_NAME} \
