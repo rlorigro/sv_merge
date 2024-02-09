@@ -350,12 +350,13 @@ public:
      * @param directories all input directories examined.
      */
     void log_anomalous_windows(const path& output_dir, const vector<Region>& directories) {
+        const char TSV_SEPARATOR = '\t';
         for (auto& [tool_id, windows]: logged_windows) {
             sort(windows.begin(),windows.end());
             const auto iterator = unique(windows.begin(),windows.end());
             windows.resize(distance(windows.begin(),iterator));
             ofstream out(output_dir/TOOLS.at(tool_id)/LOGGED_WINDOWS_FILE);
-            for (auto w: windows) out << directories.at(w).name+SUBDIR_SEPARATOR_1+to_string(directories.at(w).start)+SUBDIR_SEPARATOR_2+to_string(directories.at(w).stop) << '\n';
+            for (auto w: windows) out << directories.at(w).name+TSV_SEPARATOR+to_string(directories.at(w).start)+TSV_SEPARATOR+to_string(directories.at(w).stop) << '\n';
             out.close();
         }
     }
@@ -414,7 +415,7 @@ private:
     inline static const string EDGE_COUNTS_FILE = "edges.csv";
     inline static const string SUPPORTED_VCF_FILE = "supported.vcf";
     inline static const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
-    inline static const string LOGGED_WINDOWS_FILE = "anomalous_windows.log";
+    inline static const string LOGGED_WINDOWS_FILE = "anomalous_windows.bed";
     inline static const string EXECUTION_FILE = "log.csv";
     static const char GAF_FWD_CHAR = '>';
     static const char GAF_REV_CHAR = '<';
@@ -897,11 +898,11 @@ int main (int argc, char* argv[]) {
     app.add_option("--min_alignment_coverage",ALIGNMENT_COVERAGE_THRESHOLD,"Count a node or haplotype as fully covered iff at least this fraction of it is covered by alignments (default: 0.95).")->capture_default_str();
     app.add_option("--min_bed_coverage",BED_COVERAGE_THRESHOLD,"Use a window for evaluation iff at least this fraction of it is covered by BED intervals. 0=Iff even a single basepair of the window is covered by BED intervals.")->capture_default_str();
     app.add_option("--max_hap_length",MAX_HAP_LENGTH,"Haplotypes longer than this number of basepairs are considered errors and they make the program halt immediately.")->capture_default_str();
-    app.add_option("--log_nodes_fully_covered",LOG_NODES_FULLY_COVERED_LEQ,"Stores in a file the name of every input directory whose fraction of nodes fully covered is at most this.")->capture_default_str();
-    app.add_option("--log_edges_covered",LOG_EDGES_COVERED_LEQ,"Stores in a file the name of every input directory whose fraction of covered edges is at most this.")->capture_default_str();
-    app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the name of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
-    app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the name of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
-    app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the name of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
+    app.add_option("--log_nodes_fully_covered",LOG_NODES_FULLY_COVERED_LEQ,"Stores in a file the coordinates of every input directory whose fraction of nodes fully covered is at most this.")->capture_default_str();
+    app.add_option("--log_edges_covered",LOG_EDGES_COVERED_LEQ,"Stores in a file the coordinates of every input directory whose fraction of covered edges is at most this.")->capture_default_str();
+    app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the coordinates of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
+    app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
+    app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
