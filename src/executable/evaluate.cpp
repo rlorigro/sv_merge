@@ -623,14 +623,14 @@ void evaluate(
 ){
     Timer t;
 
-    output_dir = ghc::filesystem::absolute(output_dir);
-    tandem_bed = ghc::filesystem::absolute(tandem_bed);
-    bam_csv = ghc::filesystem::absolute(bam_csv);
-    ref_fasta = ghc::filesystem::absolute(ref_fasta);
-    cluster_by = ghc::filesystem::absolute(cluster_by);
+    output_dir = ghc::filesystem::weakly_canonical(output_dir);
+    tandem_bed = ghc::filesystem::weakly_canonical(tandem_bed);
+    bam_csv = ghc::filesystem::weakly_canonical(bam_csv);
+    ref_fasta = ghc::filesystem::weakly_canonical(ref_fasta);
+    cluster_by = ghc::filesystem::weakly_canonical(cluster_by);
 
     for (auto& v: vcfs){
-        v = ghc::filesystem::absolute(v);
+        v = ghc::filesystem::weakly_canonical(v);
     }
 
     if (ghc::filesystem::exists(output_dir)){

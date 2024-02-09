@@ -906,6 +906,13 @@ int main (int argc, char* argv[]) {
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
+    INPUT_DIR = ghc::filesystem::weakly_canonical(INPUT_DIR);
+    OUTPUT_DIR = ghc::filesystem::weakly_canonical(OUTPUT_DIR);
+
+    for (auto& b: BED_FILES){
+        b = ghc::filesystem::weakly_canonical(b);
+    }
+
     Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);
 
     // Sorting all directories by coordinate
