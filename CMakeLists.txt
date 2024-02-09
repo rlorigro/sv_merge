@@ -559,6 +559,7 @@ set(EXECUTABLES
         a
         hapestry
         find_windows
+        analyze_evaluation
 )
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
