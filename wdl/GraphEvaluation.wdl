@@ -1,7 +1,7 @@
 version 1.0
 
 
-# 
+#
 #
 workflow GraphEvaluation {
     input {
@@ -18,7 +18,7 @@ workflow GraphEvaluation {
         intersample_vcf_gz: "List of remote VCF.GZ addresses. The evaluation builds haplotype clusters using the first file."
         haps_vs_chm13_csv: "List of remote BAM addresses"
     }
-    
+
     scatter(chromosome in chromosomes) {
         call EvaluateChromosome {
             input:
@@ -32,7 +32,7 @@ workflow GraphEvaluation {
                 haps_vs_chm13_csv = haps_vs_chm13_csv
         }
     }
-    
+
     output {
         Array[File] analysis = EvaluateChromosome.analysis
         Array[File] evaluation = EvaluateChromosome.evaluation
@@ -56,22 +56,19 @@ task EvaluateChromosome {
     }
     parameter_meta {
     }
-    
+
     String docker_dir = "/hapestry"
     String work_dir = "/cromwell_root/hapestry"
-    
+
     command <<<
         set -euxo pipefail
         mkdir -p ~{work_dir}
         cd ~{work_dir}
-        
+
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
         N_CORES_PER_SOCKET="$(lscpu | grep '^Core(s) per socket:' | awk '{print $NF}')"
-#        N_THREADS=$(( 2 * ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
-
-        # TEMPORARILY FORCE 1 THREAD
-        N_THREADS=1
+        N_THREADS=$(( 2 * ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
 
         # Downloading all the calls in $chromosome$.
         export GCS_OAUTH_TOKEN=$(gcloud auth print-access-token)
@@ -110,21 +107,18 @@ task EvaluateChromosome {
             --interval_max_length ~{interval_max_length} \
             --flank_length ~{flank_length} \
             --debug
-
-        # directory names don't have '.' in them
-        TOOLS = $(echo "${TOOLS}" | tr '.' '_')
-
+        TOOLS=$(echo "${TOOLS}" | tr '.' '_')
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ./${EVALUATION_NAME} \
             --output_dir ./${ANALYSIS_NAME} \
             --tools ${TOOLS} \
             --beds ${EVALUATION_BEDS}
-        
+
         export GZIP=-1
         ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME}.tar.gz ./${ANALYSIS_NAME}
         ${TIME_COMMAND} tar -czf ${EVALUATION_NAME}.tar.gz --exclude='*.fasta' --exclude='*.fa' ./${EVALUATION_NAME}
     >>>
-    
+
     output {
         File analysis = work_dir + "/" + chromosome + "_analysis.tar.gz"
         File evaluation = work_dir + "/" + chromosome + "_evaluation.tar.gz"
