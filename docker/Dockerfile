@@ -104,16 +104,25 @@ RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_versi
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip install cmake --upgrade
-ARG HAPESTRY_COMMIT=6eb9bc25177adca4b1795c0d865bac5134c706c6
+ARG HAPESTRY_COMMIT=a911bc3
 RUN git clone https://github.com/rlorigro/sv_merge.git \
     && cd sv_merge \
     && git checkout ${HAPESTRY_COMMIT} \
     && mkdir build \
     && cd build \
-    && cmake .. \
+    && cmake .. -Dno_ortools=1 \
     && make -j 12
 
+# TRYING TO SET OPEN FILE LIMITS. NOT SURE IT IS WORKING.
+#
+COPY ./limits.conf /etc/security/limits.conf
+#SHELL ["echo", "root soft nofile unlimited", ">", "/etc/security/limits.conf"]
+#SHELL ["echo", "root hard nofile unlimited", ">>", "/etc/security/limits.conf"]
+
 # GRAPHALIGNER
+# The following would install version 1.0.13, which is from 2021: 
+# RUN /miniconda3/bin/conda install -c bioconda graphaligner
+#
 RUN mkdir -p /miniconda3 \
     && wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /miniconda3/miniconda.sh \
     && bash /miniconda3/miniconda.sh -b -u -p /miniconda3 \
@@ -128,12 +137,3 @@ RUN cd /hapestry/GraphAligner \
     && make -j 12 bin/GraphAligner \
     && bin/GraphAligner --help && echo 0 || echo 1
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
-COPY ./limits.conf /etc/security/limits.conf
-#SHELL ["echo", "root soft nofile unlimited", ">", "/etc/security/limits.conf"]
-#SHELL ["echo", "root hard nofile unlimited", ">>", "/etc/security/limits.conf"]
-
-# RUN echo "root soft nofile unlimited" > /etc/security/limits.conf \
-#     && echo "root hard nofile unlimited" >> /etc/security/limits.conf
-
-# Conda would install version 1.0.13, which is from 2021: 
-#RUN /miniconda3/bin/conda install -c bioconda graphaligner
