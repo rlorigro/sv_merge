@@ -132,7 +132,6 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
     sort(subregions.begin(), subregions.end(), left_comparator);
 
     GoogleAuthenticator authenticator;
-    mutex auth_mutex;
     sample_region_coord_map_t sample_to_region_coords;
 
     cerr << "computing coordinates..." << '\n';
@@ -146,7 +145,6 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
 
     extract_subregion_coords_from_sample(
             authenticator,
-            auth_mutex,
             sample_to_region_coords,
             sample_name,
             subregions,

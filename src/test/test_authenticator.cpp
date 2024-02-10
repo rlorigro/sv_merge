@@ -1,88 +1,39 @@
 #include "Authenticator.hpp"
 #include "Timer.hpp"
 #include "bam.hpp"
-#include "curl/curl.h"
 
 using namespace sv_merge;
 
-#include <functional>
+#include <thread>
+#include <atomic>
+#include <exception>
 
 using std::function;
+using std::thread;
+using std::atomic;
+using std::exception;
 
 
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
+void thread_fn(int64_t thread_id, mutex& m, Timer& t, GoogleAuthenticator& authenticator){
+    string region_string = "chr1:10000000-10005000";
+    path bam_path = "gs:/fc-b1dcc7b0-68be-46c4-b67e-5119c8c5de53/submissions/231ea80e-bef3-4e96-90a4-07efc80eb523/minimap2/20583855-420b-4027-97a0-b521fa94934e/call-alignAndSortBAM/HG00673.bam";
 
+    int64_t duration = 0;
 
-void curl_get(const string& url, string& result){
-    result.clear();
-    CURL *curl;
-    CURLcode res;
+    while (duration < 60*64) {
+        authenticator.try_with_authentication(2, [&]() {
+            for_read_in_bam_region(bam_path, region_string, [&](Sequence &s) {
+                m.lock();
+                cerr << t << ' ' << "thread id: " << thread_id << " result: " << s.name << '\n';
+                m.unlock();
 
-    curl = curl_easy_init();
-    if(curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
-        res = curl_easy_perform(curl);
+                // Stop after the first read
+                return;
+            });
+        });
 
-        if(res != CURLE_OK) {
-            fprintf(stderr, "curl_easy_perform() failed: %s\n",
-                    curl_easy_strerror(res));
-        }
-
-        curl_easy_cleanup(curl);
-
-        std::cout << result << std::endl;
-    }
-}
-
-
-void parse_json_line(const string& line, pair<string,string>& result){
-    result.first.clear();
-    result.second.clear();
-    size_t n_quotes = 0;
-
-    for (auto c: line){
-        if (c == '\"'){
-            n_quotes++;
-            continue;
-        }
-
-        if (n_quotes == 1){
-            result.first += c;
-        }
-
-        if (n_quotes == 3){
-            result.second += c;
-        }
-    }
-
-    if (n_quotes != 4){
-        throw runtime_error("ERROR: attempt to parse non-string value in JSON line: " + line);
-    }
-}
-
-
-/**
- * only valid for simple STRING objects no nested objects, no ints, no floats...
- */
-void for_item_in_json(const string& json, const function<void(const pair<string,string>& item)>& f){
-    string token;
-    pair<string,string> item;
-
-    for (const auto c: json){
-        if (c == ','){
-            parse_json_line(token, item);
-            f(item);
-            token.clear();
-        }
-        else{
-            token += c;
-        }
+        sleep(120);
+        duration += 120;
     }
 }
 
@@ -94,32 +45,36 @@ int main(){
     // Will throw error if fails, otherwise returns token
     run_command(command, token);
 
-    string url = "https://oauth2.googleapis.com/tokeninfo?access_token=" + token;
-    string result;
-    curl_get(url, result);
-
-    for_item_in_json(result, [&](const pair<string,string>& item){
-        if (item.first == "exp"){
-            auto remaining_seconds = stoll(item.second);
-        }
-    });
-
     GoogleAuthenticator authenticator;
-    string region_string = "chr1:10000000-10005000";
-    path bam_path = "gs:/fc-b1dcc7b0-68be-46c4-b67e-5119c8c5de53/submissions/231ea80e-bef3-4e96-90a4-07efc80eb523/minimap2/20583855-420b-4027-97a0-b521fa94934e/call-alignAndSortBAM/HG00673.bam";
 
     Timer t;
+    mutex m;
 
-    while (true){
-        authenticator.update();
+    // Thread-related variables
+    size_t n_threads = 32;
+    atomic<size_t> job_index = 0;
+    vector<thread> threads;
 
-        for_read_in_bam_region(bam_path, region_string, [&](Sequence& s){
-            cerr << t << ' ' << s.name << '\n';
-            // Stop after the first read
-            return;
-        });
+    threads.reserve(n_threads);
 
-        sleep(30);
+    // Launch threads
+    for (size_t n=0; n<n_threads; n++) {
+        try {
+            cerr << "launching: " << n << '\n';
+            threads.emplace_back(thread_fn,
+                                 n,
+                                 std::ref(m),
+                                 std::ref(t),
+                                 std::ref(authenticator)
+            );
+        } catch (const exception &e) {
+            throw e;
+        }
+    }
+
+    // Wait for threads to finish
+    for (auto &n: threads) {
+        n.join();
     }
 
 }

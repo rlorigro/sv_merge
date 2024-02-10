@@ -80,7 +80,6 @@ void null_fn(const CigarInterval &intersection, const interval_t &interval){}
  */
 void extract_subregions_from_sample(
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -114,128 +113,126 @@ void extract_subregions_from_sample(
     // Unused
     vector<interval_t> query_intervals;
 
-    // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-    authenticator_mutex.lock();
-    authenticator.update();
-    authenticator_mutex.unlock();
-
     // For this application of directly fetching sequence from the BAM, it doesn't make sense to reinterpret the coords
     // in native/unclipped query sequence space. An error will be thrown if a hardclip is found (see below)
     bool unclip_coords = false;
 
-    // Iterate each alignment in the ref region
-    for_alignment_in_bam_subregions(
-        bam_path,
-        super_region.to_string(),
-        subregions,
-        [&](Alignment& alignment, span<const Region>& overlapping_regions){
+    // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
+    authenticator.try_with_authentication(2, [&](){
+        // Iterate each alignment in the ref region
+        for_alignment_in_bam_subregions(
+            bam_path,
+            super_region.to_string(),
+            subregions,
+            [&](Alignment& alignment, span<const Region>& overlapping_regions){
 
-            if (alignment.is_unmapped() or not alignment.is_primary()){
-                return;
-            }
-
-            string name;
-            alignment.get_query_name(name);
-
-//            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
-//        for (const auto& item: overlapping_regions){
-//            cerr << item.start << ',' << item.stop << '\n';
-//        }
-
-            // The region of interest is defined in reference coordinate space
-            vector<interval_t> ref_intervals;
-            for (auto& r: overlapping_regions){
-                ref_intervals.emplace_back(r.start, r.stop);
-
-                // Find/or create coord for this region
-                auto& region_coord = query_coords_per_region[r];
-
-                // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
-                auto result = region_coord.find(name);
-
-                // If no previous alignment, initialize with the max placeholder
-                if (result == region_coord.end()){
-                    // Insert a new placeholder cigar interval and keep a reference to the value inserted
-                    result = region_coord.emplace(name, placeholder).first;
-                    result->second.is_reverse = alignment.is_reverse();
-
-                    // Try inserting a new empty sequence and keep a reference to the value inserted
-                    auto [iter,success] = query_sequences.try_emplace(name,"");
-
-                    // If the value existed already, don't do anything, the sequence has already been extracted
-                    if (not success){
-                        continue;
-                    }
-
-                    auto& x = iter->second;
-
-                    // Fill the value with the sequence
-                    alignment.get_query_sequence(x);
+                if (alignment.is_unmapped() or not alignment.is_primary()){
+                    return;
                 }
-            }
 
-            // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-            for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
-                [&](const CigarInterval& intersection, const interval_t& interval) {
+                string name;
+                alignment.get_query_name(name);
 
-                    // This will not catch every instance of a hardclip, but if there is one in the window it will throw
-                    if (intersection.is_hardclip()){
-                        throw runtime_error("ERROR: query-oriented direct-from-alignment read fetching cannot be accomplished"
-                                            " on hardclipped sequences, use whole-BAM coordinate based fetching instead");
-                    }
+    //            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+    //        for (const auto& item: overlapping_regions){
+    //            cerr << item.start << ',' << item.stop << '\n';
+    //        }
 
-                    // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
-                    // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
-                    if (intersection.is_softclip()){
-                        return;
-                    }
+                // The region of interest is defined in reference coordinate space
+                vector<interval_t> ref_intervals;
+                for (auto& r: overlapping_regions){
+                    ref_intervals.emplace_back(r.start, r.stop);
 
-//                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                    // Find/or create coord for this region
+                    auto& region_coord = query_coords_per_region[r];
 
-                    // A single alignment may span multiple regions
-                    for (auto& region: overlapping_regions){
-                        auto& coord = query_coords_per_region.at(region).at(name);
+                    // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
+                    auto result = region_coord.find(name);
 
-                        bool pass = false;
+                    // If no previous alignment, initialize with the max placeholder
+                    if (result == region_coord.end()){
+                        // Insert a new placeholder cigar interval and keep a reference to the value inserted
+                        result = region_coord.emplace(name, placeholder).first;
+                        result->second.is_reverse = alignment.is_reverse();
 
-                        // Optionally only track coords that intersect the boundaries
-                        if (require_spanning) {
-                            pass = (intersection.ref_start == region.start or intersection.ref_stop == region.stop);
+                        // Try inserting a new empty sequence and keep a reference to the value inserted
+                        auto [iter,success] = query_sequences.try_emplace(name,"");
+
+                        // If the value existed already, don't do anything, the sequence has already been extracted
+                        if (not success){
+                            continue;
                         }
-                        else{
-                            pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
+
+                        auto& x = iter->second;
+
+                        // Fill the value with the sequence
+                        alignment.get_query_sequence(x);
+                    }
+                }
+
+                // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
+                for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+                    [&](const CigarInterval& intersection, const interval_t& interval) {
+
+                        // This will not catch every instance of a hardclip, but if there is one in the window it will throw
+                        if (intersection.is_hardclip()){
+                            throw runtime_error("ERROR: query-oriented direct-from-alignment read fetching cannot be accomplished"
+                                                " on hardclipped sequences, use whole-BAM coordinate based fetching instead");
                         }
 
-                        // If the alignment is within the ref region, record the query position and ref position
-                        if (pass){
-                            auto [start,stop] = intersection.get_forward_query_interval();
+                        // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
+                        // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
+                        if (intersection.is_softclip()){
+                            return;
+                        }
 
-                            if (alignment.is_reverse()){
-                                if (stop > coord.query_stop){
-                                    coord.query_stop = stop;
-                                    coord.ref_start = intersection.ref_start;
-                                }
-                                if (start < coord.query_start){
-                                    coord.query_start = start;
-                                    coord.ref_stop = intersection.ref_stop;
-                                }
+    //                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+
+                        // A single alignment may span multiple regions
+                        for (auto& region: overlapping_regions){
+                            auto& coord = query_coords_per_region.at(region).at(name);
+
+                            bool pass = false;
+
+                            // Optionally only track coords that intersect the boundaries
+                            if (require_spanning) {
+                                pass = (intersection.ref_start == region.start or intersection.ref_stop == region.stop);
                             }
                             else{
-                                if (start < coord.query_start){
-                                    coord.query_start = start;
-                                    coord.ref_start = intersection.ref_start;
+                                pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
+                            }
+
+                            // If the alignment is within the ref region, record the query position and ref position
+                            if (pass){
+                                auto [start,stop] = intersection.get_forward_query_interval();
+
+                                if (alignment.is_reverse()){
+                                    if (stop > coord.query_stop){
+                                        coord.query_stop = stop;
+                                        coord.ref_start = intersection.ref_start;
+                                    }
+                                    if (start < coord.query_start){
+                                        coord.query_start = start;
+                                        coord.ref_stop = intersection.ref_stop;
+                                    }
                                 }
-                                if (stop > coord.query_stop){
-                                    coord.query_stop = stop;
-                                    coord.ref_stop = intersection.ref_stop;
+                                else{
+                                    if (start < coord.query_start){
+                                        coord.query_start = start;
+                                        coord.ref_start = intersection.ref_start;
+                                    }
+                                    if (stop > coord.query_stop){
+                                        coord.query_stop = stop;
+                                        coord.ref_stop = intersection.ref_stop;
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-                null_fn
-            );
+                    },
+                    null_fn
+                );
         });
+    });
 
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
     for (const auto& [region, query_coords]: query_coords_per_region){
@@ -283,7 +280,6 @@ void extract_subregions_from_sample(
  */
 void extract_subregion_coords_from_sample(
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -318,127 +314,125 @@ void extract_subregion_coords_from_sample(
     vector<interval_t> query_intervals;
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-    authenticator_mutex.lock();
-    authenticator.update();
-    authenticator_mutex.unlock();
+    // Mutex is built into this class so it is thread safe
+    authenticator.try_with_authentication(2, [&](){
+        // Iterate each alignment in the ref region
+        for_alignment_in_bam_subregions(
+            bam_path,
+            super_region.to_string(),
+            subregions,
+            [&](Alignment& alignment, span<const Region>& overlapping_regions){
 
-    // Iterate each alignment in the ref region
-    for_alignment_in_bam_subregions(
-        bam_path,
-        super_region.to_string(),
-        subregions,
-        [&](Alignment& alignment, span<const Region>& overlapping_regions){
-
-            if (alignment.is_unmapped() or not alignment.is_primary()){
-                return;
-            }
-
-            string name;
-            alignment.get_query_name(name);
-
-//            cerr << '\n' << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
-//        for (const auto& item: overlapping_regions){
-//            cerr << item.start << ',' << item.stop << '\n';
-//        }
-
-            // The region of interest is defined in reference coordinate space
-            vector<interval_t> ref_intervals;
-            for (auto& r: overlapping_regions){
-                ref_intervals.emplace_back(r.start, r.stop);
-
-                // Find/or create coord for this region
-                auto& region_coord = query_coords_per_region[r];
-
-                // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
-                auto result = region_coord.find(name);
-
-                // If no previous alignment, initialize with the max placeholder
-                if (result == region_coord.end()){
-                    // Insert a new placeholder cigar interval and keep a reference to the value inserted
-                    result = region_coord.emplace(name, placeholder).first;
-                    result->second.is_reverse = alignment.is_reverse();
+                if (alignment.is_unmapped() or not alignment.is_primary()){
+                    return;
                 }
-            }
 
-            // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-            for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
-                [&](const CigarInterval& intersection, const interval_t& interval) {
-                    // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
-                    // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
-                    if (intersection.is_clip()){
-                        return;
+                string name;
+                alignment.get_query_name(name);
+
+    //            cerr << '\n' << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
+    //        for (const auto& item: overlapping_regions){
+    //            cerr << item.start << ',' << item.stop << '\n';
+    //        }
+
+                // The region of interest is defined in reference coordinate space
+                vector<interval_t> ref_intervals;
+                for (auto& r: overlapping_regions){
+                    ref_intervals.emplace_back(r.start, r.stop);
+
+                    // Find/or create coord for this region
+                    auto& region_coord = query_coords_per_region[r];
+
+                    // Check if this read/query has an existing coord, from a previously iterated supplementary alignment
+                    auto result = region_coord.find(name);
+
+                    // If no previous alignment, initialize with the max placeholder
+                    if (result == region_coord.end()){
+                        // Insert a new placeholder cigar interval and keep a reference to the value inserted
+                        result = region_coord.emplace(name, placeholder).first;
+                        result->second.is_reverse = alignment.is_reverse();
                     }
+                }
 
-//                    cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
-
-                    // A single alignment may span multiple regions
-                    for (auto& region: overlapping_regions){
-                        auto& coord = query_coords_per_region.at(region).at(name);
-
-                        bool pass = false;
-
-                        // Optionally only track coords that intersect the boundaries
-                        if (require_spanning) {
-                            pass = (intersection.ref_start == region.start or intersection.ref_stop == region.stop);
-                        }
-                        else{
-                            pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
+                // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
+                for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+                    [&](const CigarInterval& intersection, const interval_t& interval) {
+                        // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
+                        // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
+                        if (intersection.is_clip()){
+                            return;
                         }
 
-                        // If the alignment is within the ref region, record the query position
-                        if (pass){
-                            auto [start,stop] = intersection.get_forward_query_interval();
+    //                    cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
-                            if (alignment.is_reverse()){
-                                if (stop > coord.query_stop){
-                                    coord.query_stop = stop;
-                                    coord.ref_start = intersection.ref_start;
-                                }
-                                if (start < coord.query_start){
-                                    coord.query_start = start;
-                                    coord.ref_stop = intersection.ref_stop;
-                                }
+                        // A single alignment may span multiple regions
+                        for (auto& region: overlapping_regions){
+                            auto& coord = query_coords_per_region.at(region).at(name);
+
+                            bool pass = false;
+
+                            // Optionally only track coords that intersect the boundaries
+                            if (require_spanning) {
+                                pass = (intersection.ref_start == region.start or intersection.ref_stop == region.stop);
                             }
                             else{
-                                if (start < coord.query_start){
-                                    coord.query_start = start;
-                                    coord.ref_start = intersection.ref_start;
+                                pass = (intersection.ref_start >= region.start and intersection.ref_stop <= region.stop);
+                            }
+
+                            // If the alignment is within the ref region, record the query position
+                            if (pass){
+                                auto [start,stop] = intersection.get_forward_query_interval();
+
+                                if (alignment.is_reverse()){
+                                    if (stop > coord.query_stop){
+                                        coord.query_stop = stop;
+                                        coord.ref_start = intersection.ref_start;
+                                    }
+                                    if (start < coord.query_start){
+                                        coord.query_start = start;
+                                        coord.ref_stop = intersection.ref_stop;
+                                    }
                                 }
-                                if (stop > coord.query_stop){
-                                    coord.query_stop = stop;
-                                    coord.ref_stop = intersection.ref_stop;
+                                else{
+                                    if (start < coord.query_start){
+                                        coord.query_start = start;
+                                        coord.ref_start = intersection.ref_start;
+                                    }
+                                    if (stop > coord.query_stop){
+                                        coord.query_stop = stop;
+                                        coord.ref_stop = intersection.ref_stop;
+                                    }
                                 }
                             }
                         }
-                    }
-                },
-                null_fn
-            );
-        });
+                    },
+                    null_fn
+                );
+            });
 
-    // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
-    for (const auto& [region, query_coords]: query_coords_per_region){
-        for (const auto& [name, coords]: query_coords){
-            bool pass = false;
+        // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
+        for (const auto& [region, query_coords]: query_coords_per_region){
+            for (const auto& [name, coords]: query_coords){
+                bool pass = false;
 
-            if (require_spanning){
-                pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
-            }
-            else {
-                pass = (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop);
-            }
+                if (require_spanning){
+                    pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
+                }
+                else {
+                    pass = (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop);
+                }
 
-            if (pass) {
-                sample_to_region_coords.at(sample_name).at(region).emplace_back(name, coords);
+                if (pass) {
+                    sample_to_region_coords.at(sample_name).at(region).emplace_back(name, coords);
+                }
             }
         }
-    }
+    });
 }
 
 
 void extract_subsequences_from_sample_thread_fn(
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         sample_region_read_map_t & sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
@@ -455,7 +449,6 @@ void extract_subsequences_from_sample_thread_fn(
 
         extract_subregions_from_sample(
                 authenticator,
-                authenticator_mutex,
                 sample_to_region_reads,
                 sample_name,
                 regions,
@@ -472,7 +465,6 @@ void extract_subsequences_from_sample_thread_fn(
 
 void extract_subregion_coords_from_sample_thread_fn(
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         sample_region_coord_map_t& sample_to_region_coords,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
@@ -488,7 +480,6 @@ void extract_subregion_coords_from_sample_thread_fn(
 
         extract_subregion_coords_from_sample(
                 authenticator,
-                authenticator_mutex,
                 sample_to_region_coords,
                 sample_name,
                 regions,
@@ -535,7 +526,6 @@ void get_reads_for_each_bam_subregion(
     // Thread-related variables
     atomic<size_t> job_index = 0;
     vector<thread> threads;
-    mutex authenticator_mutex;
 
     threads.reserve(n_threads);
 
@@ -546,7 +536,6 @@ void get_reads_for_each_bam_subregion(
             threads.emplace_back(
                     std::ref(extract_subsequences_from_sample_thread_fn),
                     std::ref(authenticator),
-                    std::ref(authenticator_mutex),
                     std::ref(sample_to_region_reads),
                     std::cref(sample_bams),
                     std::cref(regions),
@@ -597,7 +586,6 @@ void get_read_coords_for_each_bam_subregion(
     // Thread-related variables
     atomic<size_t> job_index = 0;
     vector<thread> threads;
-    mutex authenticator_mutex;
 
     threads.reserve(n_threads);
 
@@ -608,7 +596,6 @@ void get_read_coords_for_each_bam_subregion(
             threads.emplace_back(
                     std::ref(extract_subregion_coords_from_sample_thread_fn),
                     std::ref(authenticator),
-                    std::ref(authenticator_mutex),
                     std::ref(sample_to_region_coords),
                     std::cref(sample_bams),
                     std::cref(regions),
@@ -717,28 +704,25 @@ void fetch_query_seqs_for_each_sample_thread_fn(
         auto& queries = sample_queries.at(sample_name);
 
         // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-        authenticator_mutex.lock();
-        authenticator.update();
-        authenticator_mutex.unlock();
+        authenticator.try_with_authentication(2, [&]() {
+            for_alignment_in_bam(bam_path, [&](Alignment& alignment) {
+                // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
+                if ((not alignment.is_primary()) or alignment.is_supplementary()) {
+                    return;
+                }
 
-        for_alignment_in_bam(bam_path, [&](Alignment& alignment){
-            // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
-            if ((not alignment.is_primary()) or alignment.is_supplementary()){
-                return;
-            }
+                string name;
+                alignment.get_query_name(name);
 
-            string name;
-            alignment.get_query_name(name);
+                auto result = queries.find(name);
+                if (result == queries.end()) {
+                    return;
+                }
 
-            auto result = queries.find(name);
-            if (result == queries.end()){
-                return;
-            }
-
-            // Fetch the sequence, filling it in directly to the `queries` result object which has been pre-allocated for
-            // thread safety
-            alignment.get_query_sequence(result->second);
-
+                // Fetch the sequence, filling it in directly to the `queries` result object which has been pre-allocated for
+                // thread safety
+                alignment.get_query_sequence(result->second);
+            });
         });
 
         i = job_index.fetch_add(1);

@@ -17,6 +17,7 @@ using std::span;
 #include "Filesystem.hpp"
 #include "Alignment.hpp"
 #include "Sequence.hpp"
+#include "Region.hpp"
 
 using ghc::filesystem::path;
 

@@ -67,7 +67,6 @@ void fetch_reads_from_clipped_bam(
 
 void extract_subregion_coords_from_sample(
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,

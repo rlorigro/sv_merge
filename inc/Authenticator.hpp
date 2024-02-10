@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <chrono>
 #include <iomanip>
+#include <mutex>
+#include <functional>
 
 using std::runtime_error;
 using std::chrono::system_clock;
@@ -15,7 +17,8 @@ using std::to_string;
 using std::string;
 using std::cerr;
 using std::cout;
-
+using std::mutex;
+using std::function;
 #include "Filesystem.hpp"
 #include "misc.hpp"
 
@@ -27,20 +30,18 @@ using ghc::filesystem::path;
 namespace sv_merge{
 
 
-///
-/// Consider using this: https://stackoverflow.com/a/57282480
-/// To check for expiration
-///
 class GoogleAuthenticator{
-    /// Attributes
-    system_clock::time_point expiration = get_current_time() - hours(128);
+    mutex m;
+    string token = "NULL";
 
-    // 60min duration by default
-    system_clock::duration token_lifetime = seconds(3600);
+    // Initialize with guaranteed expired timepoint
+    system_clock::time_point expiration = get_current_time() - hours(128);
 
 public:
     /// Methods
     void update();
+    void try_with_authentication(int64_t n_retries, const function<void()>& f);
 };
+
 
 }

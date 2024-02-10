@@ -24,6 +24,8 @@ namespace sv_merge{
 
 
 void run_command(string& command, string& result, bool trim_result){
+    result.clear();
+
     cerr << "RUNNING: " << command << '\n';
 
     array<char, 128> buffer;
