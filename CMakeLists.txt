@@ -525,6 +525,7 @@ endif()
 # -------- TESTS --------
 
 set(TESTS
+        test_authenticator
         test_bam
         test_bed
         test_command_timeout
