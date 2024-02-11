@@ -1,5 +1,4 @@
-#ifndef GFASE_DURATION_HPP
-#define GFASE_DURATION_HPP
+#pragma once
 
 #include <iostream>
 #include <chrono>

@@ -1,5 +1,4 @@
-#ifndef SIMPLE_DOTPLOT_FILESYSTEM_HPP
-#define SIMPLE_DOTPLOT_FILESYSTEM_HPP
+#pragma once
 
 //---------------------------------------------------------------------------------------
 //
