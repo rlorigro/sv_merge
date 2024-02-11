@@ -427,7 +427,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     const string& main_chromosome_sequence = chromosomes.at(main_chromosome);
     main_chromosome_length=(int32_t)main_chromosome_sequence.length();
     if (p<0 || p>=main_chromosome_length) throw runtime_error("Invalid p");
-    if (q<0 || q>=main_chromosome_length) throw runtime_error("Invalid q");
+    if (q<0 || q>main_chromosome_length) throw runtime_error("Invalid q");
     if (p>q) throw runtime_error("Invalid p and q");
 
     graph.clear();
