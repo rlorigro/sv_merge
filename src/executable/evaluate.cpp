@@ -669,6 +669,13 @@ void evaluate(
         load_windows_from_bed(windows_bed, regions);
     }
 
+    cerr << t << "Loading reference sequences" << '\n';
+
+    // Load all chromosome sequences (in case of BND)
+    for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
+        ref_sequences[s.name] = s.sequence;
+    });
+
     // This is only used while loading VCFs to find where each record belongs
     unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
 
@@ -676,10 +683,14 @@ void evaluate(
     path bed_output_path = output_dir / "windows.bed";
     ofstream output_bed_file(bed_output_path);
 
+    cerr << t << "Flanking windows" << '\n';
+
     // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
+        auto max_length = int32_t(ref_sequences.at(r.name).size());
+
         r.start = max(0, r.start - flank_length);
-        r.stop += flank_length;
+        r.stop = min(max_length, r.stop + flank_length);
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
         output_bed_file << r.to_bed() << '\n';
@@ -692,17 +703,6 @@ void evaluate(
     unordered_map<Region,TransMap> region_transmaps;
 
     fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, interval_max_length, true, region_transmaps);
-
-    cerr << t << "Loading reference sequences" << '\n';
-
-    for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
-        // Check if this contig is covered at all in the windows
-        auto result = contig_interval_trees.find(s.name);
-
-        if (result != contig_interval_trees.end()){
-            ref_sequences[s.name] = s.sequence;
-        }
-    });
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';
 
