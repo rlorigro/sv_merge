@@ -1,14 +1,16 @@
 #pragma once
 
-#include <string>
+#include <filesystem>
+#include <functional>
+#include <stdexcept>
 #include <iostream>
 #include <cstdlib>
-#include <stdexcept>
-#include <chrono>
 #include <iomanip>
+#include <chrono>
+#include <string>
 #include <mutex>
-#include <functional>
 
+using std::filesystem::path;
 using std::runtime_error;
 using std::chrono::system_clock;
 using std::chrono::seconds;
@@ -19,12 +21,11 @@ using std::cerr;
 using std::cout;
 using std::mutex;
 using std::function;
-#include "Filesystem.hpp"
+
 #include "misc.hpp"
 
 using sv_merge::run_command;
 using sv_merge::get_current_time;
-using ghc::filesystem::path;
 
 
 namespace sv_merge{

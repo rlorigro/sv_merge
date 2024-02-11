@@ -1,19 +1,19 @@
-#include "Filesystem.hpp"
 #include "Region.hpp"
 #include "VcfReader.hpp"
 #include "bed.hpp"
 #include "CLI11.hpp"
 
-using ghc::filesystem::path;
-using ghc::filesystem::directory_iterator;
-using ghc::filesystem::exists;
-using ghc::filesystem::create_directory;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
 using sv_merge::Region;
 
 #include <stdexcept>
+#include <filesystem>
 
+using std::filesystem::path;
+using std::filesystem::directory_iterator;
+using std::filesystem::exists;
+using std::filesystem::create_directory;
 using std::numeric_limits;
 using std::streamsize;
 using std::string;
@@ -906,11 +906,11 @@ int main (int argc, char* argv[]) {
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
-    INPUT_DIR = ghc::filesystem::weakly_canonical(INPUT_DIR);
-    OUTPUT_DIR = ghc::filesystem::weakly_canonical(OUTPUT_DIR);
+    INPUT_DIR = std::filesystem::weakly_canonical(INPUT_DIR);
+    OUTPUT_DIR = std::filesystem::weakly_canonical(OUTPUT_DIR);
 
     for (auto& b: BED_FILES){
-        b = ghc::filesystem::weakly_canonical(b);
+        b = std::filesystem::weakly_canonical(b);
     }
 
     Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);

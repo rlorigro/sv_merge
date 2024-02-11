@@ -2,7 +2,6 @@
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
 #include "VcfReader.hpp"
-#include "Filesystem.hpp"
 #include "fasta.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
@@ -11,8 +10,13 @@
 #include "gaf.hpp"
 #include "bed.hpp"
 
-using ghc::filesystem::create_directories;
 using lib_interval_tree::interval_tree_t;
+
+#include <filesystem>
+
+using std::filesystem::path;
+using std::filesystem::create_directories;
+
 
 #include <unordered_map>
 #include <exception>
@@ -378,7 +382,7 @@ void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bo
     path log_path = output_dir / "log.csv";
 
     // Check if the log file needs to have a header written to it or not
-    bool exists = ghc::filesystem::exists(log_path);
+    bool exists = std::filesystem::exists(log_path);
 
     ofstream file(log_path, std::ios_base::app);
 
@@ -623,21 +627,21 @@ void evaluate(
 ){
     Timer t;
 
-    output_dir = ghc::filesystem::weakly_canonical(output_dir);
-    tandem_bed = ghc::filesystem::weakly_canonical(tandem_bed);
-    bam_csv = ghc::filesystem::weakly_canonical(bam_csv);
-    ref_fasta = ghc::filesystem::weakly_canonical(ref_fasta);
-    cluster_by = ghc::filesystem::weakly_canonical(cluster_by);
+    output_dir = std::filesystem::weakly_canonical(output_dir);
+    tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
+    bam_csv = std::filesystem::weakly_canonical(bam_csv);
+    ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
+    cluster_by = std::filesystem::weakly_canonical(cluster_by);
 
     for (auto& v: vcfs){
-        v = ghc::filesystem::weakly_canonical(v);
+        v = std::filesystem::weakly_canonical(v);
     }
 
-    if (ghc::filesystem::exists(output_dir)){
+    if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
     }
     else{
-        ghc::filesystem::create_directories(output_dir);
+        std::filesystem::create_directories(output_dir);
     }
 
     if (std::find(vcfs.begin(), vcfs.end(), cluster_by) == vcfs.end()){

@@ -42,11 +42,11 @@ void find_windows(
         bool debug
         ){
 
-    if (ghc::filesystem::exists(output_dir)){
+    if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
     }
     else{
-        ghc::filesystem::create_directories(output_dir);
+        std::filesystem::create_directories(output_dir);
     }
 
     Timer t;

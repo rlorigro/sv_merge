@@ -9,10 +9,10 @@ using std::function;
 using std::string;
 using std::array;
 
-#include "Filesystem.hpp"
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
 
-using ghc::filesystem::path;
+#include <filesystem>
+using std::filesystem::path;
 
 namespace sv_merge {
 

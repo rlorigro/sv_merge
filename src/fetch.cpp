@@ -658,16 +658,9 @@ void fetch_reads(
     for (const auto& r: regions){
         auto item = region_transmaps.emplace(r, template_transmap).first->second;
         auto n_reads = region_coverage[r];
-        auto n_samples = sample_to_region_reads.size();
 
         // Number of reads is known exactly
         item.reserve_sequences(n_reads + 2);
-
-        // An approximate upper limit that assumes every sample has 1 unique haplotype
-        item.reserve_nodes(n_reads + n_samples*2);
-
-        // An approximate upper limit that assumes every sample has 1 unique haplotype, fully connected in read->hap
-        item.reserve_edges(n_reads * n_samples);
     }
 
     // Move the downloaded data into a transmap, construct edges for sample->read
@@ -851,16 +844,9 @@ void fetch_reads_from_clipped_bam(
     for (const auto& r: regions){
         auto item = region_transmaps.emplace(r, template_transmap).first->second;
         auto n_reads = region_coverage[r];
-        auto n_samples = sample_to_region_coords.size();
 
         // Number of reads is known exactly
         item.reserve_sequences(n_reads + 2);
-
-        // An approximate upper limit that assumes every sample has 1 unique haplotype
-        item.reserve_nodes(n_reads + n_samples*2);
-
-        // An approximate upper limit that assumes every sample has 1 unique haplotype, fully connected in read->hap
-        item.reserve_edges(n_reads * n_samples);
     }
 
     auto max_hap_length = size_t(float(interval_max_length) * 2.5);

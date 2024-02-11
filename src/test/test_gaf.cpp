@@ -1,10 +1,11 @@
-#include "Filesystem.hpp"
+#include <filesystem>
+using std::filesystem::path;
+
 #include "Sequence.hpp"
 #include "fasta.hpp"
 #include "bed.hpp"
 #include "gaf.hpp"
 
-using ghc::filesystem::path;
 using sv_merge::for_sequence_in_fasta_file;
 using sv_merge::for_alignment_in_gaf;
 using sv_merge::reverse_complement;

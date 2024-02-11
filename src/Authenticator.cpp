@@ -2,10 +2,11 @@
 #include "curl/curl.h"
 #include <functional>
 #include <exception>
+#include <thread>
 
 using std::function;
 using std::exception;
-
+using std::this_thread::sleep_for;
 
 namespace sv_merge{
 
@@ -140,7 +141,7 @@ void GoogleAuthenticator::update() {
     // Attempt to update the token, with some number of retries, and an exponential backoff period
     while(s < 0){
         cerr << "Waiting " << delay_sec << " sec" << '\n';
-        sleep(delay_sec);
+        sleep_for(seconds(delay_sec));
 
         cerr << "Updating token" << '\n';
         string command = "gcloud auth print-access-token";

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Filesystem.hpp"
 #include "Region.hpp"
 #include "VcfReader.hpp"
 #include "bdsg/hash_graph.hpp"
@@ -9,7 +8,6 @@
 using sv_merge::Region;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
-using ghc::filesystem::path;
 using bdsg::nid_t;
 using bdsg::HashGraph;
 using bdsg::handle_t;
@@ -21,7 +19,9 @@ using bdsg::path_handle_t;
 #include <unordered_map>
 #include <unordered_set>
 #include <ostream>
+#include <filesystem>
 
+using std::filesystem::path;
 using std::string;
 using std::unordered_map;
 using std::unordered_set;

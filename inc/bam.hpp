@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <cstdlib>
 #include <utility>
@@ -7,6 +8,7 @@
 #include <array>
 #include <span>
 
+using std::filesystem::path;
 using std::function;
 using std::string;
 using std::array;
@@ -14,12 +16,10 @@ using std::pair;
 using std::span;
 
 #include "htslib/include/htslib/sam.h"
-#include "Filesystem.hpp"
 #include "Alignment.hpp"
 #include "Sequence.hpp"
 #include "Region.hpp"
 
-using ghc::filesystem::path;
 
 
 namespace sv_merge {

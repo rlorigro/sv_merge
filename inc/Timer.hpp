@@ -32,5 +32,3 @@ public:
 
 ostream& operator<<(ostream& o, const sv_merge::Timer& t);
 
-
-#endif //GFASE_DURATION_HPP

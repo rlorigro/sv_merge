@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
 
 using std::runtime_error;
 using std::ifstream;

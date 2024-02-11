@@ -12,10 +12,9 @@ using std::random_device;
 using std::uniform_int_distribution;
 using std::mt19937;
 
-#include "Filesystem.hpp"
-
-using ghc::filesystem::path;
-using ghc::filesystem::create_directories;
+#include <filesystem>
+using std::filesystem::path;
+using std::filesystem::create_directories;
 
 #include <vector>
 #include <iostream>

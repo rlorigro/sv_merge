@@ -1,5 +1,5 @@
 #include "Authenticator.hpp"
-#include "Filesystem.hpp"
+#include <filesystem>
 #include "Alignment.hpp"
 #include "Region.hpp"
 #include "fasta.hpp"
@@ -7,7 +7,7 @@
 #include "misc.hpp"
 #include "bam.hpp"
 
-using ghc::filesystem::path;
+using std::filesystem::path;
 using namespace sv_merge;
 
 #include <unordered_map>

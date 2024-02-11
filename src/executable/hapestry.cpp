@@ -86,11 +86,11 @@ void hapestry(
         bool debug
         ){
 
-    if (ghc::filesystem::exists(output_dir)){
+    if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
     }
     else{
-        ghc::filesystem::create_directories(output_dir);
+        std::filesystem::create_directories(output_dir);
     }
 
     Timer t;
@@ -145,8 +145,8 @@ void hapestry(
         // Per-region output and logging directory
         path output_subdir = output_dir / region.to_string('_');
 
-        if (not ghc::filesystem::exists(output_subdir)){
-            ghc::filesystem::create_directories(output_subdir);
+        if (not std::filesystem::exists(output_subdir)){
+            std::filesystem::create_directories(output_subdir);
         }
 
         // Get the sample-read-path transitive mapping for this region

@@ -4,7 +4,9 @@
 #include <stdexcept>
 #include <chrono>
 #include <iomanip>
+#include <filesystem>
 
+using std::filesystem::path;
 using std::runtime_error;
 using std::to_string;
 using std::string;
@@ -12,13 +14,11 @@ using std::cerr;
 using std::cout;
 
 #include "Authenticator.hpp"
-#include "Filesystem.hpp"
 #include "misc.hpp"
 
 using sv_merge::GoogleAuthenticator;
 using sv_merge::get_current_time;
 using sv_merge::run_command;
-using ghc::filesystem::path;
 
 #include "htslib/include/htslib/hts.h"
 #include "htslib/include/htslib/sam.h"
