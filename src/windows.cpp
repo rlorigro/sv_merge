@@ -6,7 +6,33 @@
 namespace sv_merge{
 
 
-void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interval_t> >& contig_tandems, const vector<path>& vcfs, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
+void construct_windows_from_vcf_and_bed(
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
+        const vector<path>& vcfs,
+        int32_t flank_length,
+        int32_t interval_max_length,
+        vector<Region>& regions){
+
+    // Provide empty object
+    unordered_map<string,string> ref_sequences;
+    construct_windows_from_vcf_and_bed(
+        ref_sequences,
+        contig_tandems,
+        vcfs,
+        flank_length,
+        interval_max_length,
+        regions);
+}
+
+
+void construct_windows_from_vcf_and_bed(
+        const unordered_map<string,string>& ref_sequences,
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
+        const vector<path>& vcfs,
+        int32_t flank_length,
+        int32_t interval_max_length,
+        vector<Region>& regions){
+
     interval_t interval;
 
     unordered_map<string,vector <pair <interval_t, bool> > > contig_intervals;
@@ -51,8 +77,27 @@ void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interv
                 return;
             }
 
-            // Just do one check at the end to fix any negative coords
-            coord.first = std::max(0,coord.first);
+            // Temporary coord to test bounds of flanks
+            auto flanked_coord = coord;
+            flanked_coord.first -= flank_length;
+            flanked_coord.second += flank_length;
+
+            // If ref_sequences are provided, check for consistency with contig lengths
+            if (not ref_sequences.empty()){
+                auto contig_length = int32_t(ref_sequences.at(r.chrom).size());
+
+                if (flanked_coord.first < 0 or flanked_coord.first >= contig_length or flanked_coord.second < 0 or flanked_coord.second > contig_length){
+                    cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << r.chrom << ':' << coord.first << ',' << coord.second << '\n';
+                    return;
+                }
+            }
+            else{
+                // Just do one check at the end to fix any negative coords
+                if (flanked_coord.first < 0 or flanked_coord.second < 0){
+                    cerr << "WARNING: skipping region for which flanking sequence would be < 0 (NO REF PROVIDED): " << r.chrom << ':' << coord.first << ',' << coord.second << '\n';
+                    return;
+                }
+            }
 
             contig_intervals[r.chrom].emplace_back(coord, false);
         });

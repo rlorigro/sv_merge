@@ -654,6 +654,13 @@ void evaluate(
     unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
+    cerr << t << "Loading reference sequences" << '\n';
+
+    // Load all chromosome sequences (in case of BND)
+    for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
+        ref_sequences[s.name] = s.sequence;
+    });
+
     cerr << "Reading tandem BED" << '\n';
 
     unordered_map<string,vector<interval_t> > contig_tandems;
@@ -666,19 +673,12 @@ void evaluate(
 
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
-        construct_windows_from_vcf_and_bed(contig_tandems, vcfs, flank_length, interval_max_length, regions);
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, vcfs, flank_length, interval_max_length, regions);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
         load_windows_from_bed(windows_bed, regions);
     }
-
-    cerr << t << "Loading reference sequences" << '\n';
-
-    // Load all chromosome sequences (in case of BND)
-    for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
-        ref_sequences[s.name] = s.sequence;
-    });
 
     // This is only used while loading VCFs to find where each record belongs
     unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
@@ -691,10 +691,8 @@ void evaluate(
 
     // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
-        auto max_length = int32_t(ref_sequences.at(r.name).size());
-
-        r.start = max(0, r.start - flank_length);
-        r.stop = min(max_length, r.stop + flank_length);
+        r.start -= flank_length;
+        r.stop += flank_length;
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
         output_bed_file << r.to_bed() << '\n';
