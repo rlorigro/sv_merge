@@ -77,28 +77,6 @@ void construct_windows_from_vcf_and_bed(
                 return;
             }
 
-            // Temporary coord to test bounds of flanks
-            auto flanked_coord = coord;
-            flanked_coord.first -= flank_length;
-            flanked_coord.second += flank_length;
-
-            // If ref_sequences are provided, check for consistency with contig lengths
-            if (not ref_sequences.empty()){
-                auto contig_length = int32_t(ref_sequences.at(r.chrom).size());
-
-                if (flanked_coord.first < 0 or flanked_coord.first >= contig_length or flanked_coord.second < 0 or flanked_coord.second > contig_length){
-                    cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << r.chrom << ':' << coord.first << ',' << coord.second << '\n';
-                    return;
-                }
-            }
-            else{
-                // Just do one check at the end to fix any negative coords
-                if (flanked_coord.first < 0 or flanked_coord.second < 0){
-                    cerr << "WARNING: skipping region for which flanking sequence would be < 0 (NO REF PROVIDED): " << r.chrom << ':' << coord.first << ',' << coord.second << '\n';
-                    return;
-                }
-            }
-
             contig_intervals[r.chrom].emplace_back(coord, false);
         });
     }
@@ -116,6 +94,28 @@ void construct_windows_from_vcf_and_bed(
         for (const auto& c: components){
             if (c.second - c.first > interval_max_length){
                 continue;
+            }
+
+            // Temporary coord to test bounds of flanks
+            auto c_flanked = c;
+            c_flanked.first -= flank_length;
+            c_flanked.second += flank_length;
+
+            // If ref_sequences are provided, check for consistency with contig lengths
+            if (not ref_sequences.empty()){
+                auto contig_length = int32_t(ref_sequences.at(contig).size());
+
+                if (c_flanked.first < 0 or c_flanked.first >= contig_length or c_flanked.second < 0 or c_flanked.second > contig_length){
+                    cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << contig << ':' << c.first << ',' << c.second << '\n';
+                    continue;
+                }
+            }
+            else{
+                // Just do one check to fix any negative coords
+                if (c_flanked.first < 0 or c_flanked.second < 0){
+                    cerr << "WARNING: skipping region for which flanking sequence would be < 0 (NO REF PROVIDED): " << contig << ':' << c.first << ',' << c.second << '\n';
+                    continue;
+                }
             }
 
             regions.emplace_back(contig, c.first, c.second);
