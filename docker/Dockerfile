@@ -69,7 +69,7 @@ RUN wget https://github.com/samtools/htslib/releases/download/${htslib_version}/
     && rm htslib-${htslib_version}.tar.bz2 \
     && cd htslib-${htslib_version} \
     && ./configure \
-    && make \
+    && make -j 16 \
     && make install \
     && cd ${work_dir} \
     && rm -rf htslib-${htslib_version} \
@@ -82,7 +82,7 @@ RUN wget https://github.com/samtools/samtools/releases/download/${samtools_versi
     && rm samtools-${samtools_version}.tar.bz2 \
     && cd samtools-${samtools_version} \
     && ./configure --without-curses \
-    && make \
+    && make -j 16 \
     && make install \
     && cd ${work_dir} \
     && rm -rf samtools-${samtools_version} \
@@ -95,7 +95,7 @@ RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_versi
     && rm bcftools-${bcftools_version}.tar.bz2 \
     && cd bcftools-${bcftools_version} \
     && ./configure --without-curses \
-    && make \
+    && make -j 16 \
     && make install \
     && cd ${work_dir} \
     && rm -rf bcftools-${bcftools_version} \
@@ -104,14 +104,14 @@ RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_versi
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip install cmake --upgrade
-ARG HAPESTRY_COMMIT=a911bc3
+ARG HAPESTRY_COMMIT=8888b6907fbe334e9a062516ae47915d1b21d866
 RUN git clone https://github.com/rlorigro/sv_merge.git \
     && cd sv_merge \
     && git checkout ${HAPESTRY_COMMIT} \
     && mkdir build \
     && cd build \
     && cmake .. -Dno_ortools=1 \
-    && make -j 12
+    && make -j 16
 
 # TRYING TO SET OPEN FILE LIMITS. NOT SURE IT IS WORKING.
 #
@@ -134,6 +134,9 @@ RUN git clone https://github.com/maickrau/GraphAligner.git \
     && /miniconda3/bin/conda env create -f CondaEnvironment_linux.yml
 SHELL ["/miniconda3/bin/conda", "run", "-n", "GraphAligner", "/bin/bash", "-c"]    
 RUN cd /hapestry/GraphAligner \
-    && make -j 12 bin/GraphAligner \
+    && make -j 16 bin/GraphAligner \
     && bin/GraphAligner --help && echo 0 || echo 1
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
+
+# MONITORING SCRIPT
+COPY ./*.sh /hapestry/
