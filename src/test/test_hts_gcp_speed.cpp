@@ -97,7 +97,6 @@ void iterate_region(path bam_path, string region){
 }
 
 
-
 //
 void iterate_regions(path bam_path, vector<char*>& regions){
     GoogleAuthenticator authenticator;

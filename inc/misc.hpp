@@ -23,6 +23,8 @@ namespace sv_merge{
 
 using coord_t = pair<int32_t,int32_t>;
 
+using named_coord_t = pair <string, coord_t>;
+
 using interval_t = pair<int32_t,int32_t>;
 
 using labeled_interval_t = pair <interval_t, unordered_set<string> >;
@@ -44,5 +46,9 @@ void run_command(string& command, bool redirect_stderr=true);
 system_clock::time_point get_current_time();
 
 bool files_equal(path p1, path p2);
+
+bool equal_ignore_case(const string& str1, const string& str2);
+
+void lowercase_string(string& str);
 
 }

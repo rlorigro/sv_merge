@@ -77,7 +77,7 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-        src/pair_hash.cpp
+#        src/pair_hash.cpp
         src/path_optimizer.cpp
         src/read_centroid_optimizer.cpp
         src/read_cluster_optimizer.cpp
@@ -86,6 +86,7 @@ set(SOURCES
         src/TransitiveMap.cpp
         src/Timer.cpp
         src/VcfReader.cpp
+        src/VariantGraph.cpp
         src/windows.cpp
         )
 
@@ -477,6 +478,12 @@ message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
 # ------- Misc -------
 
+find_program(GRAPHALIGNER_FOUND "GraphAligner")
+
+if (NOT GRAPHALIGNER_FOUND)
+    message(WARNING "GraphAligner not found in PATH, please install GraphAligner before continuing")
+endif ()
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -498,6 +505,7 @@ set(TESTS
         test_bed
         test_fasta
         test_gaf
+        test_gaf_summary
         test_graph
         test_graphaligner
         test_heterograph
@@ -509,6 +517,9 @@ set(TESTS
 #        test_minimap2_no_io
         test_ortools
         test_read_clustering
+        test_shared_memory
+        test_signal_handler
+#        test_unordered_dense
         test_transmap
         test_triangle_inequality
         test_wfa2
@@ -532,6 +543,9 @@ foreach(FILENAME_PREFIX ${TESTS})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -547,6 +561,9 @@ foreach(FILENAME_PREFIX ${TESTS})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     endif()
 
@@ -557,8 +574,10 @@ endforeach()
 
 set(EXECUTABLES
         a
+        analyze_evaluation
         hapestry
         find_windows
+        evaluate
 )
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
@@ -577,6 +596,9 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
                 )
     else()
         target_link_libraries(${FILENAME_PREFIX}
@@ -592,6 +614,9 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
 #                minimap2
                 ortools::ortools
                 wfa2
+                divsufsort
+                libhandlegraph
+                libsdsl
         )
     endif()
 

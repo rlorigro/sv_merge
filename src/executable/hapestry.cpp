@@ -105,15 +105,27 @@ void hapestry(
 
     cerr << t << "Constructing windows" << '\n';
 
+    cerr << "Reading tandem BED" << '\n';
+
+    unordered_map<string,vector<interval_t> > contig_tandems;
+    interval_t interval;
+    for_region_in_bed_file(tandem_bed, [&](const Region& r){
+        interval.first = r.start;
+        interval.second = r.stop;
+        contig_tandems[r.name].emplace_back(interval);
+    });
+
     if (windows_bed.empty()){
-        construct_windows_from_vcf_and_bed(tandem_bed, vcf, flank_length, interval_max_length, regions);
+        cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
+        construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, regions);
     }
-    else{
+    else {
+        cerr << t << "Reading BED file" << '\n';
         load_windows_from_bed(windows_bed, regions);
     }
 
     for (auto& r: regions) {
-        r.start -= flank_length;
+        r.start = max(0,r.start - flank_length);
         r.stop += flank_length;
     }
 
@@ -122,7 +134,9 @@ void hapestry(
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
-    fetch_reads(t, regions, bam_csv, n_threads, region_transmaps);
+    fetch_reads(t, regions, bam_csv, n_threads, false, region_transmaps);
+
+//    throw runtime_error("DEBUG");
 
     cerr << t << "Processing windows" << '\n';
 
@@ -182,8 +196,6 @@ void hapestry(
 
                     c++;
                 }
-
-                throw runtime_error("DEBUG EARLY EXIT");
 
 //                for (auto a: representatives){
 //                    cerr << transmap.get_node(a).name << '\n';

@@ -149,4 +149,21 @@ inline std::string& trim(std::string& s, const char* t){
     return ltrim(rtrim(s, t), t);
 }
 
+
+bool equal_ignore_case(const string& str1, const string& str2) {
+    const size_t length1 = str1.length();
+    const size_t length2 = str2.length();
+    if (length1!=length2) return false;
+    for (size_t i=0; i<length1; i++) {
+        if (tolower(str1.at(i))!=tolower(str2.at(i))) return false;
+    }
+    return true;
+}
+
+
+void lowercase_string(string& str) {
+    const size_t length = str.length();
+    for (size_t i=0; i<length; i++) str.at(i)=(char)tolower(str.at(i));
+}
+
 }
