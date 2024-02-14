@@ -766,17 +766,18 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
 
 
 void VcfReader::print_minimal_header(ofstream& out) const {
+    out << VCF_FORMAT_LINE << '\n';
     out << vcf_header << '\n';
 }
 
 
 void VcfReader::get_minimal_header(string& out) const {
-    out = vcf_header;
+    out=VCF_FORMAT_LINE+'\n'+vcf_header;
 }
 
 
 void VcfReader::get_file_path(path& out) const {
-    out = vcf_path;
+    out=vcf_path;
 }
 
 }
