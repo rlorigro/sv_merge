@@ -1,8 +1,8 @@
-#include "Filesystem.hpp"
+#include <filesystem>
+using std::filesystem::path;
+
 #include "htslib/include/htslib/hts.h"
 #include "htslib/include/htslib/sam.h"
-
-using ghc::filesystem::path;
 
 #include <stdexcept>
 #include <iostream>

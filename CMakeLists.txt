@@ -7,6 +7,14 @@
 cmake_minimum_required(VERSION 3.22)
 project(sv_merge VERSION 0.0.0)
 
+message(STATUS "Use the following flags for special configuration options E.g.: cmake .. -D[flag]=1 -D[flag2]=1
+    FLAG            RESULT
+    ------------    ----------------------------------------------------------------------------------------
+    no_ortools:     skip all portions of the project that involve ortools (including the main hapestry exe)
+    debug:          invoke less optimization and more transparency for debugging (including ASan)
+    no_san:         skip AddressSanitizer and other sanitizers (only relevant when using debug=1)
+    dev:            skip fetching external projects (must NOT be invoked on first compilation)")
+
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "CMAKE_SYSTEM: ${CMAKE_SYSTEM}")
@@ -33,9 +41,10 @@ endif()
 if (debug)
     message(STATUS "---- Building with debug options ----")
 
-    if (NOT no_asan OR NOT DEFINED no_asan)
+    if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
         set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
@@ -64,6 +73,12 @@ include_directories(
         "inc"
 )
 
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    include_directories(
+            "inc_optimize"
+    )
+endif()
+
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
         src/Alignment.cpp
@@ -77,17 +92,24 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-        src/pair_hash.cpp
-        src/path_optimizer.cpp
-        src/read_centroid_optimizer.cpp
-        src/read_cluster_optimizer.cpp
+#        src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
         src/VcfReader.cpp
+        src/VariantGraph.cpp
         src/windows.cpp
         )
+
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND SOURCES
+            src/path_optimizer.cpp
+            src/read_centroid_optimizer.cpp
+            src/read_cluster_optimizer.cpp
+    )
+endif()
 
 
 project(sv_merge)
@@ -365,32 +387,35 @@ add_dependencies(sv_merge htslib)
 # ------------------------------------------ #
 ##############################################
 
-include(FetchContent)
-FetchContent_Declare(
-        ortools
-        URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
-)
+if (NOT no_ortools OR NOT DEFINED no_ortools)
 
-set(BUILD_DEPS ON)
-set(BUILD_DOC OFF)
-set(BUILD_SAMPLES OFF)
-set(BUILD_EXAMPLES OFF)
-set(USE_COINOR OFF)
-FetchContent_MakeAvailable(ortools)
+    include(FetchContent)
+    FetchContent_Declare(
+            ortools
+            URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
+    )
 
-include_directories(
-        ${ortools_SOURCE_DIR}
-        ${ortools_BINARY_DIR}
-        ${absl_SOURCE_DIR}
-        ${protobuf_SOURCE_DIR}/src
-)
+    set(BUILD_DEPS ON)
+    set(BUILD_DOC OFF)
+    set(BUILD_SAMPLES OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(USE_COINOR OFF)
+    FetchContent_MakeAvailable(ortools)
 
-message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
-message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
-message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
-message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
+    include_directories(
+            ${ortools_SOURCE_DIR}
+            ${ortools_BINARY_DIR}
+            ${absl_SOURCE_DIR}
+            ${protobuf_SOURCE_DIR}/src
+    )
 
-add_dependencies(sv_merge ortools)
+    message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+    message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+    message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+    message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
+
+    add_dependencies(sv_merge ortools)
+endif()
 
 ##############################################
 # ------------------------------------------ #
@@ -477,6 +502,12 @@ message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
 # ------- Misc -------
 
+find_program(GRAPHALIGNER_FOUND "GraphAligner")
+
+if (NOT GRAPHALIGNER_FOUND)
+    message(WARNING "GraphAligner not found in PATH, please install GraphAligner before continuing")
+endif ()
+
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -494,10 +525,13 @@ endif()
 # -------- TESTS --------
 
 set(TESTS
+        test_authenticator
         test_bam
         test_bed
+        test_command_timeout
         test_fasta
         test_gaf
+        test_gaf_summary
         test_graph
         test_graphaligner
         test_heterograph
@@ -507,47 +541,52 @@ set(TESTS
         test_interval_graph
 #        test_minimap2
 #        test_minimap2_no_io
-        test_ortools
-        test_read_clustering
+        test_shared_memory
+        test_signal_handler
+#        test_unordered_dense
         test_transmap
-        test_triangle_inequality
         test_wfa2
         test_vcfreader
         )
 
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND TESTS
+            test_ortools
+            test_optimize
+            test_read_clustering
+            test_triangle_inequality
+    )
+endif()
+
+
 foreach(FILENAME_PREFIX ${TESTS})
     add_executable(${FILENAME_PREFIX} src/test/${FILENAME_PREFIX}.cpp)
 
+    target_link_libraries(${FILENAME_PREFIX}
+            sv_merge
+            Threads::Threads
+            htslib
+            bdsg
+            ${ZLIB_LIBRARIES}
+            ${OPENSSL_LIBRARIES}
+            bz2
+            lzma
+            #                minimap2
+            wfa2
+            divsufsort
+            libhandlegraph
+            libsdsl
+    )
+
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl2
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl2)
     else()
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl)
+    endif()
+
+    if (NOT no_ortools OR NOT DEFINED no_ortools)
+        target_link_libraries(${FILENAME_PREFIX} ortools::ortools)
     endif()
 
 endforeach()
@@ -557,42 +596,44 @@ endforeach()
 
 set(EXECUTABLES
         a
-        hapestry
+        analyze_evaluation
         find_windows
+        evaluate
 )
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND EXECUTABLES
+        hapestry
+    )
+endif()
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
+
+    target_link_libraries(${FILENAME_PREFIX}
+            sv_merge
+            Threads::Threads
+            htslib
+            bdsg
+            ${ZLIB_LIBRARIES}
+            ${OPENSSL_LIBRARIES}
+            bz2
+            lzma
+            #                minimap2
+            wfa2
+            divsufsort
+            libhandlegraph
+            libsdsl
+    )
+
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl2
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-                )
+        target_link_libraries(${FILENAME_PREFIX} curl2)
     else()
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl)
+    endif()
+
+    if (NOT no_ortools OR NOT DEFINED no_ortools)
+        target_link_libraries(${FILENAME_PREFIX} ortools::ortools)
     endif()
 
 endforeach()

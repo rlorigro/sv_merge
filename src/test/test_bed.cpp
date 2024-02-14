@@ -1,9 +1,10 @@
-#include "Filesystem.hpp"
+#include <filesystem>
+using std::filesystem::path;
+
 #include "Region.hpp"
 #include "bed.hpp"
 
 using sv_merge::for_region_in_bed_file;
-using ghc::filesystem::path;
 using sv_merge::Region;
 
 #include <stdexcept>

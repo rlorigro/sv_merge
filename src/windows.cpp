@@ -5,51 +5,87 @@
 
 namespace sv_merge{
 
-void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
-    VcfReader vcf_reader(vcf);
-    vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 0;
-    vcf_reader.progress_n_lines = 100'000;
 
-    unordered_set<uint32_t> sample_ids;
-    unordered_set<string> sample_names;
+void construct_windows_from_vcf_and_bed(
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
+        const vector<path>& vcfs,
+        int32_t flank_length,
+        int32_t interval_max_length,
+        vector<Region>& regions){
 
-    coord_t coord;
+    // Provide empty object
+    unordered_map<string,string> ref_sequences;
+    construct_windows_from_vcf_and_bed(
+        ref_sequences,
+        contig_tandems,
+        vcfs,
+        flank_length,
+        interval_max_length,
+        regions);
+}
+
+
+void construct_windows_from_vcf_and_bed(
+        const unordered_map<string,string>& ref_sequences,
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
+        const vector<path>& vcfs,
+        int32_t flank_length,
+        int32_t interval_max_length,
+        vector<Region>& regions){
+
     interval_t interval;
 
     unordered_map<string,vector <pair <interval_t, bool> > > contig_intervals;
 
-    cerr << "Reading BED... " << '\n';
-    // Add every tandem region with a generic name as the label
-    for_region_in_bed_file(tandem_bed, [&](const Region& r){
-        interval.first = r.start;
-        interval.second = r.stop;
-        contig_intervals[r.name].emplace_back(interval, true);
-    });
+    for (const auto& [name, tandems]: contig_tandems){
+        for (auto& t: tandems){
+            if (t.first == t.second){
+                throw runtime_error("ERROR: tandem BED interval start == stop: " + name + ' ' + to_string(interval.first) + ',' + to_string(interval.second));
+            }
 
-    cerr << "Reading VCF... " << '\n';
-    // Add every VCF allele interval with the sample name as the label
-    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        r.get_samples_with_alt(sample_ids);
-
-        if (sample_ids.empty()){
-            return;
+            contig_intervals[name].emplace_back(t, true);
         }
+    }
 
-        r.get_reference_coordinates(false, coord);
+    for (const auto& vcf: vcfs) {
+        cerr << "Reading VCF: " << vcf << '\n';
 
-        contig_intervals[r.chrom].emplace_back(coord, false);
-    });
+        VcfReader vcf_reader(vcf);
+        vcf_reader.min_qual = numeric_limits<float>::min();
+        vcf_reader.min_sv_length = 1;
+        vcf_reader.progress_n_lines = 100'000;
+
+        unordered_set<int32_t> sample_ids;
+        unordered_set<string> sample_names;
+
+        coord_t coord;
+
+        // Add every VCF allele interval with the sample name as the label
+        vcf_reader.for_record_in_vcf([&](VcfRecord &r) {
+            r.get_samples_with_alt(sample_ids);
+
+            if (sample_ids.empty()) {
+                return;
+            }
+
+            r.get_reference_coordinates(false, coord);
+
+            // Skip large events in the population
+            // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
+            // for very large events
+            if (coord.second - coord.first > interval_max_length){
+                return;
+            }
+
+            contig_intervals[r.chrom].emplace_back(coord, false);
+        });
+    }
 
     cerr << "Computing intervals... " << '\n';
 
     // For each contig in reference, compute intervals
     for (auto& [contig, intervals]: contig_intervals){
         cerr << "\tStarting: " << contig << '\n';
-
-        if (contig != "chr20"){
-            continue;
-        }
 
         vector<interval_t> components;
 
@@ -60,9 +96,43 @@ void construct_windows_from_vcf_and_bed(path tandem_bed, path vcf, int32_t flank
                 continue;
             }
 
+            // Temporary coord to test bounds of flanks
+            auto c_flanked = c;
+            c_flanked.first -= flank_length;
+            c_flanked.second += flank_length;
+
+            // If ref_sequences are provided, check for consistency with contig lengths
+            if (not ref_sequences.empty()){
+                auto contig_length = int32_t(ref_sequences.at(contig).size());
+
+                if (c_flanked.first < 0 or c_flanked.first >= contig_length or c_flanked.second < 0 or c_flanked.second > contig_length){
+                    cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << contig << ':' << c.first << ',' << c.second << '\n';
+                    continue;
+                }
+            }
+            else{
+                // Just do one check to fix any negative coords
+                if (c_flanked.first < 0 or c_flanked.second < 0){
+                    cerr << "WARNING: skipping region for which flanking sequence would be < 0 (NO REF PROVIDED): " << contig << ':' << c.first << ',' << c.second << '\n';
+                    continue;
+                }
+            }
+
             regions.emplace_back(contig, c.first, c.second);
         }
     }
+}
+
+
+void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interval_t> >& contig_tandems, path vcf, int32_t flank_length, int32_t interval_max_length, vector<Region>& regions){
+    vector<path> vcfs = {vcf};
+    construct_windows_from_vcf_and_bed(
+            contig_tandems,
+            vcfs,
+            flank_length,
+            interval_max_length,
+            regions
+    );
 }
 
 
@@ -112,6 +182,10 @@ void get_overlapping_components(int32_t min_gap_length, vector <pair <interval_t
 
         // Return the stored interval to original state
         interval.second -= min_gap_length;
+    }
+
+    if (not has_non_tandem_interval){
+        result.pop_back();
     }
 
     for (auto& item: result){

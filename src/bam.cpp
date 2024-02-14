@@ -24,6 +24,7 @@ using std::max;
 
 
 #include "htslib/include/htslib/hts.h"
+#include "htslib/include/htslib/sam.h"
 
 
 namespace sv_merge {
@@ -98,7 +99,7 @@ void HtsAlignment::get_query_sequence(string& result){
 }
 
 
-void HtsAlignment::for_each_cigar_interval(const function<void(const CigarInterval&)>& f) {
+void HtsAlignment::for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval&)>& f) {
     auto cigar_bytes = bam_get_cigar(hts_alignment);
     CigarInterval c;
 
@@ -108,11 +109,27 @@ void HtsAlignment::for_each_cigar_interval(const function<void(const CigarInterv
     c.is_reverse = is_reverse();
 
     if (c.is_reverse){
-        c.query_start = get_query_length();
+        if (unclip_coords) {
+            for_each_cigar_tuple([&](const CigarTuple& c2){
+                if (c2.code == 5){
+                    c.query_start += c2.length;
+                }
+
+                c.query_start += is_query_move[c2.code] * c2.length;
+            });
+        }
+        else {
+            c.query_start = get_query_length();
+        }
     }
 
     for (uint32_t i=0; i < hts_alignment->core.n_cigar; i++) {
         decompress_cigar_bytes(cigar_bytes[i], c);
+
+        // Optionally advance the query coord for hardclip (H/5) operations if native/unclipped coords are desired
+        if (unclip_coords and c.is_hardclip()){
+            c.code = 4;
+        }
 
         // Update interval bounds for this cigar interval
         if (c.is_reverse) {
@@ -159,6 +176,11 @@ bool HtsAlignment::is_not_primary() const {
 
 bool HtsAlignment::is_primary() const {
     return (not is_not_primary());
+}
+
+
+bool HtsAlignment::is_supplementary() const {
+    return ((hts_alignment->core.flag&BAM_FSUPPLEMENTARY) != 0);
 }
 
 
@@ -235,6 +257,66 @@ void for_read_in_bam_region(path bam_path, string region, const function<void(Se
 }
 
 
+void for_read_in_bam(path bam_path, const function<void(Sequence& sequence)>& f) {
+    for_alignment_in_bam(bam_path, [&](Alignment& alignment){
+        // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
+        if ((not alignment.is_primary()) or alignment.is_supplementary()) {
+            return;
+        }
+
+        Sequence s;
+
+        alignment.get_query_name(s.name);
+        alignment.get_query_sequence(s.sequence);
+
+        f(s);
+    });
+}
+
+
+void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignment)>& f) {
+    samFile *bam_file;
+    bam_hdr_t *bam_header;
+    hts_idx_t *bam_index;
+    bam1_t *alignment;
+
+    bam_file = nullptr;
+    bam_index = nullptr;
+    alignment = bam_init1();
+
+    if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
+        throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
+    }
+
+    // bam index
+    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+    }
+
+    // bam header
+    if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {
+        throw runtime_error("ERROR: Cannot open header for bam file: " + bam_path.string() + "\n");
+    }
+
+    HtsAlignment a(alignment);
+
+    while (sam_read1(bam_file, bam_header, alignment) >= 0) {
+        if (alignment->core.tid < 0) {
+            continue;
+        }
+
+        a = HtsAlignment(alignment);
+
+        f(a);
+    }
+
+    bam_destroy1(alignment);
+    bam_hdr_destroy(bam_header);
+    hts_close(bam_file);
+    hts_idx_destroy(bam_index);
+}
+
+
 void for_alignment_in_bam_region(path bam_path, string region, const function<void(Alignment& alignment)>& f) {
     samFile *bam_file;
     bam_hdr_t *bam_header;
@@ -289,6 +371,7 @@ void for_alignment_in_bam_subregions(
         ){
 
     // Don't want to rely on user compliance with documentation to guarantee that these are sorted
+    // TODO: fix the requirement for contiguous region!!
     Region r_prev = subregions[0];
     for (const auto& r: subregions){
         if (r_prev.start > r.start){
@@ -312,8 +395,11 @@ void for_alignment_in_bam_subregions(
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
     }
 
+    auto index_path = bam_path.string() + ".bai";
+    bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
+
     // bam index
-    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
+    if (bam_index == nullptr) {
         throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
     }
 
@@ -340,8 +426,11 @@ void for_alignment_in_bam_subregions(
 
         a = HtsAlignment(alignment);
 
+        auto alignment_start = a.get_ref_start();
+        auto alignment_stop = a.get_ref_stop();
+
         // Set the iterator beyond regions that have been passed by the alignments already
-        while (a.get_ref_start() > subregions[i_start].start){
+        while (alignment_start > subregions[i_start].stop){
             i_start++;
 
             if (i_start >= subregions.size()){
@@ -350,10 +439,9 @@ void for_alignment_in_bam_subregions(
         }
 
         auto i_stop = i_start;
-        auto alignment_stop = a.get_ref_stop();
 
-        // Iterate all the subregions that start before/at the alignment end
-        while (i_stop < subregions.size() and alignment_stop >= subregions[i_stop].start){
+        // Iterate all the subregions that intersect the alignment
+        while (i_stop < subregions.size() and min(subregions[i_stop].stop, alignment_stop) - max(subregions[i_stop].start, alignment_start) > 0){
             i_stop++;
         }
 

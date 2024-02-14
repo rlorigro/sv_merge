@@ -5,11 +5,11 @@
 #include <vector>
 #include <string>
 
-#include "Filesystem.hpp"
+#include <filesystem>
+using std::filesystem::path;
+
 #include "minimap.h"
 #include "kseq.h"
-
-using ghc::filesystem::path;
 
 #include <exception>
 #include <iostream>

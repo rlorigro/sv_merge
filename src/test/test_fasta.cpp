@@ -1,18 +1,18 @@
-#include "Filesystem.hpp"
 #include "Sequence.hpp"
 #include "Region.hpp"
 #include "fasta.hpp"
 
 using sv_merge::for_sequence_in_fasta_file;
-using ghc::filesystem::path;
 using sv_merge::Sequence;
 using sv_merge::Region;
 
+#include <filesystem>
 #include <stdexcept>
 #include <iostream>
 #include <fstream>
 #include <vector>
 
+using std::filesystem::path;
 using std::runtime_error;
 using std::to_string;
 using std::ofstream;

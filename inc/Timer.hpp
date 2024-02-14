@@ -1,5 +1,4 @@
-#ifndef GFASE_DURATION_HPP
-#define GFASE_DURATION_HPP
+#pragma once
 
 #include <iostream>
 #include <chrono>
@@ -25,6 +24,7 @@ class Timer{
 public:
     Timer();
     string elapsed() const;
+    string to_csv() const;
     void reset();
 };
 
@@ -32,5 +32,3 @@ public:
 
 ostream& operator<<(ostream& o, const sv_merge::Timer& t);
 
-
-#endif //GFASE_DURATION_HPP
