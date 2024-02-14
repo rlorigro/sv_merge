@@ -125,7 +125,6 @@ task EvaluateChromosome {
         # Evaluating all VCFS
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
-        set +e
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
         --n_threads ${N_THREADS} \
         --output_dir ~{work_dir}/${EVALUATION_NAME} \
@@ -137,7 +136,6 @@ task EvaluateChromosome {
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length} \
         --debug
-        set -e
 
         # Stopping resource monitoring
         kill ${MONITOR_JOB}
