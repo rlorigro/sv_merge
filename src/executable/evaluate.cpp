@@ -142,7 +142,7 @@ void compute_summaries_from_gaf(const path& gaf_path, GafSummary& gaf_summary){
 }
 
 
-string get_name_prefix_of_vcf(const path& vcf){
+string get_vcf_name_prefix(const path& vcf){
     string name_prefix = vcf.filename().string();
 
     if (name_prefix.ends_with(".gz")){
@@ -417,7 +417,7 @@ void compute_graph_evaluation_thread_fn(
 
     path vcf;
     vcf_reader.get_file_path(vcf);
-    string vcf_name_prefix = get_name_prefix_of_vcf(vcf);
+    string vcf_name_prefix = get_vcf_name_prefix(vcf);
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -450,7 +450,7 @@ void compute_graph_evaluation_thread_fn(
 
         path gaf_path = output_subdir / "alignments.gaf";
 
-        auto name_prefix = get_name_prefix_of_vcf(vcf);
+        auto name_prefix = get_vcf_name_prefix(vcf);
 
         path fasta_path = input_subdir / fasta_filename;
 

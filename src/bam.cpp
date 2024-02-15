@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 #include <ranges>
 #include <deque>
 #include <cmath>
@@ -14,6 +15,7 @@
 using std::priority_queue;
 using std::runtime_error;
 using std::to_string;
+using std::ofstream;
 using std::deque;
 using std::swap;
 using std::cerr;
@@ -25,9 +27,98 @@ using std::max;
 
 #include "htslib/include/htslib/hts.h"
 #include "htslib/include/htslib/sam.h"
+#include "htslib/include/htslib/hfile.h"
 
 
 namespace sv_merge {
+
+string strip_bam_extension(const path& bam){
+    string name_prefix = bam.string();
+
+    string suffix_a = ".bam.bai";
+    string suffix_b = ".bam";
+
+    if (name_prefix.ends_with(suffix_a)){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - suffix_a.size());
+    }
+    if (name_prefix.ends_with(suffix_b)){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - suffix_b.size());
+    }
+
+    std::replace(name_prefix.begin(), name_prefix.end(), '.', '_');
+
+    return name_prefix;
+}
+
+
+path get_cache_dir(const path& index_path){
+    path cache_dir = index_path;
+
+    // Replace all non alphanumeric chars with '_'
+    string name = strip_bam_extension(index_path);
+    std::replace_if(name.begin(), name.end(), [&](char c){return !isalnum(c);}, '_');
+
+    cache_dir = std::filesystem::temp_directory_path() / "hapestry" / "bai" / name;
+
+    return cache_dir;
+}
+
+
+hts_idx_t* get_index(const path& bam_path, samFile* bam_file){
+    path index_path = bam_path.string() + ".bai";
+    auto cache_dir = get_cache_dir(index_path);
+    auto cache_path = cache_dir / index_path.filename();
+    hts_idx_t *bam_index;
+
+    // first check if the BAI is local
+    if (std::filesystem::exists(index_path)){
+//        cerr << "loading local bai: " << index_path << '\n';
+
+        // Just load the index if it is local
+        bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
+
+        if (bam_index == nullptr) {
+            throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+        }
+    }
+    // Check if the bai is cached already
+    else if (std::filesystem::exists(cache_path)) {
+//        cerr << "cache found: " << cache_path << '\n';
+
+        bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), cache_path.c_str(), 0);
+
+        if (bam_index == nullptr) {
+            throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+        }
+    }
+    else{
+//        cerr << "cache not found, loading remote bai: " << index_path << '\n';
+
+        std::filesystem::create_directories(cache_dir);
+
+        // Load WITHOUT saving
+        bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
+
+        if (bam_index == nullptr) {
+            throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
+        }
+
+        /// Save an index to a specific file
+        /** @param idx    Index to be written
+            @param fn     Input BAM/BCF/etc filename
+            @param fnidx  Output filename, or NULL to add .bai/.csi/etc to @a fn
+            @param fmt    One of the HTS_FMT_* index formats
+            @return  0 if successful, or negative if an error occurred.
+        */
+        int result = hts_idx_save_as(bam_index, bam_path.c_str(), cache_path.c_str(), HTS_FMT_BAI);
+
+        if (result != 0){
+            throw runtime_error("ERROR: failed to write index to path: " + cache_path.string());
+        }
+    }
+
+    return bam_index;
+}
 
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar){
@@ -288,10 +379,7 @@ void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignmen
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
     }
 
-    // bam index
-    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
-        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
-    }
+    bam_index = get_index(bam_path, bam_file);
 
     // bam header
     if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {
@@ -331,10 +419,7 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
     }
 
-    // bam index
-    if ((bam_index = sam_index_load(bam_file, bam_path.string().c_str())) == nullptr) {
-        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
-    }
+    bam_index = get_index(bam_path, bam_file);
 
     // bam header
     if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {
@@ -391,17 +476,11 @@ void for_alignment_in_bam_subregions(
     bam_index = nullptr;
     alignment = bam_init1();
 
-    if ((bam_file = hts_open(bam_path.string().c_str(), "r")) == nullptr) {
+    if ((bam_file = hts_open(bam_path.c_str(), "r")) == nullptr) {
         throw runtime_error("ERROR: Cannot open bam file: " + bam_path.string());
     }
 
-    auto index_path = bam_path.string() + ".bai";
-    bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
-
-    // bam index
-    if (bam_index == nullptr) {
-        throw runtime_error("ERROR: Cannot open index for bam file: " + bam_path.string() + "\n");
-    }
+    bam_index = get_index(bam_path, bam_file);
 
     // bam header
     if ((bam_header = sam_hdr_read(bam_file)) == nullptr) {

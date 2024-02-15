@@ -146,8 +146,6 @@ void GoogleAuthenticator::update() {
         cerr << "Updating token" << '\n';
         string command = "gcloud auth print-access-token";
 
-        auto t = get_current_time();
-
         // Will throw error if fails, otherwise returns token
         run_command(command, token);
 
@@ -191,8 +189,11 @@ void GoogleAuthenticator::try_with_authentication(int64_t n_retries, const funct
     update();
     int64_t n = 0;
     bool success = false;
+    int duration = 1;
 
     while (not success and n < n_retries) {
+        success = true;
+
         try {
             f();
         }
@@ -200,11 +201,17 @@ void GoogleAuthenticator::try_with_authentication(int64_t n_retries, const funct
             cerr << e.what() << '\n';
             cerr << "Authenticating..." << '\n';
             update();
-            cerr << "Retrying..." << '\n';
+            cerr << "Retrying after " << duration << " seconds ..." << '\n';
             n++;
-        }
 
-        success = true;
+            sleep_for(seconds(duration));
+            duration *= 2;
+            success = false;
+        }
+    }
+
+    if (not success){
+        throw runtime_error("ERROR: GoogleAuthenticator::try_with_authentication failed after 2 retries");
     }
 }
 
