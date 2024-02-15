@@ -412,6 +412,7 @@ private:
      */
     string vcf_path;
     string vcf_header;  // Just the last line: #CHROM POS ID REF ALT QUAL FILTER INFO FORMAT SAMPLE
+    const string VCF_FORMAT_LINE = "##fileformat=VCFv4.3";
 };
 
 }
