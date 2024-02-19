@@ -61,7 +61,8 @@ void fetch_reads_from_clipped_bam(
         int64_t n_threads,
         int32_t interval_max_length,
         bool require_spanning,
-        unordered_map<Region,TransMap>& region_transmaps
+        unordered_map<Region,TransMap>& region_transmaps,
+        bool append_sample_to_read = false
 );
 
 

@@ -777,7 +777,8 @@ void fetch_reads_from_clipped_bam(
         int64_t n_threads,
         int32_t interval_max_length,
         bool require_spanning,
-        unordered_map<Region,TransMap>& region_transmaps
+        unordered_map<Region,TransMap>& region_transmaps,
+        bool append_sample_to_read
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -820,16 +821,6 @@ void fetch_reads_from_clipped_bam(
             authenticator,
             sample_queries
     );
-
-//    for (const auto& [sample_name,item]: sample_to_region_coords) {
-//        for (const auto& [region,named_coords]: item) {
-//            for (const auto& [name,coord]: named_coords){
-//
-//                cerr << ">" << name << '\n';
-//                cerr << sample_queries.at(sample_name).at(name) << '\n';
-//            }
-//        }
-//    }
 
     // Compute coverages for regions
     unordered_map<Region, size_t> region_coverage;
@@ -880,6 +871,12 @@ void fetch_reads_from_clipped_bam(
                     reverse_complement(s);
                 }
 
+                // If the user wants, we append sample name to the read name to prevent intersample collisions
+                if (append_sample_to_read) {
+                    name = name + "_" + sample_name;
+                }
+
+                // Finally update the transmap
                 transmap.add_read_with_move(name, s);
                 transmap.add_edge(sample_id, transmap.get_id(name), 0);
 

@@ -623,7 +623,8 @@ void evaluate(
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t n_threads,
-        bool debug
+        bool debug,
+        bool force_unique_reads
 ){
     Timer t;
 
@@ -704,7 +705,16 @@ void evaluate(
     // The container to store all fetched reads and their relationships to samples/paths
     unordered_map<Region,TransMap> region_transmaps;
 
-    fetch_reads_from_clipped_bam(t, regions, bam_csv, n_threads, interval_max_length, true, region_transmaps);
+    fetch_reads_from_clipped_bam(
+            t,
+            regions,
+            bam_csv,
+            n_threads,
+            interval_max_length,
+            true,
+            region_transmaps,
+            force_unique_reads
+        );
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';
 
@@ -785,6 +795,7 @@ int main (int argc, char* argv[]){
     int32_t interval_max_length = 15000;
     int32_t n_threads = 1;
     bool debug = false;
+    bool force_unique_reads = false;
 
     CLI::App app{"App description"};
 
@@ -849,6 +860,8 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
+    app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
+
     app.parse(argc, argv);
 
     auto vcfs = app.get_option("--vcfs")->as<std::vector<path> >();
@@ -864,7 +877,8 @@ int main (int argc, char* argv[]){
         flank_length,
         interval_max_length,
         n_threads,
-        debug
+        debug,
+        force_unique_reads
     );
 
     return 0;
