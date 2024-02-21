@@ -13,11 +13,11 @@ workflow GraphEvaluation {
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
-        Float small_overlap
-        Array[File] evaluation_bed_small_overlap
-        Float large_overlap
+        Float? small_overlap
+        Array[File]? evaluation_bed_small_overlap
+        Float? large_overlap
+        Array[File]? evaluation_bed_large_overlap
         Boolean force_unique_reads
-        Array[File] evaluation_bed_large_overlap
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
     }
     parameter_meta {
@@ -28,7 +28,7 @@ workflow GraphEvaluation {
         tandems_bed: "Tandem track"
         haps_vs_chm13_csv: "List of remote haplotype-reference BAMs"
         evaluation_bed_small_overlap: "For every BED file in this list: use only windows with at least `small_overlap` fraction of bases covered by intervals in the BED."
-        evaluation_bed_small_overlap: "For every BED file in this list: use only windows with at least `large_overlap` fraction of bases covered by intervals in the BED."
+        evaluation_bed_large_overlap: "For every BED file in this list: use only windows with at least `large_overlap` fraction of bases covered by intervals in the BED."
         chromosomes: "Use only these chromosomes. Each chromosome is processed in parallel and produces separate evaluation files."
         force_unique_reads: "Intended for resolving collisions in identically named sequences across samples. If true, then force sequence names to have a suffix _[sample_name] where sample_name is the unique name provided in the BAM CSV for each BAM"
     }
@@ -72,10 +72,10 @@ task EvaluateChromosome {
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
-        Float small_overlap
-        Array[File] evaluation_bed_small_overlap
-        Float large_overlap
-        Array[File] evaluation_bed_large_overlap
+        Float? small_overlap
+        Array[File]? evaluation_bed_small_overlap
+        Float? large_overlap
+        Array[File]? evaluation_bed_large_overlap
         String chromosome
         Boolean force_unique_reads
     }
@@ -147,28 +147,44 @@ task EvaluateChromosome {
         df -h
         ls -laht
 
-        # Analyzing the evaluation
-        ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
-        EVALUATION_BEDS_SMALL=~{sep=',' evaluation_bed_small_overlap}
-        EVALUATION_BEDS_SMALL=$(echo ${EVALUATION_BEDS_SMALL} | tr ',' ' ')
-        rm -rf ./${ANALYSIS_NAME_SMALL}
-        ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
-        --input_dir ~{work_dir}/${EVALUATION_NAME} \
-        --output_dir ~{work_dir}/${ANALYSIS_NAME_SMALL} \
-        --tools ${TOOLS} \
-        --beds ${EVALUATION_BEDS_SMALL} \
-        --min_bed_coverage ~{small_overlap} &
+        if ~{defined(evaluation_bed_small_overlap)}
+        then
+            # Analyzing the evaluation
+            ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
+            EVALUATION_BEDS_SMALL=~{sep=',' evaluation_bed_small_overlap}
+            EVALUATION_BEDS_SMALL=$(echo ${EVALUATION_BEDS_SMALL} | tr ',' ' ')
+            rm -rf ./${ANALYSIS_NAME_SMALL}
+            ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
+            --input_dir ~{work_dir}/${EVALUATION_NAME} \
+            --output_dir ~{work_dir}/${ANALYSIS_NAME_SMALL} \
+            --tools ${TOOLS} \
+            --beds ${EVALUATION_BEDS_SMALL} \
+            --min_bed_coverage ~{small_overlap} &
+        fi
 
-        ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
-        EVALUATION_BEDS_LARGE=~{sep=',' evaluation_bed_large_overlap}
-        EVALUATION_BEDS_LARGE=$(echo ${EVALUATION_BEDS_LARGE} | tr ',' ' ')
-        rm -rf ./${ANALYSIS_NAME_LARGE}
-        ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
-        --input_dir ~{work_dir}/${EVALUATION_NAME} \
-        --output_dir ~{work_dir}/${ANALYSIS_NAME_LARGE} \
-        --tools ${TOOLS} \
-        --beds ${EVALUATION_BEDS_LARGE} \
-        --min_bed_coverage ~{large_overlap} &
+        if ~{defined(evaluation_bed_large_overlap)}
+        then
+            ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
+            EVALUATION_BEDS_LARGE=~{sep=',' evaluation_bed_large_overlap}
+            EVALUATION_BEDS_LARGE=$(echo ${EVALUATION_BEDS_LARGE} | tr ',' ' ')
+            rm -rf ./${ANALYSIS_NAME_LARGE}
+            ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
+            --input_dir ~{work_dir}/${EVALUATION_NAME} \
+            --output_dir ~{work_dir}/${ANALYSIS_NAME_LARGE} \
+            --tools ${TOOLS} \
+            --beds ${EVALUATION_BEDS_LARGE} \
+            --min_bed_coverage ~{large_overlap} &
+        fi
+
+        if ! ~{defined(evaluation_bed_small_overlap)} && ! ~{defined(evaluation_bed_large_overlap)}
+        then
+            ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
+            rm -rf ./${ANALYSIS_NAME_LARGE}
+            ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
+            --input_dir ~{work_dir}/${EVALUATION_NAME} \
+            --output_dir ~{work_dir}/${ANALYSIS_NAME_LARGE} \
+            --tools ${TOOLS} &
+        fi
 
         wait
 
