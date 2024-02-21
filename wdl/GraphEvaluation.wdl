@@ -16,6 +16,7 @@ workflow GraphEvaluation {
         Float small_overlap
         Array[File] evaluation_bed_small_overlap
         Float large_overlap
+        Boolean force_unique_reads
         Array[File] evaluation_bed_large_overlap
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
     }
@@ -29,6 +30,7 @@ workflow GraphEvaluation {
         evaluation_bed_small_overlap: "For every BED file in this list: use only windows with at least `small_overlap` fraction of bases covered by intervals in the BED."
         evaluation_bed_small_overlap: "For every BED file in this list: use only windows with at least `large_overlap` fraction of bases covered by intervals in the BED."
         chromosomes: "Use only these chromosomes. Each chromosome is processed in parallel and produces separate evaluation files."
+        force_unique_reads: "Intended for resolving collisions in identically named sequences across samples. If true, then force sequence names to have a suffix _[sample_name] where sample_name is the unique name provided in the BAM CSV for each BAM"
     }
 
     scatter(chromosome in chromosomes) {
@@ -46,7 +48,8 @@ workflow GraphEvaluation {
                 evaluation_bed_small_overlap = evaluation_bed_small_overlap,
                 large_overlap = large_overlap,
                 evaluation_bed_large_overlap = evaluation_bed_large_overlap,
-                chromosome = chromosome
+                chromosome = chromosome,
+                force_unique_reads = force_unique_reads
         }
     }
 
@@ -74,6 +77,7 @@ task EvaluateChromosome {
         Float large_overlap
         Array[File] evaluation_bed_large_overlap
         String chromosome
+        Boolean force_unique_reads
     }
     parameter_meta {
     }
@@ -135,7 +139,7 @@ task EvaluateChromosome {
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length} \
-        --debug
+        --debug ~{if force_unique_reads then "--force_unique_reads" else ""}
 
         # Stopping resource monitoring
         kill ${MONITOR_JOB}
