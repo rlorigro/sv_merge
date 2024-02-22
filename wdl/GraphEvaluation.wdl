@@ -147,10 +147,12 @@ task EvaluateChromosome {
         df -h
         ls -laht
 
+        ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
+        ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
+
         if ~{defined(evaluation_bed_small_overlap)}
         then
             # Analyzing the evaluation
-            ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
             EVALUATION_BEDS_SMALL=~{sep=',' evaluation_bed_small_overlap}
             EVALUATION_BEDS_SMALL=$(echo ${EVALUATION_BEDS_SMALL} | tr ',' ' ')
             rm -rf ./${ANALYSIS_NAME_SMALL}
@@ -160,11 +162,13 @@ task EvaluateChromosome {
             --tools ${TOOLS} \
             --beds ${EVALUATION_BEDS_SMALL} \
             --min_bed_coverage ~{small_overlap} &
+        else
+            # Make a placeholder so cromwell doesn't whine
+            touch ~{work_dir}/${ANALYSIS_NAME_SMALL}.tar.gz
         fi
 
         if ~{defined(evaluation_bed_large_overlap)}
         then
-            ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
             EVALUATION_BEDS_LARGE=~{sep=',' evaluation_bed_large_overlap}
             EVALUATION_BEDS_LARGE=$(echo ${EVALUATION_BEDS_LARGE} | tr ',' ' ')
             rm -rf ./${ANALYSIS_NAME_LARGE}
@@ -174,11 +178,13 @@ task EvaluateChromosome {
             --tools ${TOOLS} \
             --beds ${EVALUATION_BEDS_LARGE} \
             --min_bed_coverage ~{large_overlap} &
+        else
+            # Make a placeholder so cromwell doesn't whine
+            touch ~{work_dir}/${ANALYSIS_NAME_LARGE}.tar.gz
         fi
 
         if ! ~{defined(evaluation_bed_small_overlap)} && ! ~{defined(evaluation_bed_large_overlap)}
         then
-            ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
             rm -rf ./${ANALYSIS_NAME_LARGE}
             ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ~{work_dir}/${EVALUATION_NAME} \
