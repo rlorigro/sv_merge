@@ -10,7 +10,8 @@ using std::cerr;
 
 
 void test_simple(){
-    GafSummary g;
+    TransMap t;
+    GafSummary g(t);
     CigarInterval c;
 
     c.ref_start = 0;
@@ -57,7 +58,8 @@ void test_simple(){
 
 
 void test_reverse(){
-    GafSummary g;
+    TransMap t;
+    GafSummary g(t);
     CigarInterval c;
 
     c.ref_start = 0;
@@ -104,7 +106,8 @@ void test_reverse(){
 
 
 void test_coincidental(){
-    GafSummary g;
+    TransMap t;
+    GafSummary g(t);
     CigarInterval c;
 
     c.ref_start = 0;

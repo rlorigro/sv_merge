@@ -71,6 +71,38 @@ const string& TransMap::get_sequence(int64_t id) const{
 }
 
 
+void TransMap::add_flank_coord(const string& name, int32_t start, int32_t stop){
+    auto id = graph.name_to_id(name);
+    sequence_flanks[id] = {start,stop};
+}
+
+
+coord_t TransMap::get_flank_coord(const string& name) const{
+    auto id = graph.name_to_id(name);
+    return sequence_flanks.at(id);
+}
+
+
+coord_t TransMap::get_flank_coord(int64_t id) const{
+    return sequence_flanks.at(id);
+}
+
+
+const unordered_map<int64_t,interval_t>& TransMap::get_flank_map() const {
+    return sequence_flanks;
+}
+
+
+void TransMap::construct_named_flank_map(unordered_map<string,interval_t>& flank_map) const {
+    flank_map.clear();
+    flank_map.reserve(sequence_flanks.size());
+    for (const auto& [id,item]: sequence_flanks){
+        auto& name = get_node(id).name;
+        flank_map.emplace(name, item);
+    }
+}
+
+
 void TransMap::add_read(const string& name){
     if (name == read_node_name or name == sample_node_name or name == path_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);

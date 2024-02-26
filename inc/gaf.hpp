@@ -80,7 +80,7 @@ public:
     [[nodiscard]] bool is_primary() const override;
     [[nodiscard]] bool is_supplementary() const override;
     [[nodiscard]] bool is_reverse() const override;
-    void for_step_in_path(const string& path_name, const function<void(const string& step_name, bool is_reverse)>& f) const;
+    void for_step_in_path(const function<void(const string& step_name, bool is_reverse)>& f) const;
     [[nodiscard]] const pair<string,bool>& get_step_of_path(size_t index) const;
     [[nodiscard]] const vector<pair<string,bool> >& get_path() const;
 
@@ -125,7 +125,7 @@ public:
 class GafSummary{
 public:
     unordered_map<string,int32_t> node_lengths;
-    unordered_map<string,int32_t> query_lengths;
+//    unordered_map<string,int32_t> query_lengths;
 
     unordered_map <string, vector<AlignmentSummary> > ref_summaries;
     unordered_map <string, vector<AlignmentSummary> > query_summaries;
@@ -133,32 +133,37 @@ public:
     // Paths observed in alignments
     unordered_map <string, vector <vector <pair<string,bool> > > > query_paths;
 
+    // Transmap holds all sequence-related data (lengths, flanks)
+    const TransMap& transmap;
+    bool apply_flanks;
+
     /**
      * For testing purposes only, does not properly initialize
      */
-    GafSummary()=default;
+    GafSummary(const TransMap& transmap);
 
     /**
      * This constructor needs some objects that can inform the GafSummary of all the lengths of the graph nodes/queries.
      * TODO: For future applications, consider passing a GFA path, or simply a map of node/query lengths.
      * @param variant_graph a fully built variant graph that corresponds to the graph aligned as target in the GAF
-     * @param trans_map a transitive map that contains only the reads that will be aligned to the graph
+     * @param trans_map a transitive map that contains only the reads that will be aligned to the graph.
+     * @param apply_flanks if true, use the info stored in TransMap to subset the portion of the query that is evaluated
      */
-    GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map);
+    GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map, bool apply_flanks);
 
     /**
      * Update alignment stats, for a given ref node
-     * @param node_name : ref node to be assigned this cigar operation
-     * @param c : cigar interval obtained from iterating an alignment
-     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
+     * @param node_name ref node to be assigned this cigar operation
+     * @param c cigar interval obtained from iterating an alignment
+     * @param insert a new alignment should start with this operation (separate alignments will be overlap-resolved)
      */
     void update_node(const string& node_name, const CigarInterval& c, bool insert);
 
     /**
      * Update alignment stats, for a given query sequence
-     * @param query_name : query to be assigned this cigar operation
-     * @param c : cigar interval obtained from iterating an alignment
-     * @param insert : a new alignment should start with this operation (separate alignments will be overlap-resolved)
+     * @param query_name query to be assigned this cigar operation
+     * @param c cigar interval obtained from iterating an alignment
+     * @param insert a new alignment should start with this operation (separate alignments will be overlap-resolved)
      */
     void update_query(const string& query_name, const CigarInterval& c, bool insert);
 
@@ -167,6 +172,28 @@ public:
 
     void resolve_all_overlaps();
     static void resolve_overlaps(vector<AlignmentSummary>& alignments);
+
+    /**
+     * Accumulate data from a GAF that can summarize the alignment in terms of the query sequences and the graph. If
+     * `apply_flanks` was previously specified, then this accumulation of stats on the queries will only pertain to
+     * regions inside the inner flank boundaries of the queries, as provided by the transmap given at construction time.
+     * @param gaf_path GAF to be parsed
+     */
+    void compute(const path& gaf_path);
+
+private:
+    /**
+     * Accumulate data from a GAF that can summarize the alignment in terms of the query sequences and the graph
+     * @param gaf_path GAF to be parsed
+     */
+    void compute_without_flanks(const path& gaf_path);
+
+    /**
+     * Accumulate data from a GAF that can summarize the alignment in terms of the query sequences and the graph. In this
+     * variant of the compute() fn, we exclude flanking regions from the accumulation of cigar operations on the query
+     * @param gaf_path GAF to be parsed
+     */
+    void compute_with_flanks(const path& gaf_path);
 };
 
 

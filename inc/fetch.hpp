@@ -43,6 +43,7 @@ namespace sv_merge{
 
 using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
 using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
+using sample_region_flanked_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, pair<CigarInterval,CigarInterval> > > > >;
 
 void fetch_reads(
         Timer& t,
@@ -60,6 +61,7 @@ void fetch_reads_from_clipped_bam(
         path bam_csv,
         int64_t n_threads,
         int32_t interval_max_length,
+        int32_t flank_length,
         bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps,
         bool append_sample_to_read = false
@@ -67,6 +69,17 @@ void fetch_reads_from_clipped_bam(
 
 
 void extract_subregion_coords_from_sample(
+        GoogleAuthenticator& authenticator,
+        sample_region_coord_map_t& sample_to_region_coords,
+        const string& sample_name,
+        const vector<Region>& subregions,
+        bool require_spanning,
+        bool unclip_coords,
+        path bam_path
+);
+
+
+void extract_flanked_subregion_coords_from_sample(
         GoogleAuthenticator& authenticator,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,

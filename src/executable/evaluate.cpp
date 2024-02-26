@@ -44,102 +44,6 @@ using std::ref;
 
 using namespace sv_merge;
 
-void compute_summaries_from_gaf(const path& gaf_path, GafSummary& gaf_summary){
-    // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
-    // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
-    // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
-    bool unclip_coords = false;
-
-    vector<interval_t> query_intervals = {};
-
-    for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
-        // Skip nonsensical alignments
-        if (alignment.get_map_quality() == 0){
-            return;
-        }
-
-        string name;
-        alignment.get_query_name(name);
-
-        // First establish the set of intervals that defines the steps in the path (node lengths)
-        // And maintain a map that will point from an interval_t to a step in the path (size_t)
-        vector<interval_t> ref_intervals;
-        unordered_map<interval_t,size_t> interval_to_path_index;
-
-        int32_t x = 0;
-        size_t i = 0;
-
-//        cerr << "PARSING PATH" << '\n';
-        alignment.for_step_in_path(name, [&](const string& step_name, bool is_reverse){
-            auto l = int32_t(gaf_summary.node_lengths.at(step_name));
-
-            ref_intervals.emplace_back(x, x+l);
-            interval_to_path_index.emplace(ref_intervals.back(), i);
-//            cerr << i << ' ' << step_name << ',' << l << ',' << x << ',' << x+l << '\n';
-
-            x += l;
-            i++;
-        });
-
-        gaf_summary.query_paths[name].emplace_back(alignment.get_path());
-
-//        cerr << name << '\n';
-
-        string prev_node_name;
-
-        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
-        [&](const CigarInterval& i, const interval_t& interval){
-            // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
-            auto i_norm = i;
-
-//            cerr << '\t' << " r:" << interval.first << ',' << interval.second << ' ' << " i:" << i.ref_start << ',' << i.ref_stop << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
-
-            auto path_index = interval_to_path_index.at(interval);
-            const auto& [node_name, node_reversal] = alignment.get_step_of_path(path_index);
-
-//            cerr << '\t' << node_reversal << " r:" << interval.first << ',' << interval.second << ' ' << cigar_code_to_char[i_norm.code] << ',' << i_norm.length << " r:" << i_norm.ref_start << ',' << i_norm.ref_stop << " q:" << i_norm.query_start << ',' << i_norm.query_stop << '\n';
-
-            // REVERSAL:
-            // path  alignment  result
-            // -----------------------
-            // 0     0          0
-            // 0     1          1
-            // 1     0          1
-            // 1     1          0
-            i_norm.is_reverse = (node_reversal xor i_norm.is_reverse);
-
-            auto [a,b] = i_norm.get_forward_ref_interval();
-
-            // Compute distance from edge of interval (start of node in path)
-            int32_t start = a - interval.first;
-            int32_t stop = b - interval.first;
-
-            if (not i_norm.is_reverse){
-                i_norm.ref_start = start;
-                i_norm.ref_stop = stop;
-            }
-            else{
-                auto node_length = int32_t(gaf_summary.node_lengths.at(node_name));
-                i_norm.ref_start = node_length - start;
-                i_norm.ref_stop = node_length - stop;
-            }
-
-            // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
-            bool new_query_alignment = prev_node_name.empty();
-            bool new_ref_alignment = node_name != prev_node_name;
-
-            // Update the last alignment block in the GafSummary for ref and query
-            gaf_summary.update_node(node_name, i_norm, new_ref_alignment);
-            gaf_summary.update_query(name, i_norm, new_query_alignment);
-
-            prev_node_name = node_name;
-        },{});
-
-//        cerr << '\n';
-    });
-
-    gaf_summary.resolve_all_overlaps();
-}
 
 
 string get_vcf_name_prefix(const path& vcf){
@@ -477,8 +381,8 @@ void compute_graph_evaluation_thread_fn(
         }
 
         // Do the bulk of the Gaf parsing work here
-        GafSummary gaf_summary(variant_graph, transmap);
-        compute_summaries_from_gaf(gaf_path, gaf_summary);
+        GafSummary gaf_summary(variant_graph, transmap, true);
+        gaf_summary.compute(gaf_path);
 
         // Write out all the alignment dependent results for this region
         write_summary(output_subdir, gaf_summary, variant_graph, vcf_reader);
@@ -686,17 +590,21 @@ void evaluate(
 
     // Log which windows were used
     path bed_output_path = output_dir / "windows.bed";
+    path bed_flanked_output_path = output_dir / "windows_flanked.bed";
     ofstream output_bed_file(bed_output_path);
+    ofstream output_bed_flanked_file(bed_output_path);
 
-    cerr << t << "Flanking windows" << '\n';
+    cerr << t << "Flanking windows and writing BED" << '\n';
 
     // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
+        output_bed_file << r.to_bed() << '\n';
+
         r.start -= flank_length;
         r.stop += flank_length;
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
-        output_bed_file << r.to_bed() << '\n';
+        output_bed_flanked_file << r.to_bed() << '\n';
     }
     output_bed_file.close();
 
@@ -711,10 +619,11 @@ void evaluate(
             bam_csv,
             n_threads,
             interval_max_length,
+            flank_length,
             true,
             region_transmaps,
             force_unique_reads
-        );
+    );
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';
 

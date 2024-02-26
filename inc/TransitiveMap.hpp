@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HeteroGraph.hpp"
+#include "misc.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -26,6 +27,9 @@ class TransMap {
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,string> sequences;
 
+    // Pains me to add yet another map but here it is
+    unordered_map<int64_t,coord_t> sequence_flanks;
+
     string sample_node_name;
     string read_node_name;
     string path_node_name;
@@ -39,6 +43,7 @@ public:
     void reserve_sequences(size_t n);
     void add_sample(const string& name);
     void add_read(const string& name);
+    void add_flank_coord(const string& name, int32_t start, int32_t stop);
     void add_read(const string& name, const string& sequence);
     void add_read_with_move(string& name, string& sequence);
     void add_path(const string& name);
@@ -55,6 +60,10 @@ public:
     bool has_edge(int64_t a, int64_t b) const;
     int64_t get_node_count() const;
     int64_t get_edge_count(int64_t id, char type) const;
+    const unordered_map<int64_t,coord_t>& get_flank_map() const;
+    coord_t get_flank_coord(const string& name) const;
+    coord_t get_flank_coord(int64_t id) const;
+    void construct_named_flank_map(unordered_map<string,interval_t>& flank_map) const;
 
     const HeteroNode& get_node(int64_t id) const;
     const HeteroNode& get_node(const string& name) const;

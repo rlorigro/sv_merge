@@ -227,7 +227,7 @@ const pair<string,bool>& GafAlignment::get_path_step(int32_t index) const{
 }
 
 
-void GafAlignment::for_step_in_path(const string& path_name, const function<void(const string& step_name, bool is_reverse)>& f) const{
+void GafAlignment::for_step_in_path(const function<void(const string& step_name, bool is_reverse)>& f) const{
     for (const auto& [name, r]: path){
         f(name, r);
     }
@@ -559,15 +559,20 @@ void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
 }
 
 
-GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& trans_map){
+GafSummary::GafSummary(const TransMap& transmap):
+    transmap(transmap),
+    apply_flanks(false)
+{}
+
+
+GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& transmap, bool apply_flanks):
+        transmap(transmap),
+        apply_flanks(apply_flanks)
+{
     variant_graph.graph.for_each_handle([&](const handle_t& h){
         auto l = variant_graph.graph.get_length(h);
         auto name = std::to_string(variant_graph.graph.get_id(h));
         node_lengths[name] = int32_t(l);
-    });
-
-    trans_map.for_each_read([&](const string& name, const string& sequence){
-        query_lengths[name] = int32_t(sequence.size());
     });
 }
 
@@ -658,12 +663,21 @@ void GafSummary::for_each_ref_summary(const function<void(const string& name, in
 void GafSummary::for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
     pair<float,float> identity_and_coverage;
 
-    for (auto& [name, length]: query_lengths){
+    int32_t length;
+    transmap.for_each_read([&](const string& name, int64_t id){
+        if (apply_flanks){
+            coord_t c = transmap.get_flank_coord(id);
+            length = c.second - c.first;
+        }
+        else {
+            length = int32_t(transmap.get_sequence(id).size());
+        }
+
         auto result = query_summaries.find(name);
 
         if (result == query_summaries.end()){
             f(name, length, 0, 0);
-            continue;
+            return;
         }
 
         const auto& alignments = result->second;
@@ -671,7 +685,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
         compute_identity_and_coverage(alignments, length, identity_and_coverage);
 
         f(name, length, identity_and_coverage.first, identity_and_coverage.second);
-    }
+    });
 }
 
 
@@ -791,5 +805,206 @@ void GafSummary::resolve_all_overlaps() {
     }
 }
 
+
+void normalize_gaf_cigar(const interval_t& interval, CigarInterval& result, int32_t node_length, bool node_reversal){
+    // REVERSAL:
+    // path  alignment  result
+    // -----------------------
+    // 0     0          0
+    // 0     1          1
+    // 1     0          1
+    // 1     1          0
+    result.is_reverse = (node_reversal xor result.is_reverse);
+
+    auto [a,b] = result.get_forward_ref_interval();
+
+    // Compute distance from edge of interval (start of node in path)
+    int32_t start = a - interval.first;
+    int32_t stop = b - interval.first;
+
+    if (not result.is_reverse){
+        result.ref_start = start;
+        result.ref_stop = stop;
+    }
+    else{
+        result.ref_start = node_length - start;
+        result.ref_stop = node_length - stop;
+    }
+}
+
+
+void GafSummary::compute(const path& gaf_path){
+    if (apply_flanks){
+        compute_with_flanks(gaf_path);
+    }
+    else{
+        compute_without_flanks(gaf_path);
+    }
+}
+
+
+void GafSummary::compute_without_flanks(const path& gaf_path){
+    // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
+    // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
+    // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
+    bool unclip_coords = false;
+
+    for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
+        // Skip nonsensical alignments
+        if (alignment.get_map_quality() == 0){
+            return;
+        }
+
+        string name;
+        alignment.get_query_name(name);
+
+        // First establish the set of intervals that defines the steps in the path (node lengths)
+        // And maintain a map that will point from an interval_t to a step in the path (size_t)
+        vector<interval_t> ref_intervals;
+        unordered_map<interval_t,size_t> interval_to_path_index;
+
+        int32_t x = 0;
+        size_t i = 0;
+
+        alignment.for_step_in_path([&](const string& step_name, bool is_reverse){
+            auto l = int32_t(node_lengths.at(step_name));
+
+            ref_intervals.emplace_back(x, x+l);
+            interval_to_path_index.emplace(ref_intervals.back(), i);
+
+            x += l;
+            i++;
+        });
+
+        query_paths[name].emplace_back(alignment.get_path());
+
+        // The query intervals for each alignment is not used because we do not use flanks
+        vector<interval_t> query_intervals = {};
+
+        // The iterator has a cache where they can store previously computed info for the path
+        // (to avoid using unordered_map.at() for every cigar)
+        string prev_node_name;
+        size_t prev_path_index = -1;
+        int32_t node_length = -1;
+        string node_name;
+        bool node_reversal;
+
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+            // REF (node) coordinate iterator:
+            [&](const CigarInterval& i, const interval_t& interval){
+                // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
+                auto i_norm = i;
+
+                auto path_index = interval_to_path_index.at(interval);
+
+                // Don't recompute path/node stats unless we have advanced to a new node in the path
+                if (path_index != prev_path_index) {
+                    std::tie(node_name, node_reversal) = alignment.get_step_of_path(path_index);
+                    node_length = int32_t(node_lengths.at(node_name));
+                }
+
+                normalize_gaf_cigar(interval, i_norm, node_length, node_reversal);
+
+                // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
+                bool new_ref_alignment = node_name != prev_node_name;
+                bool new_query_alignment = prev_node_name.empty();
+
+                // Update the last alignment block in the GafSummary for ref and query
+                update_node(node_name, i_norm, new_ref_alignment);
+                update_query(name, i_norm, new_query_alignment);
+
+                prev_node_name = node_name;
+                prev_path_index = path_index;
+            },
+            // QUERY coordinate iterator: DO NOTHING HERE
+            {});
+    });
+    resolve_all_overlaps();
+}
+
+
+void GafSummary::compute_with_flanks(const path& gaf_path){
+    // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
+    // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
+    // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
+    bool unclip_coords = false;
+
+    for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
+        // Skip nonsensical alignments
+        if (alignment.get_map_quality() == 0){
+            return;
+        }
+
+        string name;
+        alignment.get_query_name(name);
+
+        // First establish the set of intervals that defines the steps in the path (node lengths)
+        // And maintain a map that will point from an interval_t to a step in the path (size_t)
+        vector<interval_t> ref_intervals;
+        unordered_map<interval_t,size_t> interval_to_path_index;
+
+        int32_t x = 0;
+        size_t i = 0;
+
+        alignment.for_step_in_path([&](const string& step_name, bool is_reverse){
+            auto l = int32_t(node_lengths.at(step_name));
+
+            ref_intervals.emplace_back(x, x+l);
+            interval_to_path_index.emplace(ref_intervals.back(), i);
+
+            x += l;
+            i++;
+        });
+
+        query_paths[name].emplace_back(alignment.get_path());
+
+        // The query intervals for each alignment is just the inner flank bounds
+        vector<interval_t> query_intervals_i = {transmap.get_flank_coord(name)};
+
+        // The ref and query iterators both have a cache where they can store previously computed info for the path
+        // (to avoid using unordered_map.at() for every cigar)
+        string prev_node_name;
+        size_t prev_path_index = -1;
+        int32_t node_length = -1;
+        string node_name;
+        bool node_reversal;
+        bool new_query_alignment = true;
+
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals_i,
+        // REF (node) coordinate iterator:
+        [&](const CigarInterval& i, const interval_t& interval){
+            // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
+            auto i_norm = i;
+
+            auto path_index = interval_to_path_index.at(interval);
+
+            // Don't recompute path/node stats unless we have advanced to a new node in the path
+            if (path_index != prev_path_index) {
+                std::tie(node_name, node_reversal) = alignment.get_step_of_path(path_index);
+                node_length = int32_t(node_lengths.at(node_name));
+            }
+
+            normalize_gaf_cigar(interval, i_norm, node_length, node_reversal);
+
+            // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
+            bool new_ref_alignment = node_name != prev_node_name;
+
+            // Update the last alignment block in the GafSummary for REF ONLY
+            update_node(node_name, i_norm, new_ref_alignment);
+
+            prev_node_name = node_name;
+        },
+        // QUERY coordinate iterator:
+        [&](const CigarInterval& i, const interval_t& interval){
+            // Update the alignment block in the GafSummary for QUERY
+            // We don't care about "normalizing" the interval here because we aren't operating in ref/node space.
+            // Every cigar within the query interval gets added to the summary.
+            update_query(name, i, new_query_alignment);
+            new_query_alignment = false;
+        });
+    });
+
+    resolve_all_overlaps();
+}
 
 }

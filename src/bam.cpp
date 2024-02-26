@@ -448,6 +448,14 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
 }
 
 
+/**
+ *
+ * @param bam_path : path to local (on filesystem) or remote (GS URI) BAM to be iterated
+ * @param region : the region which envelopes all the subregions
+ * @param subregions : subregions that the user is interested in fetching
+ * @param f : returns the SAM alignment, and also a vector of Regions which the alignment overlaps, corresponding to
+ *              whichever regions the user provided, as a read may span multiple
+ */
 void for_alignment_in_bam_subregions(
         path bam_path,
         string region,
