@@ -466,11 +466,6 @@ void extract_flanked_subregion_coords_from_sample(
                 string name;
                 alignment.get_query_name(name);
 
-    //            cerr << '\n' << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
-    //        for (const auto& item: overlapping_regions){
-    //            cerr << item.start << ',' << item.stop << '\n';
-    //        }
-
                 // The region of interest is defined in reference coordinate space
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
@@ -503,7 +498,7 @@ void extract_flanked_subregion_coords_from_sample(
                             return;
                         }
 
-                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+//                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
@@ -539,9 +534,6 @@ void extract_flanked_subregion_coords_from_sample(
             for (const auto& [name, coords]: query_coords){
                 auto& [inner_coord, outer_coord] = coords;
                 bool pass = false;
-
-                cerr << name << '\n';
-                cerr << outer_coord.query_start << ',' << outer_coord.query_stop << '\n';
 
                 // Require all four bounds are touched by alignment
                 if (require_spanning){
@@ -993,10 +985,8 @@ void fetch_reads_from_clipped_bam(
                 auto i = size_t(outer_coord.query_start);
                 auto l = size_t(outer_coord.query_stop - outer_coord.query_start);
 
-                cerr << inner_coord.is_reverse << ',' << l << ',' << inner_coord.query_start << ',' << inner_coord.query_stop << '\n';
                 inner_coord.query_start -= outer_coord.query_start;
                 inner_coord.query_stop -= outer_coord.query_start;
-                cerr << inner_coord.is_reverse << ',' << l << ',' << inner_coord.query_start << ',' << inner_coord.query_stop << '\n';
 
                 if (l > max_hap_length){
                     cerr << "Warning: skipping reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
@@ -1020,9 +1010,6 @@ void fetch_reads_from_clipped_bam(
                     inner_coord.query_stop = int32_t(l) - inner_coord.query_stop;
                     std::swap(inner_coord.query_start, inner_coord.query_stop);
                 }
-
-                cerr << inner_coord.is_reverse << ',' << l << ',' << inner_coord.query_start << ',' << inner_coord.query_stop << '\n';
-                cerr << '\n';
 
                 // If the user wants, we append sample name to the read name to prevent intersample collisions
                 if (append_sample_to_read) {
