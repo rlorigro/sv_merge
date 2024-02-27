@@ -71,6 +71,11 @@ string Region::to_string(char sep) const{
 }
 
 
+string Region::to_unflanked_string(char sep, int32_t flank_length) const{
+    return name + sep + std::to_string(start + flank_length) + "-" + std::to_string(stop - flank_length);
+}
+
+
 string Region::to_bed() const{
     return name + "\t" + std::to_string(start) + "\t" + std::to_string(stop);
 }

@@ -67,6 +67,7 @@ void write_region_subsequences_to_file_thread_fn(
         const vector<Region>& regions,
         const path& output_dir,
         const path& filename,
+        const int32_t flank_length,
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
@@ -75,7 +76,7 @@ void write_region_subsequences_to_file_thread_fn(
         const auto& region = regions.at(i);
         const auto& t = region_transmaps.at(region);
 
-        path output_subdir = output_dir / region.to_string('_');
+        path output_subdir = output_dir / region.to_unflanked_string('_', flank_length);
 
         create_directories(output_subdir);
 
@@ -327,8 +328,8 @@ void compute_graph_evaluation_thread_fn(
         const auto& region = regions.at(i);
         const auto& transmap = region_transmaps.at(region);
 
-        path input_subdir = output_dir / region.to_string('_');
-        path output_subdir = output_dir / region.to_string('_') / vcf_name_prefix;
+        path input_subdir = output_dir / region.to_unflanked_string('_', flank_length);
+        path output_subdir = output_dir / region.to_unflanked_string('_', flank_length) / vcf_name_prefix;
 
         auto records = region_records.at(region);
 
@@ -344,7 +345,7 @@ void compute_graph_evaluation_thread_fn(
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
         }
         else{
-            cerr << "TRIVIAL REGION: " + region.to_string() << '\n';
+            cerr << "TRIVIAL REGION: " + region.to_unflanked_string('_', flank_length) << '\n';
             // VariantGraph assumes that the flank length needs to be added to the region
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
         }
@@ -592,7 +593,7 @@ void evaluate(
     path bed_output_path = output_dir / "windows.bed";
     path bed_flanked_output_path = output_dir / "windows_flanked.bed";
     ofstream output_bed_file(bed_output_path);
-    ofstream output_bed_flanked_file(bed_output_path);
+    ofstream output_bed_flanked_file(bed_flanked_output_path);
 
     cerr << t << "Flanking windows and writing BED" << '\n';
 
@@ -607,6 +608,7 @@ void evaluate(
         output_bed_flanked_file << r.to_bed() << '\n';
     }
     output_bed_file.close();
+    output_bed_flanked_file.close();
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
@@ -647,6 +649,7 @@ void evaluate(
                                      std::cref(regions),
                                      std::cref(staging_dir),
                                      std::cref(fasta_filename),
+                                     flank_length,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {

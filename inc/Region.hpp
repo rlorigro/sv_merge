@@ -22,8 +22,9 @@ public:
     int32_t start{};
     int32_t stop{};
 
-    string to_string(char sep=':') const;
     string to_bed() const;
+    string to_string(char sep=':') const;
+    string to_unflanked_string(char sep, int32_t flank_length) const;
 
     explicit Region(string &region_string);
     Region(string& name, int32_t start, int32_t stop);
