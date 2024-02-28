@@ -55,7 +55,7 @@ public:
      * empty. The tandem track is used for adding flanking regions with enough non-tandem sequence to the graph, which
      * is useful for seeding graph alignments: see `build()` for more details.
      */
-    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {});
+    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {}, bool silent = true);
 
     /**
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
@@ -102,7 +102,7 @@ public:
      * and one node for each of its flanking sequences (if they exist). If `p=q`, the central node is replaced by a
      * single edge.
      *
-     * @param flank_length ensures that an interval of this length, with no overlap to the tandem track, is present
+     * @param flank_length (>0) ensures that an interval of this length, with no overlap to the tandem track, is present
      * before `p` and at or after `q`.
      */
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
@@ -147,6 +147,12 @@ public:
      * field of a VCF record to be counted.
      */
     void print_supported_vcf_records(ofstream& supported, ofstream& unsupported, bool print_all_records, const vector<string>& callers = {});
+
+    /**
+     * Iterates over every VCF record and the names of its supporting paths (if any). See
+     * `print_supported_vcf_records()` for details on supporting paths.
+     */
+    void for_each_vcf_record_with_supporting_paths(const function<void(size_t id, const VcfRecord& record, const vector<string>& supporting_paths)>& callback);
 
     /**
      * Writes every path handle in `graph` as a distinct VCF record:
@@ -314,6 +320,7 @@ private:
     const unordered_map<string,string>& chromosomes;
     const uint8_t n_chromosomes;
     const unordered_map<string,vector<interval_t>>& tandem_track;
+    bool silent;
     size_t n_vcf_records;
     string main_chromosome;  // The CHROM field of every VCF record
     int32_t main_chromosome_length;
@@ -354,6 +361,7 @@ private:
      * Reused temporary space
      */
     vector<bool> printed, initialized;
+    vector<vector<string>> path_names;
     vector<vector<size_t>> flags;
     interval_t tmp_interval;
     vector<edge_t> tmp_edges;
@@ -425,7 +433,7 @@ private:
      * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
      *
      * @param pos zero-based;
-     * @param tandem_track a sorted list of non-overlapping intervals per chromosome, with format `[x..y)`;
+     * @param flank_length >0;
      * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
      * `x>=pos`; returns `INT32_MAX` if no such interval exists.
      */
@@ -435,7 +443,7 @@ private:
      * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
      *
      * @param pos zero-based; can be equal to `chromosome_length`;
-     * @param tandem_track a sorted list of non-overlapping intervals per chromosome, with format `[x..y)`;
+     * @param flank_length >0;
      * @return the largest `x` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
      * `y<pos`; returns `INT32_MAX` if no such interval exists.
      */
