@@ -498,7 +498,7 @@ void extract_flanked_subregion_coords_from_sample(
                             return;
                         }
 
-                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+//                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
