@@ -31,7 +31,19 @@ void construct_windows_from_vcf_and_bed(
         const vector<path>& vcfs,
         int32_t flank_length,
         int32_t interval_max_length,
-        vector<Region>& regions){
+        vector<Region>& regions,
+        const path& bed_log_path
+        ){
+
+    ofstream log_file;
+
+    if (not bed_log_path.empty()){
+        log_file.open(bed_log_path);
+
+        if (not (log_file.is_open() and log_file.good())){
+            throw runtime_error("ERROR: could not write BED log file: " + bed_log_path.string());
+        }
+    }
 
     interval_t interval;
 
@@ -74,6 +86,9 @@ void construct_windows_from_vcf_and_bed(
             // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
             // for very large events
             if (coord.second - coord.first > interval_max_length){
+                if (not bed_log_path.empty()) {
+                    log_file << r.chrom << '\t' << coord.first << '\t' << coord.first << '\t' << "vcf" << '\n';
+                }
                 return;
             }
 
@@ -93,6 +108,9 @@ void construct_windows_from_vcf_and_bed(
 
         for (const auto& c: components){
             if (c.second - c.first > interval_max_length){
+                if (not bed_log_path.empty()) {
+                    log_file << contig << '\t' << c.first << '\t' << c.first << '\t' << "component" << '\n';
+                }
                 continue;
             }
 
@@ -127,6 +145,8 @@ void construct_windows_from_vcf_and_bed(
             regions.emplace_back(contig, c.first, c.second);
         }
     }
+
+    log_file.close();
 }
 
 

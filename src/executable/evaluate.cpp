@@ -579,7 +579,8 @@ void evaluate(
 
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
-        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, vcfs, flank_length, interval_max_length, regions);
+        path bed_log_path = output_dir / "windows_ommitted.bed";
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, vcfs, flank_length, interval_max_length, regions, bed_log_path);
     }
     else {
         cerr << t << "Reading BED file" << '\n';

@@ -992,9 +992,6 @@ void fetch_reads_from_clipped_bam(
                 auto i = size_t(outer_coord.query_start);
                 auto l = size_t(outer_coord.query_stop - outer_coord.query_start);
 
-                inner_coord.query_start -= outer_coord.query_start;
-                inner_coord.query_stop -= outer_coord.query_start;
-
                 if (l > max_hap_length){
                     cerr << "Warning: skipping reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
                     continue;
@@ -1008,6 +1005,9 @@ void fetch_reads_from_clipped_bam(
                 }
 
                 string s = seq.substr(i, l);;
+
+                inner_coord.query_start -= outer_coord.query_start;
+                inner_coord.query_stop -= outer_coord.query_start;
 
                 if (outer_coord.is_reverse) {
                     reverse_complement(s);
