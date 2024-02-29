@@ -90,7 +90,7 @@ task EvaluateChromosome {
         mkdir -p ~{work_dir}
         cd ~{work_dir}
 
-        git --git-dir ~{docker_dir}/sv_merge/.git log | head -n 6
+        git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
 
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
