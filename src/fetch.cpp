@@ -172,12 +172,8 @@ void extract_subregions_from_sample(
                 string name;
                 alignment.get_query_name(name);
 
-    //            cerr << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
-    //        for (const auto& item: overlapping_regions){
-    //            cerr << item.start << ',' << item.stop << '\n';
-    //        }
-
                 // The region of interest is defined in reference coordinate space
+                // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
                     ref_intervals.emplace_back(r.start, r.stop);
@@ -261,10 +257,10 @@ void extract_subregions_from_sample(
                     auto s = query_sequences[name].substr(i, l);
                     reverse_complement(s);
 
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s);
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s, true);
                 }
                 else{
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l));
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l), false);
                 }
             }
         }
@@ -334,12 +330,8 @@ void extract_subregion_coords_from_sample(
                 string name;
                 alignment.get_query_name(name);
 
-    //            cerr << '\n' << name << ' ' << alignment.get_ref_start() << ' ' << alignment.get_ref_stop() << '\n';
-    //        for (const auto& item: overlapping_regions){
-    //            cerr << item.start << ',' << item.stop << '\n';
-    //        }
-
                 // The region of interest is defined in reference coordinate space
+                // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
                     ref_intervals.emplace_back(r.start, r.stop);
@@ -467,12 +459,20 @@ void extract_flanked_subregion_coords_from_sample(
                 alignment.get_query_name(name);
 
                 // The region of interest is defined in reference coordinate space
+                // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
                     // Append the three intervals that account for inner/outer flank boundaries
-                    ref_intervals.emplace_back(r.start, r.start + flank_length);
-                    ref_intervals.emplace_back(r.start + flank_length, r.stop - flank_length);
-                    ref_intervals.emplace_back(r.stop - flank_length, r.stop);
+                    auto inner_left = r.start + flank_length;
+                    auto inner_right = r.stop - flank_length;
+
+                    ref_intervals.emplace_back(r.start, inner_left);
+                    ref_intervals.emplace_back(inner_left, inner_right);
+                    ref_intervals.emplace_back(inner_right, r.stop);
+
+                    if (inner_left > inner_right){
+                        throw runtime_error("ERROR: inner left flank bound exceeds inner right flank bound: " + to_string(inner_left) + "," + to_string(inner_right) + " for read " + name);
+                    }
 
                     // Find/or create coords for this region
                     auto& coords = query_coords_per_region[r];
@@ -498,31 +498,32 @@ void extract_flanked_subregion_coords_from_sample(
                             return;
                         }
 
-//                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
-
                             auto& [inner_coord, outer_coord] = query_coords_per_region.at(region).at(name);
 
+                            // Inner interval should update without require_spanning because it may be a
+                            // point element that is never returned by the cigar iterator, but which needs to be
+                            // updated anyway
                             update_coord(
-                                alignment,
-                                intersection,
-                                inner_coord,
-                                require_spanning,
-                                region.start + flank_length,
-                                region.stop - flank_length
+                                    alignment,
+                                    intersection,
+                                    inner_coord,
+                                    false,
+                                    region.start + flank_length,
+                                    region.stop - flank_length
                             );
 
                             update_coord(
-                                alignment,
-                                intersection,
-                                outer_coord,
-                                require_spanning,
-                                region.start,
-                                region.stop
+                                    alignment,
+                                    intersection,
+                                    outer_coord,
+                                    require_spanning,
+                                    region.start,
+                                    region.stop
                             );
-
                         }
                     },
                     null_fn
@@ -536,7 +537,7 @@ void extract_flanked_subregion_coords_from_sample(
                 bool pass = false;
 
                 // Require all four bounds are touched by alignment
-                if (require_spanning){
+                if (require_spanning) {
                     bool inner_pass = (inner_coord.ref_start == region.start + flank_length and inner_coord.ref_stop == region.stop - flank_length);
                     bool outer_pass = (outer_coord.ref_start == region.start and outer_coord.ref_stop == region.stop);
                     pass = (inner_pass and outer_pass);
@@ -749,7 +750,8 @@ void fetch_reads(
         path bam_csv,
         int64_t n_threads,
         bool require_spanning,
-        unordered_map<Region,TransMap>& region_transmaps
+        unordered_map<Region,TransMap>& region_transmaps,
+        bool append_sample_to_read
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -799,7 +801,12 @@ void fetch_reads(
             auto sample_id = transmap.get_id(sample_name);
 
             for (auto& s: sequences) {
-                transmap.add_read_with_move(s.name, s.sequence);
+                // If the user wants, we append sample name to the read name to prevent intersample collisions
+                if (append_sample_to_read) {
+                    s.name += + "_" + sample_name;
+                }
+
+                transmap.add_read_with_move(s.name, s.sequence, s.is_reverse);
                 transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
             }
         }
@@ -1013,7 +1020,7 @@ void fetch_reads_from_clipped_bam(
 
                 // If the user wants, we append sample name to the read name to prevent intersample collisions
                 if (append_sample_to_read) {
-                    name = name + "_" + sample_name;
+                    name += + "_" + sample_name;
                 }
 
                 // Finally update the transmap

@@ -30,6 +30,9 @@ class TransMap {
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,coord_t> sequence_flanks;
 
+    // Pains me to add yet another map but here it is
+    unordered_map<int64_t,bool> sequence_reversals;
+
     string sample_node_name;
     string read_node_name;
     string path_node_name;
@@ -46,6 +49,7 @@ public:
     void add_flank_coord(const string& name, int32_t start, int32_t stop);
     void add_read(const string& name, const string& sequence);
     void add_read_with_move(string& name, string& sequence);
+    void add_read_with_move(string& name, string& sequence, bool reversal);
     void add_path(const string& name);
     void add_edge(const string& a, const string& b);
     void add_edge(int64_t a, int64_t b, float weight);

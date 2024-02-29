@@ -41,9 +41,10 @@ using std::ref;
 
 namespace sv_merge{
 
-using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<StrandedSequence> > >;
 using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
 using sample_region_flanked_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, pair<CigarInterval,CigarInterval> > > > >;
+
 
 void fetch_reads(
         Timer& t,
@@ -51,7 +52,8 @@ void fetch_reads(
         path bam_csv,
         int64_t n_threads,
         bool require_spanning,
-        unordered_map<Region,TransMap>& region_transmaps
+        unordered_map<Region,TransMap>& region_transmaps,
+        bool append_sample_to_read = false
 );
 
 

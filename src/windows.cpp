@@ -103,7 +103,13 @@ void construct_windows_from_vcf_and_bed(
 
             // If ref_sequences are provided, check for consistency with contig lengths
             if (not ref_sequences.empty()){
-                auto contig_length = int32_t(ref_sequences.at(contig).size());
+                auto result = ref_sequences.find(contig);
+
+                if (result == ref_sequences.end()){
+                    throw runtime_error("ERROR: VCF region name not found in reference sequences: " + contig);
+                }
+
+                auto contig_length = int32_t(result->second.size());
 
                 if (c_flanked.first < 0 or c_flanked.first >= contig_length or c_flanked.second < 0 or c_flanked.second > contig_length){
                     cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << contig << ':' << c.first << ',' << c.second << '\n';

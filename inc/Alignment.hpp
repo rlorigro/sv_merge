@@ -195,7 +195,8 @@ public:
 
 /**
  * Iterate cigar intervals and return cigar intervals that are clipped to match the bounds of each window provided by
- * the user as a vector of interval_t. Useful for parsing cigars over a region of interest.
+ * the user as a vector of interval_t. Useful for parsing cigars over a region of interest. WARNING: empty intervals
+ * such as [2,2) are not ever returned by this iterator.
  * @param unclip_coords - re-interpret hardclips as softclips. Intended to fetch coords for native/unclipped sequence
  * @param alignment - pointer to htslib alignment struct
  * @param ref_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals

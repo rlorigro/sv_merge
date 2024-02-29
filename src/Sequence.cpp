@@ -14,6 +14,27 @@ Sequence::Sequence(const string& name, const string& sequence):
 {}
 
 
+StrandedSequence::StrandedSequence(const string& name, const string& sequence, bool is_reverse):
+        name(name),
+        sequence(sequence),
+        is_reverse(is_reverse)
+{}
+
+
+StrandedSequence::StrandedSequence(const string& name, const string& sequence):
+        name(name),
+        sequence(sequence),
+        is_reverse(false)
+{}
+
+
+StrandedSequence::StrandedSequence():
+        name(),
+        sequence(),
+        is_reverse(false)
+{}
+
+
 char get_complement(char c){
     if (isupper(c)) {
         switch (c){

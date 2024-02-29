@@ -16,6 +16,19 @@ public:
     Sequence()=default;
 };
 
+
+class StrandedSequence{
+public:
+    string name;
+    string sequence;
+    bool is_reverse;
+
+    StrandedSequence(const string& name, const string& sequence, bool is_reverse);
+    StrandedSequence(const string& name, const string& sequence);
+    StrandedSequence();
+};
+
+
 char get_complement(char c);
 
 void reverse_complement(string& seq);

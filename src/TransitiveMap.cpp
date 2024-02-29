@@ -135,6 +135,20 @@ void TransMap::add_read_with_move(string& name, string& sequence){
 }
 
 
+void TransMap::add_read_with_move(string& name, string& sequence, bool is_reverse){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    auto id = graph.name_to_id(name);
+    sequences.emplace(id, std::move(sequence));
+    sequence_reversals.emplace(id, is_reverse);
+}
+
+
 void TransMap::add_sample(const string& name){
     if (name == read_node_name or name == sample_node_name or name == path_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
