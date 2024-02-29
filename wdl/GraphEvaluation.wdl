@@ -86,11 +86,11 @@ task EvaluateChromosome {
     String work_dir = "/cromwell_root/hapestry"
 
     command <<<
+        git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
+
         set -euxo pipefail
         mkdir -p ~{work_dir}
         cd ~{work_dir}
-
-        git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
 
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
