@@ -536,6 +536,10 @@ void extract_flanked_subregion_coords_from_sample(
                 auto& [inner_coord, outer_coord] = coords;
                 bool pass = false;
 
+                if (outer_coord.query_stop < outer_coord.query_start or outer_coord.query_start < 0 or outer_coord.query_stop < 0){
+                    throw runtime_error("ERROR: invalid query coords: " + region.to_string() + " " + name + " " + to_string(outer_coord.query_start) + "," + to_string(outer_coord.query_stop));
+                }
+
                 // Require all four bounds are touched by alignment
                 if (require_spanning) {
                     bool inner_pass = (inner_coord.ref_start == region.start + flank_length and inner_coord.ref_stop == region.stop - flank_length);
@@ -1004,7 +1008,7 @@ void fetch_reads_from_clipped_bam(
                                         sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
                 }
 
-                string s = seq.substr(i, l);;
+                string s = seq.substr(i, l);
 
                 inner_coord.query_start -= outer_coord.query_start;
                 inner_coord.query_stop -= outer_coord.query_start;
