@@ -101,18 +101,6 @@ RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_versi
     && rm -rf bcftools-${bcftools_version} \
     && bcftools --help
 
-# HAPESTRY
-RUN apt remove cmake -y \
-    && pip install cmake --upgrade
-ARG HAPESTRY_COMMIT=ddb75e8868f1a7cee34fc9a6cd0fb9fbacec80e6
-RUN git clone https://github.com/rlorigro/sv_merge.git \
-    && cd sv_merge \
-    && git checkout ${HAPESTRY_COMMIT} \
-    && mkdir build \
-    && cd build \
-    && cmake .. -Dno_ortools=1 \
-    && make -j 16
-
 # TRYING TO SET OPEN FILE LIMITS. NOT SURE IT IS WORKING.
 #
 COPY ./limits.conf /etc/security/limits.conf
@@ -137,6 +125,19 @@ RUN cd /hapestry/GraphAligner \
     && make -j 16 bin/GraphAligner \
     && bin/GraphAligner --help && echo 0 || echo 1
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
+SHELL ["/bin/bash", "-c"]
+
+# HAPESTRY
+RUN apt remove cmake -y \
+    && pip install cmake --upgrade
+ARG HAPESTRY_COMMIT=ddb75e8868f1a7cee34fc9a6cd0fb9fbacec80e6
+RUN git clone https://github.com/rlorigro/sv_merge.git \
+    && cd sv_merge \
+    && git checkout ${HAPESTRY_COMMIT} \
+    && mkdir build \
+    && cd build \
+    && cmake .. -Dno_ortools=1 \
+    && make -j 16
 
 # MONITORING SCRIPT
 COPY ./*.sh /hapestry/
