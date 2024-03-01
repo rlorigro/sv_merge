@@ -68,7 +68,13 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
 
-void update_coord(const Alignment& alignment, const CigarInterval& cigar, CigarInterval& coord, bool require_spanning, int32_t ref_start, int32_t ref_stop){
+void update_coord(
+        const CigarInterval& cigar,
+        CigarInterval& coord,
+        bool require_spanning,
+        int32_t ref_start,
+        int32_t ref_stop
+        ){
     bool pass = false;
 
     // Optionally only track coords that intersect the boundaries
@@ -83,7 +89,7 @@ void update_coord(const Alignment& alignment, const CigarInterval& cigar, CigarI
     if (pass){
         auto [start,stop] = cigar.get_forward_query_interval();
 
-        if (alignment.is_reverse()){
+        if (cigar.is_reverse){
             if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_start = cigar.ref_start;
@@ -227,7 +233,7 @@ void extract_subregions_from_sample(
                         for (auto& region: overlapping_regions){
                             auto& coord = query_coords_per_region.at(region).at(name);
 
-                            update_coord(alignment, intersection, coord, require_spanning, region.start, region.stop);
+                            update_coord(intersection, coord, require_spanning, region.start, region.stop);
                         }
                     },
                     null_fn
@@ -364,7 +370,7 @@ void extract_subregion_coords_from_sample(
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
                             auto& coord = query_coords_per_region.at(region).at(name);
-                            update_coord(alignment, intersection, coord, require_spanning, region.start, region.stop);
+                            update_coord(intersection, coord, require_spanning, region.start, region.stop);
                         }
                     },
                     null_fn
@@ -504,11 +510,7 @@ void extract_flanked_subregion_coords_from_sample(
                         for (auto& region: overlapping_regions){
                             auto& [inner_coord, outer_coord] = query_coords_per_region.at(region).at(name);
 
-                            // Inner interval should update without require_spanning because it may be a
-                            // point element that is never returned by the cigar iterator, but which needs to be
-                            // updated anyway
                             update_coord(
-                                    alignment,
                                     intersection,
                                     inner_coord,
                                     false,
@@ -517,7 +519,6 @@ void extract_flanked_subregion_coords_from_sample(
                             );
 
                             update_coord(
-                                    alignment,
                                     intersection,
                                     outer_coord,
                                     require_spanning,
@@ -992,12 +993,16 @@ void fetch_reads_from_clipped_bam(
                 auto i = size_t(outer_coord.query_start);
                 auto l = size_t(outer_coord.query_stop - outer_coord.query_start);
 
+                auto l_inner = size_t(outer_coord.query_stop - outer_coord.query_start);
+                auto l_left = size_t(inner_coord.query_start - outer_coord.query_start);
+                auto l_right = size_t(outer_coord.query_stop - outer_coord.query_start);
+
                 if (outer_coord.query_stop < outer_coord.query_start or outer_coord.query_start < 0 or outer_coord.query_stop < 0){
                     throw runtime_error("ERROR: invalid query coords: " + region.to_string() + " " + name + " " + to_string(outer_coord.query_start) + "," + to_string(outer_coord.query_stop));
                 }
 
-                if (l > max_hap_length){
-                    cerr << "Warning: skipping reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
+                if (l_inner > max_hap_length or l_left > max_hap_length or l_right > max_hap_length or l > max_hap_length){
+                    cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
                     continue;
                 }
 
@@ -1005,7 +1010,7 @@ void fetch_reads_from_clipped_bam(
 
                 if (seq.empty() or (i > seq.size() - 1) or (i + l > seq.size())){
                     throw runtime_error("ERROR: fetch_reads_from_clipped_bam coord slice attempted on empty or undersized sequence: \n" +
-                                        sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
+                                        sample_name + ',' + sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
                 }
 
                 string s = seq.substr(i, l);
