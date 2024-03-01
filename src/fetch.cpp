@@ -163,7 +163,7 @@ void extract_subregions_from_sample(
     bool unclip_coords = false;
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-    authenticator.try_with_authentication(2, [&](){
+    authenticator.try_with_authentication(3, [&](){
         // Iterate each alignment in the ref region
         for_alignment_in_bam_subregions(
             bam_path,
@@ -321,7 +321,7 @@ void extract_subregion_coords_from_sample(
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
     // Mutex is built into this class so it is thread safe
-    authenticator.try_with_authentication(2, [&](){
+    authenticator.try_with_authentication(3, [&](){
         // Iterate each alignment in the ref region
         for_alignment_in_bam_subregions(
             bam_path,
@@ -449,7 +449,7 @@ void extract_flanked_subregion_coords_from_sample(
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
     // Mutex is built into this class so it is thread safe
-    authenticator.try_with_authentication(2, [&](){
+    authenticator.try_with_authentication(3, [&](){
         // Iterate each alignment in the ref region
         for_alignment_in_bam_subregions(
             bam_path,
@@ -819,7 +819,6 @@ void fetch_query_seqs_for_each_sample_thread_fn(
         const vector <pair <string,path> >& sample_bams,
         unordered_map<string, unordered_map<string,string> >& sample_queries,
         GoogleAuthenticator& authenticator,
-        mutex& authenticator_mutex,
         atomic<size_t>& job_index
 ){
 
@@ -833,7 +832,7 @@ void fetch_query_seqs_for_each_sample_thread_fn(
         auto& queries = sample_queries.at(sample_name);
 
         // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
-        authenticator.try_with_authentication(2, [&]() {
+        authenticator.try_with_authentication(3, [&]() {
             for_alignment_in_bam(bam_path, [&](Alignment& alignment) {
                 // The goal is to collect all query sequences, so skip any that may be hardclipped (not primary)
                 if ((not alignment.is_primary()) or alignment.is_supplementary()) {
@@ -890,7 +889,6 @@ void fetch_query_seqs_for_each_sample(
                     std::cref(sample_bams),
                     std::ref(sample_queries),
                     std::ref(authenticator),
-                    std::ref(authenticator_mutex),
                     std::ref(job_index)
             );
         } catch (const exception& e) {
