@@ -35,6 +35,7 @@ void construct_windows_from_vcf_and_bed(
         const path& bed_log_path
         ){
 
+
     ofstream log_file;
 
     if (not bed_log_path.empty()){
@@ -59,8 +60,12 @@ void construct_windows_from_vcf_and_bed(
         }
     }
 
+    vector <pair <string,size_t> > vcf_omissions;
+
     for (const auto& vcf: vcfs) {
         cerr << "Reading VCF: " << vcf << '\n';
+
+        vcf_omissions.emplace_back(vcf.filename(), 0);
 
         VcfReader vcf_reader(vcf);
         vcf_reader.min_qual = numeric_limits<float>::min();
@@ -86,9 +91,7 @@ void construct_windows_from_vcf_and_bed(
             // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
             // for very large events
             if (coord.second - coord.first > interval_max_length){
-                if (not bed_log_path.empty()) {
-                    log_file << r.chrom << '\t' << coord.first << '\t' << coord.first << '\t' << "vcf" << '\n';
-                }
+                vcf_omissions.back().second++;
                 return;
             }
 
@@ -98,6 +101,8 @@ void construct_windows_from_vcf_and_bed(
 
     cerr << "Computing intervals... " << '\n';
 
+    size_t total_bp_omitted = 0;
+    size_t total_windows_omitted = 0;
     // For each contig in reference, compute intervals
     for (auto& [contig, intervals]: contig_intervals){
         cerr << "\tStarting: " << contig << '\n';
@@ -109,8 +114,11 @@ void construct_windows_from_vcf_and_bed(
         for (const auto& c: components){
             if (c.second - c.first > interval_max_length){
                 if (not bed_log_path.empty()) {
-                    log_file << contig << '\t' << c.first << '\t' << c.first << '\t' << "component" << '\n';
+                    log_file << contig << '\t' << c.first << '\t' << c.second << '\n';
                 }
+
+                total_bp_omitted += c.second - c.first;
+                total_windows_omitted++;
                 continue;
             }
 
@@ -130,6 +138,13 @@ void construct_windows_from_vcf_and_bed(
                 auto contig_length = int32_t(result->second.size());
 
                 if (c_flanked.first < 0 or c_flanked.first >= contig_length or c_flanked.second < 0 or c_flanked.second > contig_length){
+                    if (not bed_log_path.empty()) {
+                        log_file << contig << '\t' << c.first << '\t' << c.second << '\n';
+                    }
+
+                    total_bp_omitted += c.second - c.first;
+                    total_windows_omitted++;
+
                     cerr << "WARNING: skipping region for which flanking sequence would exceed bounds: " << contig << ':' << c.first << ',' << c.second << '\n';
                     continue;
                 }
@@ -137,6 +152,13 @@ void construct_windows_from_vcf_and_bed(
             else{
                 // Just do one check to fix any negative coords
                 if (c_flanked.first < 0 or c_flanked.second < 0){
+                    if (not bed_log_path.empty()) {
+                        log_file << contig << '\t' << c.first << '\t' << c.second << '\n';
+                    }
+
+                    total_bp_omitted += c.second - c.first;
+                    total_windows_omitted++;
+
                     cerr << "WARNING: skipping region for which flanking sequence would be < 0 (NO REF PROVIDED): " << contig << ':' << c.first << ',' << c.second << '\n';
                     continue;
                 }
@@ -145,6 +167,15 @@ void construct_windows_from_vcf_and_bed(
             regions.emplace_back(contig, c.first, c.second);
         }
     }
+
+    cerr << "Input variants skipped because longer than " << interval_max_length << "bp:" << '\n';
+    for (const auto& [name,count]: vcf_omissions){
+        cerr << name << ": " << count << '\n';
+    }
+
+    cerr << "Connected components skipped because too long or would exceed contig end when flanked:" << '\n';
+    cerr << "Total windows: " << total_windows_omitted << '\n';
+    cerr << "Total bp: " << total_bp_omitted << '\n';
 
     log_file.close();
 }
