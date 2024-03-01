@@ -72,7 +72,7 @@ hts_idx_t* get_index(const path& bam_path, samFile* bam_file){
 
     // first check if the BAI is local
     if (std::filesystem::exists(index_path)){
-//        cerr << "loading local bai: " << index_path << '\n';
+        cerr << "loading local bai: " << index_path << '\n';
 
         // Just load the index if it is local
         bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), index_path.c_str(), 0);
@@ -83,7 +83,7 @@ hts_idx_t* get_index(const path& bam_path, samFile* bam_file){
     }
     // Check if the bai is cached already
     else if (std::filesystem::exists(cache_path)) {
-//        cerr << "cache found: " << cache_path << '\n';
+        cerr << "cache found: " << cache_path << '\n';
 
         bam_index = sam_index_load3(bam_file, bam_path.string().c_str(), cache_path.c_str(), 0);
 
@@ -92,7 +92,7 @@ hts_idx_t* get_index(const path& bam_path, samFile* bam_file){
         }
     }
     else{
-//        cerr << "cache not found, loading remote bai: " << index_path << '\n';
+        cerr << "cache not found, loading remote bai: " << index_path << '\n';
 
         std::filesystem::create_directories(cache_dir);
 
@@ -388,7 +388,18 @@ void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignmen
 
     HtsAlignment a(alignment);
 
-    while (sam_read1(bam_file, bam_header, alignment) >= 0) {
+    int result;
+
+    while (true) {
+        result = sam_read1(bam_file, bam_header, alignment);
+
+        if (result == -1){
+            break;
+        }
+        else if (result < -1){
+            throw runtime_error("ERROR: sam read failed with error code: " + to_string(result));
+        }
+
         if (alignment->core.tid < 0) {
             continue;
         }
@@ -430,7 +441,17 @@ void for_alignment_in_bam_region(path bam_path, string region, const function<vo
 
     HtsAlignment a(alignment);
 
-    while (sam_itr_next(bam_file, itr, alignment) >= 0) {
+    int result;
+    while (true) {
+        result = sam_itr_next(bam_file, itr, alignment);
+
+        if (result == -1){
+            break;
+        }
+        else if (result < -1){
+            throw runtime_error("ERROR: sam read failed with error code: " + to_string(result));
+        }
+
         if (alignment->core.tid < 0) {
             continue;
         }
@@ -502,7 +523,17 @@ void for_alignment_in_bam_subregions(
     size_t i_start = 0;
 
     // Iterate a SORTED bam
-    while (sam_itr_next(bam_file, itr, alignment) >= 0) {
+    int result;
+    while (true) {
+        result = sam_itr_next(bam_file, itr, alignment);
+
+        if (result == -1){
+            break;
+        }
+        else if (result < -1){
+            throw runtime_error("ERROR: sam read failed with error code: " + to_string(result));
+        }
+
         if (alignment->core.tid < 0) {
             continue;
         }

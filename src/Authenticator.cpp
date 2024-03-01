@@ -211,7 +211,7 @@ void GoogleAuthenticator::try_with_authentication(int64_t n_retries, const funct
     }
 
     if (not success){
-        throw runtime_error("ERROR: GoogleAuthenticator::try_with_authentication failed after 2 retries");
+        throw runtime_error("ERROR: GoogleAuthenticator::try_with_authentication failed after " + to_string(n_retries) + " retries");
     }
 }
 
