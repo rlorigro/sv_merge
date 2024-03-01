@@ -991,7 +991,7 @@ void fetch_reads_from_clipped_bam(
                 auto i = size_t(outer_coord.query_start);
                 auto l = size_t(outer_coord.query_stop - outer_coord.query_start);
 
-                auto l_inner = size_t(outer_coord.query_stop - outer_coord.query_start);
+                auto l_inner = size_t(inner_coord.query_stop - inner_coord.query_start);
                 auto l_left = size_t(inner_coord.query_start - outer_coord.query_start);
                 auto l_right = size_t(outer_coord.query_stop - outer_coord.query_start);
 
