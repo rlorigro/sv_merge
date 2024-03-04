@@ -33,10 +33,11 @@ const char VariantGraph::GAF_REV_CHAR = '<';
 const uint64_t VariantGraph::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
 
-VariantGraph::VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track):
+VariantGraph::VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track, bool silent):
         chromosomes(chromosomes),
         n_chromosomes(chromosomes.size()),
-        tandem_track(tandem_track)
+        tandem_track(tandem_track),
+        silent(silent)
 { }
 
 
@@ -161,8 +162,10 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     // Remark: it can happen that the list of first positions of a chromosome contains the position right after the last
     // position of the chromosome (e.g. if there is a BND that connects the ends of two chromosomes, or if there is an
     // INS after the end of a chromosome).
-    cerr << "Number of VCF records: " << n_vcf_records << '\n';
-    print_vcf_records_stats(BIN_SIZE,callers);
+    if (!silent) {
+        cerr << "Number of VCF records: " << n_vcf_records << '\n';
+        print_vcf_records_stats(BIN_SIZE,callers);
+    }
     chunk_first_raw.clear(); chunk_first_raw.reserve(n_chromosomes);
     for (const auto& chromosome: chromosomes) chunk_first_raw.emplace(chromosome.first,vector<int32_t>());
     vector<int32_t>& first_positions = chunk_first_raw.at(main_chromosome);
@@ -219,17 +222,19 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             }
         }
     }
-    cerr << "Table: Chromosome involved | N. distinct breakpoints\n";
-    for (auto& [chromosome,first_positions]: chunk_first_raw) {
-        const uint32_t n_breakpoints = first_positions.size();
-        if (n_breakpoints==0) continue;
-        sort_and_compact_positions(first_positions);
-        cerr << chromosome << ": ";
-        for (const auto& position: first_positions) cerr << std::to_string(position) << ',';
-        cerr << '\n';
-        cerr << chromosome << ',' << first_positions.size() << '\n';
+    if (!silent) {
+        cerr << "Table: Chromosome involved | N. distinct breakpoints\n";
+        for (auto& [chromosome,first_positions]: chunk_first_raw) {
+            const uint32_t n_breakpoints = first_positions.size();
+            if (n_breakpoints==0) continue;
+            sort_and_compact_positions(first_positions);
+            cerr << chromosome << ": ";
+            for (const auto& position: first_positions) cerr << std::to_string(position) << ',';
+            cerr << '\n';
+            cerr << chromosome << ',' << first_positions.size() << '\n';
+        }
+        cerr << "Number of non-reference nodes: " << insertion_handles.size() << '\n';
     }
-    cerr << "Number of non-reference nodes: " << insertion_handles.size() << '\n';
 
     // Building all reference nodes and all reference edges, taking into account the tandem repeat track and the
     // flanking requirements.
@@ -299,23 +304,25 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         chunk_first.emplace(chromosome,first_positions_new);
     }
     chunk_first_raw.clear();
-    cerr << "Number of reference nodes: " << to_string(graph.get_node_count()-insertion_handles.size()) << '\n';
-    cerr << "Total number of nodes: " << to_string(graph.get_node_count()) << '\n';
-    cerr << "Table: Chromosome involved | First position of every reference node\n";
-    for (const auto& [chromosome,first_positions]: chunk_first) {
-        const size_t n_breakpoints = first_positions.size();
-        if (n_breakpoints==0) continue;
-        cerr << chromosome << ": ";
-        for (const auto& position: first_positions) cerr << std::to_string(position) << ',';
-        cerr << '\n';
-    }
-    cerr << "Table: Chromosome involved | N. reference nodes\n";
-    for (const auto& [chromosome,chunks]: node_handles) {
-        const size_t n_chunks = chunks.size();
-        if (n_chunks>0) cerr << chromosome << ',' << n_chunks << '\n';
-    }
     const size_t n_reference_edges = graph.get_edge_count();
-    cerr << "Number of reference edges: " << n_reference_edges << '\n';
+    if (!silent) {
+        cerr << "Number of reference nodes: " << to_string(graph.get_node_count()-insertion_handles.size()) << '\n';
+        cerr << "Total number of nodes: " << to_string(graph.get_node_count()) << '\n';
+        cerr << "Table: Chromosome involved | First position of every reference node\n";
+        for (const auto& [chromosome,first_positions]: chunk_first) {
+            const size_t n_breakpoints = first_positions.size();
+            if (n_breakpoints==0) continue;
+            cerr << chromosome << ": ";
+            for (const auto& position: first_positions) cerr << std::to_string(position) << ',';
+            cerr << '\n';
+        }
+        cerr << "Table: Chromosome involved | N. reference nodes\n";
+        for (const auto& [chromosome,chunks]: node_handles) {
+            const size_t n_chunks = chunks.size();
+            if (n_chunks>0) cerr << chromosome << ',' << n_chunks << '\n';
+        }
+        cerr << "Number of reference edges: " << n_reference_edges << '\n';
+    }
 
     // Building all non-reference edges
     vcf_record_to_edge.reserve(n_vcf_records);
@@ -392,14 +399,16 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             }
         }
     }
-    cerr << "Total number of edges: " << to_string(graph.get_edge_count()) << '\n';
-    cerr << "Number of non-reference edges: " << to_string(graph.get_edge_count()-n_reference_edges) << '\n';
-    cerr << "Number of chrA-chrB edges: " << to_string(get_n_interchromosomal_edges()) << '\n';
-    cerr << "Number of chr-INS edges: " << to_string(get_n_ins_edges()) << '\n';
-    cerr << "Number of nodes with edges on just one side: " << to_string(get_n_dangling_nodes()) << '\n';
-    unordered_set<nid_t> dangling_nodes;
-    get_dangling_nodes(false,dangling_nodes);
-    print_edge_histograms();
+    if (!silent) {
+        cerr << "Total number of edges: " << to_string(graph.get_edge_count()) << '\n';
+        cerr << "Number of non-reference edges: " << to_string(graph.get_edge_count()-n_reference_edges) << '\n';
+        cerr << "Number of chrA-chrB edges: " << to_string(get_n_interchromosomal_edges()) << '\n';
+        cerr << "Number of chr-INS edges: " << to_string(get_n_ins_edges()) << '\n';
+        cerr << "Number of nodes with edges on just one side: " << to_string(get_n_dangling_nodes()) << '\n';
+        unordered_set<nid_t> dangling_nodes;
+        get_dangling_nodes(false,dangling_nodes);
+        print_edge_histograms();
+    }
 
     // Deallocating temporary space. Transforming `insertion_handles` into `insertion_handles_set`.
     chunk_first.clear(); node_handles.clear(); bnd_ids.clear();
@@ -413,6 +422,8 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     // Allocating temporary space: `printed`, `initialized`, `flags`.
     printed.clear(); printed.reserve(n_vcf_records);
     for (i=0; i<n_vcf_records; i++) printed.emplace_back(false);
+    path_names.clear(); path_names.reserve(n_vcf_records);
+    for (i=0; i<n_vcf_records; i++) path_names.emplace_back();
     initialized.clear(); initialized.reserve(n_vcf_records);
     for (i=0; i<n_vcf_records; i++) initialized.emplace_back(false);
     flags.reserve(n_vcf_records);
@@ -606,7 +617,7 @@ vector<string> VariantGraph::load_gfa(const path& gfa_path) {
         buffer.clear();
     }
     instream.close();
-    cerr << "Loaded " << to_string(graph.get_node_count()) << " nodes, " << to_string(graph.get_edge_count()) << " edges, " << to_string(graph.get_path_count()) << " paths from the GFA file.\n";
+    if (!silent) cerr << "Loaded " << to_string(graph.get_node_count()) << " nodes, " << to_string(graph.get_edge_count()) << " edges, " << to_string(graph.get_path_count()) << " paths from the GFA file.\n";
     return node_ids;
 }
 
@@ -651,89 +662,96 @@ void VariantGraph::mark_edge(const edge_t& query, size_t rank, const vector<edge
 }
 
 
+void VariantGraph::for_each_vcf_record_with_supporting_paths(const function<void(size_t id, const VcfRecord& record, const vector<string>& supporting_paths)>& callback) {
+    bool all_present, is_increasing, is_decreasing;
+    size_t i, j;
+    size_t rank, n_edges;
+
+    for (i=0; i<n_vcf_records; i++) printed.at(i)=false;
+    for (i=0; i<n_vcf_records; i++) path_names.at(i).clear();
+    for (i=0; i<n_vcf_records; i++) initialized.at(i)=false;
+    graph.for_each_path_handle([&](path_handle_t path) {
+        step_handle_t from = graph.path_begin(path);  // `graph` breaks circular paths
+        const step_handle_t last = graph.path_back(path);  // `graph` breaks circular paths
+
+        // Initializing `flags`.
+        while (from!=last) {
+            const step_handle_t to = graph.get_next_step(from);
+            const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
+            if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
+            for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) initialized.at(r)=false;
+            from=to;
+        }
+        from=graph.path_begin(path);
+        while (from!=last) {
+            const step_handle_t to = graph.get_next_step(from);
+            const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
+            if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
+            for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
+                if (printed.at(r) || initialized.at(r)) continue;
+                n_edges=vcf_record_to_edge.at(r).size();
+                flags.at(r).clear();
+                for (i=0; i<n_edges; i++) flags.at(r).emplace_back(0);
+                initialized.at(r)=true;
+            }
+            from=to;
+        }
+
+        // Marking `flags`.
+        from=graph.path_begin(path); rank=1;
+        while (from!=last) {
+            const step_handle_t to = graph.get_next_step(from);
+            const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
+            if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; rank++; continue; }
+            for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
+                if (printed.at(r)) continue;
+                mark_edge(canonized_edge,rank,vcf_record_to_edge.at(r),flags.at(r));
+            }
+            from=to; rank++;
+        }
+
+        // Finding supported VCF records
+        from=graph.path_begin(path);
+        while (from!=last) {
+            const step_handle_t to = graph.get_next_step(from);
+            const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
+            if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
+            for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
+                if (printed.at(r)) continue;
+                n_edges=vcf_record_to_edge.at(r).size();
+                all_present=true;
+                for (j=0; j<n_edges; j++) {
+                    if (flags.at(r).at(j)==0) { all_present=false; break; }
+                }
+                if (all_present) {
+                    is_increasing=true; is_decreasing=true;
+                    for (j=1; j<n_edges; j++) {
+                        if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
+                        if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
+                    }
+                    if (is_increasing || is_decreasing) {
+                        printed.at(r)=true;
+                        path_names.at(r).emplace_back(graph.get_path_name(path));
+                    }
+                }
+            }
+            from=to;
+        }
+    });
+
+    for (i=0; i<n_vcf_records; i++) callback(i,vcf_records.at(i),path_names.at(i));
+}
+
+
 void VariantGraph::print_supported_vcf_records(ofstream& supported, ofstream& unsupported, bool print_all_records, const vector<string>& callers) {
     const size_t N_CALLERS = callers.size();
-    bool all_present, is_increasing, is_decreasing;
-    size_t i, j, k;
-    size_t rank, n_edges;
+    size_t i, j;
     vector<vector<size_t>> caller_count;
 
-    if (print_all_records) {
-        for (i=0; i<n_vcf_records; i++) printed.at(i)=true;
-    }
-    else {
-        for (i=0; i<n_vcf_records; i++) printed.at(i)=false;
-        for (i=0; i<n_vcf_records; i++) initialized.at(i)=false;
-        graph.for_each_path_handle([&](path_handle_t path) {
-            step_handle_t from = graph.path_begin(path);  // `graph` breaks circular paths
-            const step_handle_t last = graph.path_back(path);  // `graph` breaks circular paths
-
-            // Initializing `flags`.
-            while (from!=last) {
-                const step_handle_t to = graph.get_next_step(from);
-                const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
-                if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
-                for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) initialized.at(r)=false;
-                from=to;
-            }
-            from=graph.path_begin(path);
-            while (from!=last) {
-                const step_handle_t to = graph.get_next_step(from);
-                const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
-                if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
-                for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
-                    if (printed.at(r) || initialized.at(r)) continue;
-                    n_edges=vcf_record_to_edge.at(r).size();
-                    flags.at(r).clear();
-                    for (i=0; i<n_edges; i++) flags.at(r).emplace_back(0);
-                    initialized.at(r)=true;
-                }
-                from=to;
-            }
-
-            // Marking `flags`.
-            from=graph.path_begin(path); rank=1;
-            while (from!=last) {
-                const step_handle_t to = graph.get_next_step(from);
-                const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
-                if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; rank++; continue; }
-                for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
-                    if (printed.at(r)) continue;
-                    mark_edge(canonized_edge,rank,vcf_record_to_edge.at(r),flags.at(r));
-                }
-                from=to; rank++;
-            }
-
-            // Finding supported VCF records
-            from=graph.path_begin(path);
-            while (from!=last) {
-                const step_handle_t to = graph.get_next_step(from);
-                const edge_t canonized_edge = graph.edge_handle(graph.get_handle_of_step(from),graph.get_handle_of_step(to));
-                if (!edge_to_vcf_record.contains(canonized_edge)) { from=to; continue; }
-                for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
-                    if (printed.at(r)) continue;
-                    n_edges=vcf_record_to_edge.at(r).size();
-                    all_present=true;
-                    for (j=0; j<n_edges; j++) {
-                        if (flags.at(r).at(j)==0) { all_present=false; break; }
-                    }
-                    if (all_present) {
-                        is_increasing=true; is_decreasing=true;
-                        for (j=1; j<n_edges; j++) {
-                            if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
-                            if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
-                        }
-                        if (is_increasing || is_decreasing) printed.at(r)=true;
-                    }
-                }
-                from=to;
-            }
-        });
-    }
     for (i=0; i<N_CALLERS; i++) caller_count.emplace_back(vector<size_t> {0,0,0,0,0});
-    for (i=0; i<n_vcf_records; i++) {
-        VcfRecord& record = vcf_records.at(i);
-        if (printed.at(i)) {
+    if (print_all_records) {
+        for (i=0; i<n_vcf_records; i++) {
+            VcfRecord& record = vcf_records.at(i);
             record.print(supported); supported << '\n';
             if (!callers.empty()) {
                 if (record.sv_type==VcfReader::TYPE_INSERTION) increment_caller_count(record,callers,caller_count,0);
@@ -743,13 +761,27 @@ void VariantGraph::print_supported_vcf_records(ofstream& supported, ofstream& un
                 else if (record.sv_type==VcfReader::TYPE_BREAKEND) increment_caller_count(record,callers,caller_count,4);
             }
         }
-        else { record.print(unsupported); unsupported << '\n'; }
     }
-    if (!callers.empty()) {
+    else {
+        for_each_vcf_record_with_supporting_paths([&](size_t id, const VcfRecord& record, const vector<string>& supporting_paths) {
+            if (supporting_paths.empty()) { record.print(unsupported); unsupported << '\n'; }
+            else {
+                record.print(supported); supported << '\n';
+                if (!callers.empty()) {
+                    if (record.sv_type==VcfReader::TYPE_INSERTION) increment_caller_count(record,callers,caller_count,0);
+                    else if (record.sv_type==VcfReader::TYPE_DUPLICATION) increment_caller_count(record,callers,caller_count,1);
+                    else if (record.sv_type==VcfReader::TYPE_DELETION) increment_caller_count(record,callers,caller_count,2);
+                    else if (record.sv_type==VcfReader::TYPE_INVERSION) increment_caller_count(record,callers,caller_count,3);
+                    else if (record.sv_type==VcfReader::TYPE_BREAKEND) increment_caller_count(record,callers,caller_count,4);
+                }
+            }
+        });
+    }
+    if (!silent && !callers.empty()) {
         cerr << "Histogram: Caller | #INS printed | #DUP printed | #DEL printed | #INV printed | #BND printed\n";
         for (i=0; i<caller_count.size(); i++) {
             cerr << callers.at(i);
-            for (k=0; k<caller_count.at(i).size(); k++) cerr << ',' << to_string(caller_count.at(i).at(k));
+            for (j=0; j<caller_count.at(i).size(); j++) cerr << ',' << to_string(caller_count.at(i).at(j));
             cerr << '\n';
         }
     }
