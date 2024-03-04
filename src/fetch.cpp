@@ -116,11 +116,11 @@ void update_coord(
 /**
  *
  * @param authenticator
- * @param authenticator_mutex
- * @param sample_to_region_reads : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
- * @param sample_name
- * @param subregions
- * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param sample_to_region_reads must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
+ * @param sample_name any unique name that identifies the sample from which the reads are derived
+ * @param subregions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
+ * @param require_spanning any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
  * @param bam_path
  */
 void extract_subregions_from_sample(
@@ -129,7 +129,8 @@ void extract_subregions_from_sample(
         const string& sample_name,
         const vector<Region>& subregions,
         bool require_spanning,
-        path bam_path
+        bool force_forward,
+        const path& bam_path
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
@@ -259,14 +260,14 @@ void extract_subregions_from_sample(
 
 //                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
-                if (coords.is_reverse) {
+                if (coords.is_reverse and force_forward) {
                     auto s = query_sequences[name].substr(i, l);
                     reverse_complement(s);
 
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s, true);
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s);
                 }
                 else{
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l), false);
+                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l));
                 }
             }
         }
@@ -468,16 +469,26 @@ void extract_flanked_subregion_coords_from_sample(
                 // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
-                    // Append the three intervals that account for inner/outer flank boundaries
                     auto inner_left = r.start + flank_length;
                     auto inner_right = r.stop - flank_length;
 
-                    ref_intervals.emplace_back(r.start, inner_left);
-                    ref_intervals.emplace_back(inner_left, inner_right);
-                    ref_intervals.emplace_back(inner_right, r.stop);
+                    if (flank_length > 0) {
+                        // Append the intervals that account for inner/outer flank boundaries
+                        ref_intervals.emplace_back(r.start, inner_left);
+                        ref_intervals.emplace_back(inner_left, inner_right);
+                        ref_intervals.emplace_back(inner_right, r.stop);
+                    }
+                    else if (flank_length == 0){
+                        ref_intervals.emplace_back(inner_left, inner_right);
+                    }
+                    else{
+                        throw runtime_error("ERROR: flank length cannot be negative: " + to_string(flank_length));
+                    }
 
-                    if (inner_left > inner_right){
-                        throw runtime_error("ERROR: inner left flank bound exceeds inner right flank bound: " + to_string(inner_left) + "," + to_string(inner_right) + " for read " + name);
+                    if (inner_left > inner_right) {
+                        throw runtime_error("ERROR: inner left flank bound exceeds inner right flank bound: " +
+                                            to_string(inner_left) + "," + to_string(inner_right) + " for read " +
+                                            name);
                     }
 
                     // Find/or create coords for this region
@@ -563,6 +574,7 @@ void extract_subsequences_from_sample_thread_fn(
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
         bool require_spanning,
+        bool force_forward,
         atomic<size_t>& job_index
 ){
 
@@ -579,6 +591,7 @@ void extract_subsequences_from_sample_thread_fn(
                 sample_name,
                 regions,
                 require_spanning,
+                force_forward,
                 bam_path
         );
 
@@ -630,7 +643,8 @@ void get_reads_for_each_bam_subregion(
         sample_region_read_map_t& sample_to_region_reads,
         path bam_csv,
         int64_t n_threads,
-        bool require_spanning
+        bool require_spanning,
+        bool force_forward
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -668,6 +682,7 @@ void get_reads_for_each_bam_subregion(
                     std::cref(sample_bams),
                     std::cref(regions),
                     std::ref(require_spanning),
+                    std::ref(force_forward),
                     std::ref(job_index)
             );
         } catch (const exception& e) {
@@ -750,9 +765,10 @@ void fetch_reads(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
-        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps,
-        bool append_sample_to_read
+        bool require_spanning,
+        bool append_sample_to_read,
+        bool force_forward
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -768,7 +784,8 @@ void fetch_reads(
             sample_to_region_reads,
             bam_csv,
             n_threads,
-            require_spanning
+            require_spanning,
+            force_forward
     );
 
     // Construct template transmap with only samples
@@ -807,7 +824,7 @@ void fetch_reads(
                     s.name += + "_" + sample_name;
                 }
 
-                transmap.add_read_with_move(s.name, s.sequence, s.is_reverse);
+                transmap.add_read_with_move(s.name, s.sequence);
                 transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
             }
         }
@@ -904,16 +921,31 @@ void fetch_query_seqs_for_each_sample(
 }
 
 
+/**
+ *
+ * @param t for printing fetch time per BAM
+ * @param regions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
+ * @param bam_csv
+ * @param n_threads
+ * @param max_length skip excessively long reads, greater than this threshold (useful for supplementaries, fragmented alignments)
+ * @param flank_length length of sequence that is considered flanking, and to be tracked in Transmaps as additional
+ * data. The query coordinates corresponding to the inner flank bounds are stored.
+ * @param region_transmaps
+ * @param require_spanning for any read to be fetched it must, among all its alignments, cover the left and right bounds
+ * @param append_sample_to_read if true, attempt to force unique read names by using their sample name as a suffix
+ * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ */
 void fetch_reads_from_clipped_bam(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
-        int32_t interval_max_length,
+        int32_t max_length,
         int32_t flank_length,
-        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps,
-        bool append_sample_to_read
+        bool require_spanning,
+        bool append_sample_to_read,
+        bool force_forward
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -976,8 +1008,6 @@ void fetch_reads_from_clipped_bam(
         item.reserve_sequences(n_reads + 2);
     }
 
-    auto max_hap_length = size_t(float(interval_max_length) * 2.5);
-
     // Move the downloaded data into a transmap, construct edges for sample->read
     for (auto& [sample_name,item]: sample_to_region_coords){
         for (auto& [region,named_coords]: item){
@@ -999,8 +1029,8 @@ void fetch_reads_from_clipped_bam(
                     throw runtime_error("ERROR: invalid query coords: " + region.to_string() + " " + name + " " + to_string(outer_coord.query_start) + "," + to_string(outer_coord.query_stop));
                 }
 
-                if (l_inner > max_hap_length or l_left > max_hap_length or l_right > max_hap_length or l > max_hap_length){
-                    cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name + " longer than " + to_string(max_hap_length) + " in window " + region.to_string() << '\n';
+                if (l_inner > max_length or l_left > max_length or l_right > max_length or l > max_length){
+                    cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name + " longer than " + to_string(max_length) + " in window " + region.to_string() << '\n';
                     continue;
                 }
 
@@ -1016,7 +1046,7 @@ void fetch_reads_from_clipped_bam(
                 inner_coord.query_start -= outer_coord.query_start;
                 inner_coord.query_stop -= outer_coord.query_start;
 
-                if (outer_coord.is_reverse) {
+                if (outer_coord.is_reverse and force_forward) {
                     reverse_complement(s);
 
                     // Reorient inner coordinates also

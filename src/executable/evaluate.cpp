@@ -616,16 +616,19 @@ void evaluate(
     // The container to store all fetched reads and their relationships to samples/paths
     unordered_map<Region,TransMap> region_transmaps;
 
+    auto max_length = size_t(float(interval_max_length) * 2.5);
+
     fetch_reads_from_clipped_bam(
             t,
             regions,
             bam_csv,
             n_threads,
-            interval_max_length,
+            max_length,
             flank_length,
-            true,
             region_transmaps,
-            force_unique_reads
+            true,
+            force_unique_reads,
+            false
     );
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';

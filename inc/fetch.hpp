@@ -41,7 +41,7 @@ using std::ref;
 
 namespace sv_merge{
 
-using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<StrandedSequence> > >;
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
 using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
 using sample_region_flanked_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, pair<CigarInterval,CigarInterval> > > > >;
 
@@ -51,9 +51,10 @@ void fetch_reads(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
-        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps,
-        bool append_sample_to_read = false
+        bool require_spanning,
+        bool append_sample_to_read = false,
+        bool force_forward = false
 );
 
 
@@ -62,11 +63,12 @@ void fetch_reads_from_clipped_bam(
         vector<Region>& regions,
         path bam_csv,
         int64_t n_threads,
-        int32_t interval_max_length,
+        int32_t max_length,
         int32_t flank_length,
-        bool require_spanning,
         unordered_map<Region,TransMap>& region_transmaps,
-        bool append_sample_to_read = false
+        bool require_spanning,
+        bool append_sample_to_read = false,
+        bool force_forward = false
 );
 
 
