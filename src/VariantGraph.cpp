@@ -743,6 +743,20 @@ void VariantGraph::for_each_vcf_record_with_supporting_paths(const function<void
 }
 
 
+void VariantGraph::add_gaf_path_to_graph(const string& alignment_name, const vector <pair<string,bool> >& path){
+    // Create a new path in the variant graph
+    auto p = graph.create_path_handle(alignment_name);
+
+    // Iterate the path steps and append each step to the prev step
+    for (const auto& [step_name, is_reverse]: path){
+        // Convert GAF name string back into nid, and construct handle of correct orientation
+        nid_t id = stoll(step_name);
+        auto h = graph.get_handle(id,is_reverse);
+        graph.append_step(p,h);
+    }
+}
+
+
 void VariantGraph::print_supported_vcf_records(ofstream& supported, ofstream& unsupported, bool print_all_records, const vector<string>& callers) {
     const size_t N_CALLERS = callers.size();
     size_t i, j;

@@ -127,6 +127,13 @@ public:
     vector<string> load_gfa(const path& gfa_path);
 
     /**
+     * Helper function to construct an internal BDSG graph path using GAF path convention
+     * @param alignment_name name which must be unique to all other paths
+     * @param path a vector of node names and reversals
+     */
+    void add_gaf_path_to_graph(const string& alignment_name, const vector <pair<string,bool> >& path);
+
+    /**
      * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a
      * sequence of non-reference edges. The procedure writes to a file every R such that there is a (possibly circular)
      * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse. The procedure

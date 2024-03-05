@@ -599,6 +599,7 @@ set(EXECUTABLES
         analyze_evaluation
         find_windows
         evaluate
+        annotate
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
