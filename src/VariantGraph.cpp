@@ -222,12 +222,12 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             }
         }
     }
+    for (auto& [chromosome,first_positions]: chunk_first_raw) sort_and_compact_positions(first_positions);
     if (!silent) {
         cerr << "Table: Chromosome involved | N. distinct breakpoints\n";
         for (auto& [chromosome,first_positions]: chunk_first_raw) {
             const uint32_t n_breakpoints = first_positions.size();
             if (n_breakpoints==0) continue;
-            sort_and_compact_positions(first_positions);
             cerr << chromosome << ": ";
             for (const auto& position: first_positions) cerr << std::to_string(position) << ',';
             cerr << '\n';
