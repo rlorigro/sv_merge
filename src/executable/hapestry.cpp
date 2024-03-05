@@ -83,6 +83,7 @@ void hapestry(
         int32_t interval_max_length,
         int32_t flank_length,
         int32_t n_threads,
+        bool force_unique_reads,
         bool debug
         ){
 
@@ -134,7 +135,16 @@ void hapestry(
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
-    fetch_reads(t, regions, bam_csv, n_threads, false, region_transmaps);
+    fetch_reads(
+            t,
+            regions,
+            bam_csv,
+            n_threads,
+            region_transmaps,
+            true,
+            force_unique_reads,
+            false
+    );
 
 //    throw runtime_error("DEBUG");
 
@@ -228,6 +238,7 @@ int main (int argc, char* argv[]){
     int32_t flank_length;
     int32_t n_threads = 1;
     bool debug = false;
+    bool force_unique_reads = false;
 
     CLI::App app{"App description"};
 
@@ -277,6 +288,8 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
+    app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
+
     CLI11_PARSE(app, argc, argv);
 
     hapestry(
@@ -289,6 +302,7 @@ int main (int argc, char* argv[]){
         interval_max_length,
         flank_length,
         n_threads,
+        force_unique_reads,
         debug
     );
 
