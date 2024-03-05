@@ -91,7 +91,7 @@ VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_q
 
 VcfReader::VcfReader(const path& vcf_path) {
     this->vcf_path=vcf_path;
-    progress_n_lines=10000;
+    progress_n_lines=0;
     high_qual_only=false;
     min_qual=0.0;
     pass_only=false;
