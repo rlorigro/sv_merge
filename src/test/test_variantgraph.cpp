@@ -1170,7 +1170,9 @@ int main(int argc, char* argv[]) {
         vector<VcfRecord> records_prime = records;
         std::shuffle(std::begin(records_prime),std::end(records_prime),rng);
         if (!graph.would_graph_be_nontrivial(records_prime)) throw runtime_error("would_graph_be_nontrivial() failed on non-emtpy VCF records");
+cerr << "VITTU> 1\n";
         graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
+cerr << "VITTU> 2\n";
 
         cerr << "Testing print_supported_vcf_records() (all records)...\n";
         ofstream truth_vcf(TRUTH_VCF.string());

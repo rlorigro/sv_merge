@@ -158,6 +158,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     pair<int32_t,int32_t> tmp_pair;
     handle_t previous_handle;
 
+cerr << "build> 1\n";
     // Collecting every distinct first position of a reference node, and building all non-reference nodes.
     // Remark: it can happen that the list of first positions of a chromosome contains the position right after the last
     // position of the chromosome (e.g. if there is a BND that connects the ends of two chromosomes, or if there is an
@@ -235,6 +236,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         }
         cerr << "Number of non-reference nodes: " << insertion_handles.size() << '\n';
     }
+cerr << "build> 2\n";
 
     // Building all reference nodes and all reference edges, taking into account the tandem repeat track and the
     // flanking requirements.
@@ -323,6 +325,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         }
         cerr << "Number of reference edges: " << n_reference_edges << '\n';
     }
+cerr << "build> 3\n";
 
     // Building all non-reference edges
     vcf_record_to_edge.reserve(n_vcf_records);
@@ -334,6 +337,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         VcfRecord& record = vcf_records.at(i);
         record.get_reference_coordinates(false,tmp_pair);
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
+record.print(cerr);
         if (tmp_pair.first!=tmp_pair.second) {
             s=find_closest(main_chromosome,tmp_pair.first);
             t=find_closest(main_chromosome,tmp_pair.second);
@@ -375,18 +379,31 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                         orientation_cis=record.get_breakend_orientation_cis();
                         const handle_t& handle_from = orientation_cis==1?handles.at(find_closest(main_chromosome,tmp_pair.first+1)-1):graph.flip(handles.at(find_closest(main_chromosome,tmp_pair.first)));
                         if (is_bnd_single==2) {
+cerr << "build> 3.10\n";
                             record.get_breakend_chromosome(tmp_buffer);
+cerr << "build> 3.11\n";
                             trans_pos=record.get_breakend_pos()-1;
+cerr << "build> 3.12\n";
                             orientation_trans=record.get_breakend_orientation_trans();
+cerr << "build> 3.13  tmp_buffer=" << tmp_buffer << "  trans_pos=" << to_string(trans_pos) << " orientation_trans=" << to_string(orientation_trans) << " find_closest=" << to_string(find_closest(tmp_buffer,trans_pos+1)) << " node_handles has " << to_string(node_handles.at(tmp_buffer).size()) << " elements" << "\n";
+cerr << "Element at zero: " << to_string(graph.get_id(node_handles.at(tmp_buffer).at(0))) << '\n';
                             const handle_t& handle_to = orientation_trans==1?graph.flip(node_handles.at(tmp_buffer).at(find_closest(tmp_buffer,trans_pos+1)-1)):node_handles.at(tmp_buffer).at(find_closest(tmp_buffer,trans_pos));
+cerr << "build> 3.14\n";
                             record.get_breakend_inserted_sequence(tmp_buffer);
-                            if (tmp_buffer.empty()) add_nonreference_edge(handle_from,handle_to,i);
+cerr << "build> 3.15\n";
+                            if (tmp_buffer.empty()) {
+cerr << "build> 3.16\n";
+                                add_nonreference_edge(handle_from,handle_to,i);
+                            }
                             else {
+cerr << "build> 3.17\n";
                                 const handle_t& insertion_handle = orientation_cis==1?insertion_handles.at(j):graph.flip(insertion_handles.at(j));
                                 add_nonreference_edge(handle_from,insertion_handle,i);
                                 add_nonreference_edge(insertion_handle,handle_to,i);
                                 j++;
+cerr << "build> 3.18\n";
                             }
+cerr << "build> 3.19\n";
                         }
                         else {
                             record.get_breakend_inserted_sequence(tmp_buffer);
@@ -399,6 +416,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             }
         }
     }
+cerr << "build> 3.5\n";
     if (!silent) {
         cerr << "Total number of edges: " << to_string(graph.get_edge_count()) << '\n';
         cerr << "Number of non-reference edges: " << to_string(graph.get_edge_count()-n_reference_edges) << '\n';
@@ -409,6 +427,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         get_dangling_nodes(false,dangling_nodes);
         print_edge_histograms();
     }
+cerr << "build> 4\n";
 
     // Deallocating temporary space. Transforming `insertion_handles` into `insertion_handles_set`.
     chunk_first.clear(); node_handles.clear(); bnd_ids.clear();
@@ -418,6 +437,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     if (deallocate_ref_alt) {  // Deallocating REF and ALT
         for (auto& record: vcf_records) { record.ref.clear(); record.alt.clear(); }
     }
+cerr << "build> 5\n";
 
     // Allocating temporary space: `printed`, `initialized`, `flags`.
     printed.clear(); printed.reserve(n_vcf_records);
@@ -429,6 +449,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     flags.reserve(n_vcf_records);
     for (i=flags.size(); i<n_vcf_records; i++) flags.emplace_back();
     for (i=0; i<n_vcf_records; i++) flags.at(i).reserve(vcf_record_to_edge.at(i).size());
+cerr << "build> 6\n";
 }
 
 
