@@ -159,6 +159,7 @@ void GoogleAuthenticator::update() {
 
         if (result == nullptr or error_code != 0) {
             cerr << "error_code: " << error_code << '\n';
+            m.unlock();
             throw runtime_error("ERROR: environment variable not set");
         } else {
             env = result;
@@ -167,6 +168,7 @@ void GoogleAuthenticator::update() {
         n_retries++;
 
         if (n_retries >= 5){
+            m.unlock();
             throw runtime_error("ERROR: authentication failed after " + to_string(n_retries) + " retries");
         }
 
