@@ -123,11 +123,10 @@ int64_t get_remaining_seconds(const string& token){
 
 
 void GoogleAuthenticator::update() {
-    m.lock();
+    std::lock_guard<std::mutex> lock(m);
 
     // Don't bother querying the info server if we aren't withing 60 seconds of the expiration
     if (get_current_time() < expiration - seconds(60)){
-        m.unlock();
         return;
     }
 
@@ -159,7 +158,6 @@ void GoogleAuthenticator::update() {
 
         if (result == nullptr or error_code != 0) {
             cerr << "error_code: " << error_code << '\n';
-            m.unlock();
             throw runtime_error("ERROR: environment variable not set");
         } else {
             env = result;
@@ -168,7 +166,6 @@ void GoogleAuthenticator::update() {
         n_retries++;
 
         if (n_retries >= 5){
-            m.unlock();
             throw runtime_error("ERROR: authentication failed after " + to_string(n_retries) + " retries");
         }
 
@@ -182,8 +179,6 @@ void GoogleAuthenticator::update() {
             delay_sec *= 2;
         }
     }
-
-    m.unlock();
 }
 
 
