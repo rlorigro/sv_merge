@@ -26,6 +26,7 @@ using std::filesystem::create_directories;
 #include <thread>
 #include <limits>
 
+using std::sleep_for;
 using std::numeric_limits;
 using std::unordered_map;
 using std::runtime_error;
@@ -274,6 +275,7 @@ void compute_graph_evaluation_thread_fn(
         }
 
         out_file << "##INFO=<ID=HAPESTRY_COV,Number=3,Type=.,Description=\"Coverage computed by hapestry of the form [forward_coverage, reverse_coverage, window_coverage]\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        vcf_reader.print_minimal_header(out_file);
         variant_graph.for_each_vcf_record_with_supporting_paths([&](size_t id, const VcfRecord& record, const vector<string>& supporting_paths){
             // Construct a simple summary of read alignments of the form:
             // [forward_coverage, reverse_coverage, window_coverage]
@@ -403,7 +405,6 @@ void compute_graph_evaluation(
 
 void annotate(
         vector<path>& vcfs,
-        path cluster_by,
         path output_dir,
         path windows_bed,                // Override the interval graph if this is provided
         path tandem_bed,
@@ -422,7 +423,6 @@ void annotate(
     tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
     bam_csv = std::filesystem::weakly_canonical(bam_csv);
     ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
-    cluster_by = std::filesystem::weakly_canonical(cluster_by);
 
     for (auto& v: vcfs){
         v = std::filesystem::weakly_canonical(v);
@@ -433,10 +433,6 @@ void annotate(
     }
     else{
         std::filesystem::create_directories(output_dir);
-    }
-
-    if (std::find(vcfs.begin(), vcfs.end(), cluster_by) == vcfs.end()){
-        throw runtime_error("ERROR: --cluster_by parameter must match one of the paths provided by --vcfs");
     }
 
     cerr << t << "Initializing" << '\n';
@@ -569,6 +565,7 @@ void annotate(
     }
 
     if (debug){
+        sleep_for(seconds(60));
         throw runtime_error("DEBUG EARLY EXIT");
     }
 
@@ -580,11 +577,6 @@ void annotate(
     for (const auto& vcf: vcfs){
         cerr << "Generating graph alignments for VCF: " << vcf << '\n';
 
-        bool cluster = (cluster_by == vcf);
-        if (cluster){
-            cerr << "Is cluster VCF" << '\n';
-        }
-
         compute_graph_evaluation(
                 contig_interval_trees,
                 contig_tandems,
@@ -595,7 +587,7 @@ void annotate(
                 n_threads,
                 flank_length,
                 interval_max_length,
-                cluster,
+                false,
                 staging_dir
         );
     }
@@ -610,7 +602,6 @@ int main (int argc, char* argv[]){
     path tandem_bed;
     string bam_csv;
     path ref_fasta;
-    path cluster_by;
     string vcfs_string;
     int32_t flank_length = 150;
     int32_t interval_max_length = 15000;
@@ -651,12 +642,6 @@ int main (int argc, char* argv[]){
             ->delimiter(',');
 
     app.add_option(
-            "--cluster_by",
-            cluster_by,
-            "Simple headerless CSV file with the format [sample_name],[hap_name],[bam_path]")
-            ->required();
-
-    app.add_option(
             "--bam_csv",
             bam_csv,
             "Simple headerless CSV file with the format [sample_name],[hap_name],[bam_path]")
@@ -692,7 +677,6 @@ int main (int argc, char* argv[]){
 
     annotate(
         vcfs,
-        cluster_by,
         output_dir,
         windows_bed,
         tandem_bed,
