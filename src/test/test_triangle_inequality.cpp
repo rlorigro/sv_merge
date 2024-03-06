@@ -1,5 +1,5 @@
 #include "TransitiveMap.hpp"
-#include "HeteroGraph.hpp"
+#include "VectorHeteroGraph.hpp"
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 using sv_merge::HeteroNode;

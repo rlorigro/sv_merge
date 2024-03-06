@@ -1,6 +1,6 @@
 #pragma once
 
-#include "HeteroGraph.hpp"
+#include "VectorHeteroGraph.hpp"
 #include "misc.hpp"
 
 #include <unordered_map>
