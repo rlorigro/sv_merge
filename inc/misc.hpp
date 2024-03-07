@@ -44,6 +44,7 @@ void run_command(string& command, path output_path);
 
 void run_command(string& command, bool redirect_stderr=true);
 
+uint64_t get_peak_memory_usage();
 
 /**
  * Run a command with a timeout

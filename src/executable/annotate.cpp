@@ -565,6 +565,7 @@ void annotate(
     }
 
     if (debug){
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
         sleep_for(seconds(60));
         throw runtime_error("DEBUG EARLY EXIT");
     }

@@ -12,6 +12,7 @@ using std::chrono::seconds;
 using std::chrono::hours;
 using std::to_string;
 using std::ofstream;
+using std::ifstream;
 using std::string;
 using std::cerr;
 using std::cout;
@@ -138,6 +139,32 @@ bool run_command(string command, bool redirect_stderr, float timeout){
     }
 
     return true;
+}
+
+
+uint64_t get_peak_memory_usage() {
+    uint64_t peakMemoryUsage = 0ULL;
+
+    ifstream procStats("/proc/self/status");
+    if (procStats) {
+        string line;
+        while (std::getline(procStats, line)) {
+            if (string::npos == line.find("VmPeak")) {
+                continue;
+            }
+            size_t pos = line.find(":");
+            while (pos < line.size() && !isdigit(line[pos])) {
+                pos++;
+            }
+            char* end;
+            peakMemoryUsage = std::strtoull(line.c_str() + pos, &end, 10);
+            // Convert from kB to bytes.
+            peakMemoryUsage *= 1024;
+            break;
+        }
+    }
+
+    return peakMemoryUsage;
 }
 
 
