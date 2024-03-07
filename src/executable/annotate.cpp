@@ -165,7 +165,6 @@ void compute_graph_evaluation_thread_fn(
         const VcfReader& vcf_reader,
         const path& output_dir,
         int32_t flank_length,
-        bool cluster,
         atomic<size_t>& job_index
 ){
     // TODO: finish implementing tandem track as a user input
@@ -184,15 +183,14 @@ void compute_graph_evaluation_thread_fn(
         const auto& region = regions.at(i);
         const auto& transmap = region_transmaps.at(region);
 
-        path input_subdir = output_dir / region.to_unflanked_string('_', flank_length);
-        path output_subdir = output_dir / region.to_unflanked_string('_', flank_length) / vcf_name_prefix;
+        path subdir = output_dir / region.to_unflanked_string('_', flank_length);
 
         auto records = region_records.at(region);
 
-        create_directories(output_subdir);
+        create_directories(subdir);
 
-        path gfa_path = output_subdir / "graph.gfa";
-        path fasta_filename = input_subdir / "haplotypes.fasta";
+        path gfa_path = subdir / "graph.gfa";
+        path fasta_filename = subdir / "haplotypes.fasta";
 
         VariantGraph variant_graph(ref_sequences, contig_tandems);
 
@@ -201,7 +199,6 @@ void compute_graph_evaluation_thread_fn(
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
         }
         else{
-            cerr << "TRIVIAL REGION: " + region.to_unflanked_string('_', flank_length) << '\n';
             // VariantGraph assumes that the flank length needs to be added to the region
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
         }
@@ -209,11 +206,11 @@ void compute_graph_evaluation_thread_fn(
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
         variant_graph.to_gfa(gfa_path);
 
-        path gaf_path = output_subdir / "alignments.gaf";
+        path gaf_path = subdir / "alignments.gaf";
 
         auto name_prefix = get_vcf_name_prefix(vcf);
 
-        path fasta_path = input_subdir / fasta_filename;
+        path fasta_path = subdir / fasta_filename;
 
         string command = "GraphAligner"
                   " -x " "vg"
@@ -228,7 +225,7 @@ void compute_graph_evaluation_thread_fn(
         bool success = run_command(command, false, 90);
         string time_csv = t.to_csv();
 
-        write_time_log(input_subdir, vcf_name_prefix, time_csv, success);
+        write_time_log(subdir, vcf_name_prefix, time_csv, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
@@ -268,7 +265,7 @@ void compute_graph_evaluation_thread_fn(
             c++;
         });
 
-        path output_path = output_subdir / "annotated.vcf";
+        path output_path = subdir / "annotated.vcf";
         ofstream out_file(output_path);
         if (not out_file.is_open() or not out_file.good()){
             throw runtime_error("ERROR: file could not be written: " + output_path.string());
@@ -312,7 +309,6 @@ void compute_graph_evaluation(
         size_t n_threads,
         int32_t flank_length,
         int32_t interval_max_length,
-        bool cluster,
         const path& output_dir
         ){
 
@@ -387,7 +383,6 @@ void compute_graph_evaluation(
                                      std::cref(vcf_reader),
                                      std::cref(output_dir),
                                      flank_length,
-                                     cluster,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -404,7 +399,7 @@ void compute_graph_evaluation(
 
 
 void annotate(
-        vector<path>& vcfs,
+        path vcf,
         path output_dir,
         path windows_bed,                // Override the interval graph if this is provided
         path tandem_bed,
@@ -423,10 +418,7 @@ void annotate(
     tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
     bam_csv = std::filesystem::weakly_canonical(bam_csv);
     ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
-
-    for (auto& v: vcfs){
-        v = std::filesystem::weakly_canonical(v);
-    }
+    vcf = std::filesystem::weakly_canonical(vcf);
 
     if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
@@ -461,7 +453,7 @@ void annotate(
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
         path bed_log_path = output_dir / "windows_omitted.bed";
-        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, vcfs, flank_length, interval_max_length, regions, bed_log_path);
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, regions, bed_log_path);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
@@ -523,12 +515,13 @@ void annotate(
                 flank_length,
                 region_transmaps,
                 true,
+                true,
                 force_unique_reads,
                 false
         );
     }
 
-    cerr << t << "Aligning sequences to variant graphs" << '\n';
+    cerr << t << "Writing sequences to disk" << '\n';
 
     path fasta_filename = "haplotypes.fasta";
     path staging_dir = output_dir;
@@ -575,24 +568,48 @@ void annotate(
     // TODO: create option to use /dev/shm/ as staging dir
     // Absolutely must delete the /dev/shm/ copy or warn the user at termination
     //
-    for (const auto& vcf: vcfs){
-        cerr << "Generating graph alignments for VCF: " << vcf << '\n';
+    cerr << "Generating graph alignments for VCF: " << vcf << '\n';
 
-        compute_graph_evaluation(
-                contig_interval_trees,
-                contig_tandems,
-                region_transmaps,
-                ref_sequences,
-                regions,
-                vcf,
-                n_threads,
-                flank_length,
-                interval_max_length,
-                false,
-                staging_dir
-        );
+    compute_graph_evaluation(
+            contig_interval_trees,
+            contig_tandems,
+            region_transmaps,
+            ref_sequences,
+            regions,
+            vcf,
+            n_threads,
+            flank_length,
+            interval_max_length,
+            staging_dir
+    );
+
+    auto vcf_prefix = get_vcf_name_prefix(vcf);
+    path out_vcf = output_dir / (vcf_prefix + "_annotated.vcf");
+    ofstream out_file(out_vcf);
+
+    if (not (out_file.is_open() and out_file.good())){
+        throw runtime_error("ERROR: could not write BED log file: " + out_vcf.string());
     }
 
+    for (size_t i=0; i<regions.size(); i++){
+        const auto& region = regions[i];
+        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "annotated.vcf";
+
+        ifstream file(sub_vcf);
+        string line;
+        while (getline(file, line)){
+            if (line.starts_with('#')){
+                if (i == 0){
+                    out_file << line << '\n';
+                }
+            }
+            else{
+                out_file << line << '\n';
+            }
+        }
+    }
+
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
     cerr << t << "Done" << '\n';
 }
 
@@ -603,7 +620,7 @@ int main (int argc, char* argv[]){
     path tandem_bed;
     string bam_csv;
     path ref_fasta;
-    string vcfs_string;
+    path vcf;
     int32_t flank_length = 150;
     int32_t interval_max_length = 15000;
     int32_t n_threads = 1;
@@ -636,11 +653,8 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--vcf",
-            vcfs_string,
-            "List of VCFs to evaluate (space-separated)")
-            ->required()
-            ->expected(1,1)
-            ->delimiter(',');
+            vcf,
+            "Path to VCF file containing variants to annotate (must be biallelic/normed)");
 
     app.add_option(
             "--bam_csv",
@@ -674,10 +688,8 @@ int main (int argc, char* argv[]){
 
     app.parse(argc, argv);
 
-    auto vcfs = app.get_option("--vcf")->as<std::vector<path> >();
-
     annotate(
-        vcfs,
+        vcf,
         output_dir,
         windows_bed,
         tandem_bed,

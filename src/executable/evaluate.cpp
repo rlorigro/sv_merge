@@ -345,7 +345,6 @@ void compute_graph_evaluation_thread_fn(
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
         }
         else{
-            cerr << "TRIVIAL REGION: " + region.to_unflanked_string('_', flank_length) << '\n';
             // VariantGraph assumes that the flank length needs to be added to the region
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
         }
@@ -627,6 +626,7 @@ void evaluate(
             flank_length,
             region_transmaps,
             true,
+            true,
             force_unique_reads,
             false
     );
@@ -695,6 +695,7 @@ void evaluate(
         );
     }
 
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
     cerr << t << "Done" << '\n';
 }
 

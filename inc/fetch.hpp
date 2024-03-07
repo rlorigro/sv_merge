@@ -58,6 +58,21 @@ void fetch_reads(
 );
 
 
+/**
+ *
+ * @param t for printing fetch time per BAM
+ * @param regions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
+ * @param bam_csv
+ * @param n_threads
+ * @param max_length skip excessively long reads, greater than this threshold (useful for supplementaries, fragmented alignments)
+ * @param flank_length length of sequence that is considered flanking, and to be tracked in Transmaps as additional
+ * data. The query coordinates corresponding to the inner flank bounds are stored.
+ * @param region_transmaps
+ * @param require_spanning for any read to be fetched it must, among all its alignments, cover the left and right bounds
+ * @param first_only only consider the first read observed for each window in the BAM (for omitting misassemblies in asm-to-ref BAMs)
+ * @param append_sample_to_read if true, attempt to force unique read names by using their sample name as a suffix
+ * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ */
 void fetch_reads_from_clipped_bam(
         Timer& t,
         vector<Region>& regions,
@@ -67,6 +82,7 @@ void fetch_reads_from_clipped_bam(
         int32_t flank_length,
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
+        bool first_only = false,
         bool append_sample_to_read = false,
         bool force_forward = false
 );
