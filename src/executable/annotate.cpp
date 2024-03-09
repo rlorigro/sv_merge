@@ -25,6 +25,8 @@ using std::filesystem::create_directories;
 #include <fstream>
 #include <thread>
 #include <limits>
+#include <cmath>
+#include <tuple>
 
 using std::this_thread::sleep_for;
 using std::numeric_limits;
@@ -36,6 +38,8 @@ using std::ofstream;
 using std::thread;
 using std::atomic;
 using std::mutex;
+using std::log10;
+using std::tuple;
 using std::cerr;
 using std::max;
 using std::min;
@@ -156,6 +160,63 @@ void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bo
 }
 
 
+class VariantSupport{
+public:
+    array<vector<float>,2> identity;
+
+    [[nodiscard]] size_t get_coverage(bool is_reverse) const;
+    void get_identity_distribution(bool is_reverse, array<size_t,4>& result) const;
+    void get_support_string(string& s) const;
+};
+
+
+void VariantSupport::get_support_string(string& s) const{
+    s.clear();
+
+    array<size_t,4> d;
+
+//    s += to_string(get_coverage(false)) + ',';
+//    s += to_string(get_coverage(true)) + ',';
+
+    get_identity_distribution(false, d);
+    s += to_string(d[0]) + ',';
+    s += to_string(d[1]) + ',';
+    s += to_string(d[2]) + ',';
+    s += to_string(d[3]) + ',';
+
+    get_identity_distribution(true, d);
+    s += to_string(d[0]) + ',';
+    s += to_string(d[1]) + ',';
+    s += to_string(d[2]) + ',';
+    s += to_string(d[3]);
+}
+
+
+size_t VariantSupport::get_coverage(bool is_reverse) const{
+    return identity[is_reverse].size();
+}
+
+
+void VariantSupport::get_identity_distribution(bool is_reverse, array<size_t,4>& result) const{
+    result.fill(0);
+    for (auto i: identity[is_reverse]){
+        size_t index = result.size() - 1;
+
+        if (i < 1.0){
+            auto q = -10*log10(1-i);
+
+            // Bin the q value into one of the distribution indexes, with the top bin open ended
+            index = min(result.size()-1, size_t(round(q/10)));
+        }
+        else if (i > 1.0){
+            throw runtime_error("ERROR: identity greater than 1.0 encountered: " + to_string(i));
+        }
+
+        result[index]++;
+    }
+}
+
+
 void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -163,6 +224,7 @@ void compute_graph_evaluation_thread_fn(
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
+        const string& label,
         const path& output_dir,
         int32_t flank_length,
         atomic<size_t>& job_index
@@ -235,11 +297,19 @@ void compute_graph_evaluation_thread_fn(
         }
 
         size_t total_coverage = 0;
+        int32_t variant_flank_length = 50;
+
+        vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
 
         // Update variant graph to contain all the paths of the (SPANNING ONLY) alignments
         unordered_map<string,size_t> counter;
         for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
             auto& path = alignment.get_path();
+            if (path.size() < 2){
+                return;
+            }
+
+            bool path_is_reverse = path.front().second;
 
             nid_t id_front = stoll(path.front().first);
             nid_t id_back = stoll(path.back().first);
@@ -258,7 +328,63 @@ void compute_graph_evaluation_thread_fn(
 
             // Create a unique name and add the path to variant graph
             auto name = alignment.get_query_name() + "_" + to_string(c);
-            variant_graph.add_gaf_path_to_graph(name, path);
+
+            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                unordered_set<edge_t> vcf_edges(edges_of_the_record.begin(), edges_of_the_record.end());
+
+                int32_t total_length = 0;
+                vector<int32_t> lengths;
+                vector<handle_t> handles;
+                for (const auto& [n,is_reverse]: path){
+                    auto h = variant_graph.graph.get_handle(stoll(n), is_reverse);
+                    auto length = int32_t(variant_graph.graph.get_length(h));
+
+                    lengths.emplace_back(length);
+                    handles.emplace_back(h);
+                    total_length += length;
+                }
+
+                int32_t ref_min = total_length + 1;
+                int32_t ref_max = 0;
+                int32_t ref_coord = 0;
+                for (size_t p=0; p < path.size() - 1; p++){
+                    auto h1 = handles[p];
+                    auto h2 = handles[p+1];
+                    auto a_length = lengths[p];
+
+                    // Get forward and reverse edges
+                    edge_t e(h1,h2);
+                    edge_t e2(variant_graph.graph.flip(h2),variant_graph.graph.flip(h1));
+
+                    // Update the ref coord so it is now up to the edge junction
+                    ref_coord += a_length;
+
+                    // If the edge is one of the relevant VCF edges then track min and max
+                    if (vcf_edges.find(e) != vcf_edges.end() or vcf_edges.find(e2) != vcf_edges.end()){
+                        if (ref_coord < ref_min){
+                            ref_min = ref_coord;
+                        }
+                        if (ref_coord > ref_max){
+                            ref_max = ref_coord;
+                        }
+                    }
+                }
+
+                // Compute flanks that are relevant to the variant
+                ref_min = max(0, ref_min - variant_flank_length);
+                ref_max = min(total_length, ref_max + variant_flank_length);
+
+                vector<interval_t> ref_intervals = {{ref_min,ref_max}};
+                vector<interval_t> query_intervals = {};
+
+                AlignmentSummary summary;
+                for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
+                    summary.update(i,true);
+                },{});
+
+                variant_supports[id].identity[path_is_reverse].emplace_back(summary.compute_identity());
+//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << total_length << ',' << ref_min << ',' << ref_max << ',' << summary.compute_identity() << '\n';
+            });
 
             // Increment counter
             total_coverage++;
@@ -271,28 +397,18 @@ void compute_graph_evaluation_thread_fn(
             throw runtime_error("ERROR: file could not be written: " + output_path.string());
         }
 
-        out_file << "##INFO=<ID=HAPESTRY_COV,Number=3,Type=.,Description=\"Coverage computed by hapestry of the form [forward_coverage, reverse_coverage, window_coverage]\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        out_file << "##INFO=<ID=" + label + ",Number=3,Type=.,Description=\"Coverage computed by hapestry of the form [window_coverage, forward_0q, forward_10q, forward_20q, forward_30q, reverse_0q, reverse_10q, reverse_20q, reverse_30q]\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         vcf_reader.print_minimal_header(out_file);
-        variant_graph.for_each_vcf_record_with_supporting_paths([&](size_t id, const VcfRecord& record, const vector<string>& supporting_paths){
-            // Construct a simple summary of read alignments of the form:
-            // [forward_coverage, reverse_coverage, window_coverage]
-            vector<size_t> coverage = {0,0,total_coverage};
-            for (const auto& path_name: supporting_paths){
-                auto p = variant_graph.graph.get_path_handle(path_name);
-                auto s = variant_graph.graph.path_begin(p);
-                auto h = variant_graph.graph.get_handle_of_step(s);
+        string s;
 
-                // Since the read is guaranteed spanning, and the ref is always in F direction,
-                // just check the orientation w.r.t. the left flank
-                bool is_reverse = variant_graph.graph.get_is_reverse(h);
-                coverage[is_reverse]++;
-            }
+        for (size_t v=0; v<variant_supports.size(); v++){
+            auto& r = variant_graph.vcf_records[v];
 
-            auto r = record;
-            r.info += ";HAPESTRY_COV=" + to_string(coverage[0]) + "," + to_string(coverage[1]) + "," + to_string(coverage[2]);
+            variant_supports[v].get_support_string(s);
+            r.info += ";" + label + "=" + to_string(total_coverage) + ',' + s;
             r.print(out_file);
             out_file << '\n';
-        });
+        }
 
         i = job_index.fetch_add(1);
     }
@@ -305,6 +421,7 @@ void compute_graph_evaluation(
         const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
+        const string& label,
         const path& vcf,
         size_t n_threads,
         int32_t flank_length,
@@ -381,6 +498,7 @@ void compute_graph_evaluation(
                                      std::cref(ref_sequences),
                                      std::cref(regions),
                                      std::cref(vcf_reader),
+                                     std::cref(label),
                                      std::cref(output_dir),
                                      flank_length,
                                      std::ref(job_index)
@@ -405,6 +523,7 @@ void annotate(
         path tandem_bed,
         path bam_csv,
         path ref_fasta,
+        const string& label,
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t n_threads,
@@ -576,6 +695,7 @@ void annotate(
             region_transmaps,
             ref_sequences,
             regions,
+            label,
             vcf,
             n_threads,
             flank_length,
@@ -618,6 +738,7 @@ int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
     path tandem_bed;
+    string label = "HAPESTRY_SUPPORT";
     string bam_csv;
     path ref_fasta;
     path vcf;
@@ -640,6 +761,11 @@ int main (int argc, char* argv[]){
             output_dir,
             "Path to output directory which must not exist yet")
             ->required();
+
+    app.add_option(
+            "--label",
+            label,
+            "Label to give this annotation in the INFO field of the VCF");
 
     app.add_option(
             "--windows",
@@ -695,6 +821,7 @@ int main (int argc, char* argv[]){
         tandem_bed,
         bam_csv,
         ref_fasta,
+        label,
         flank_length,
         interval_max_length,
         n_threads,
