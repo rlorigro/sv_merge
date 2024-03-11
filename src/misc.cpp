@@ -107,10 +107,6 @@ void run_command(string& command, bool redirect_stderr){
 
 
 bool run_command(string command, bool redirect_stderr, float timeout){
-    if (redirect_stderr){
-        command += " 2>&1";
-    }
-
     command = "timeout " + to_string(timeout) + ' ' + command;
 
     cerr << "RUNNING: " << command << '\n';
@@ -124,7 +120,9 @@ bool run_command(string command, bool redirect_stderr, float timeout){
     }
 
     while (fgets(buffer.data(), 128, pipe) != nullptr){
-        cerr << buffer.data();
+        if (redirect_stderr) {
+            cerr << buffer.data();
+        }
     }
 
     int result = pclose(pipe);

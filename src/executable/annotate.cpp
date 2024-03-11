@@ -162,10 +162,11 @@ void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bo
 
 class VariantSupport{
 public:
-    array<vector<float>,2> identity;
+    // is_spanning -> is_reverse -> Q
+    array <array <vector<float>, 2>, 2> identity;
 
-    [[nodiscard]] size_t get_coverage(bool is_reverse) const;
-    void get_identity_distribution(bool is_reverse, array<size_t,4>& result) const;
+    [[nodiscard]] size_t get_coverage(bool is_spanning, bool is_reverse) const;
+    void get_identity_distribution(bool is_spanning, bool is_reverse, array<size_t,6>& result) const;
     void get_support_string(string& s) const;
 };
 
@@ -173,40 +174,71 @@ public:
 void VariantSupport::get_support_string(string& s) const{
     s.clear();
 
-    array<size_t,4> d;
+    array<size_t,6> d;
 
 //    s += to_string(get_coverage(false)) + ',';
 //    s += to_string(get_coverage(true)) + ',';
 
-    get_identity_distribution(false, d);
+    get_identity_distribution(false, false, d);
     s += to_string(d[0]) + ',';
     s += to_string(d[1]) + ',';
     s += to_string(d[2]) + ',';
     s += to_string(d[3]) + ',';
+    s += to_string(d[4]) + ',';
+    s += to_string(d[5]) + ',';
 
-    get_identity_distribution(true, d);
+    get_identity_distribution(false, true, d);
     s += to_string(d[0]) + ',';
     s += to_string(d[1]) + ',';
     s += to_string(d[2]) + ',';
-    s += to_string(d[3]);
+    s += to_string(d[3]) + ',';
+    s += to_string(d[4]) + ',';
+    s += to_string(d[5]) + ',';
+
+    get_identity_distribution(true, false, d);
+    s += to_string(d[0]) + ',';
+    s += to_string(d[1]) + ',';
+    s += to_string(d[2]) + ',';
+    s += to_string(d[3]) + ',';
+    s += to_string(d[4]) + ',';
+    s += to_string(d[5]) + ',';
+
+    get_identity_distribution(true, true, d);
+    s += to_string(d[0]) + ',';
+    s += to_string(d[1]) + ',';
+    s += to_string(d[2]) + ',';
+    s += to_string(d[3]) + ',';
+    s += to_string(d[4]) + ',';
+    s += to_string(d[5]);
 }
 
 
-size_t VariantSupport::get_coverage(bool is_reverse) const{
+size_t VariantSupport::get_coverage(bool is_spanning, bool is_reverse) const{
     return identity[is_reverse].size();
 }
 
 
-void VariantSupport::get_identity_distribution(bool is_reverse, array<size_t,4>& result) const{
+void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse, array<size_t,6>& result) const{
     result.fill(0);
-    for (auto i: identity[is_reverse]){
-        size_t index = result.size() - 1;
+    for (auto i: identity[is_spanning][is_reverse]){
+        auto index = int64_t(result.size() - 1);
 
         if (i < 1.0){
-            auto q = -10*log10(1-i);
+            // q = 0, p(correct) = 0.0  Merged with above
+            // q = 1, p(correct) = 0.5  Merged with above
+            // q = 2, p(correct) = 0.75
+            // q = 3, p(correct) = 0.875
+            // q = 4, p(correct) = 0.9375
+            // q = 5, p(correct) = 0.96875
+            // q = 6, p(correct) = 0.984375
+            // q = 7, p(correct) = 0.9921875
+            auto q = -log2(1-i);
+            q = max(0.0f,q-2.0f);
 
             // Bin the q value into one of the distribution indexes, with the top bin open ended
-            index = min(result.size()-1, size_t(round(q/10)));
+            index = min(int64_t(result.size()-1), int64_t(floor(q)));
+
+//            cerr << is_spanning << ',' << i << ',' << q << ',' << index << '\n';
         }
         else if (i > 1.0){
             throw runtime_error("ERROR: identity greater than 1.0 encountered: " + to_string(i));
@@ -317,11 +349,7 @@ void compute_graph_evaluation_thread_fn(
             // Accumulate total flank coverage (to be averaged later)
             auto l = variant_graph.is_dangling_node(id_front);
             auto r = variant_graph.is_dangling_node(id_back);
-
-            // Skip non-spanning alignments
-            if (not l and r){
-                return;
-            }
+            bool is_spanning = l and r;
 
             // Fetch (or construct) the count for this read name (default = 0)
             auto& c = counter[alignment.get_query_name()];
@@ -382,7 +410,7 @@ void compute_graph_evaluation_thread_fn(
                     summary.update(i,true);
                 },{});
 
-                variant_supports[id].identity[path_is_reverse].emplace_back(summary.compute_identity());
+                variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(summary.compute_identity());
 //                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << total_length << ',' << ref_min << ',' << ref_max << ',' << summary.compute_identity() << '\n';
             });
 
@@ -397,13 +425,15 @@ void compute_graph_evaluation_thread_fn(
             throw runtime_error("ERROR: file could not be written: " + output_path.string());
         }
 
-        out_file << "##INFO=<ID=" + label + ",Number=3,Type=.,Description=\"Coverage computed by hapestry of the form [window_coverage, forward_0q, forward_10q, forward_20q, forward_30q, reverse_0q, reverse_10q, reverse_20q, reverse_30q]\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        out_file << "##INFO=<ID=" + label + ",Number=25,Type=.,Description=\"Coverage computed by hapestry of the form: window coverage, and then 4 vectors of 6 values each representing the Q distribution of Forward/Rev and Spanning/Non-Spanning reads from threshold Q=<10,<20,<30,<inf\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         vcf_reader.print_minimal_header(out_file);
         string s;
 
         for (size_t v=0; v<variant_supports.size(); v++){
             auto& r = variant_graph.vcf_records[v];
 
+//            cerr << '\n';
+//            cerr << r.id << '\n';
             variant_supports[v].get_support_string(s);
             r.info += ";" + label + "=" + to_string(total_coverage) + ',' + s;
             r.print(out_file);
@@ -533,18 +563,18 @@ void annotate(
 ){
     Timer t;
 
-    output_dir = std::filesystem::weakly_canonical(output_dir);
-    tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
-    bam_csv = std::filesystem::weakly_canonical(bam_csv);
-    ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
-    vcf = std::filesystem::weakly_canonical(vcf);
-
     if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
     }
     else{
         std::filesystem::create_directories(output_dir);
     }
+
+    output_dir = std::filesystem::weakly_canonical(output_dir);
+    tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
+    bam_csv = std::filesystem::weakly_canonical(bam_csv);
+    ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
+    vcf = std::filesystem::weakly_canonical(vcf);
 
     cerr << t << "Initializing" << '\n';
 
@@ -618,7 +648,7 @@ void annotate(
                 bam_csv,
                 n_threads,
                 region_transmaps,
-                true,
+                false,
                 force_unique_reads,
                 false
         );
@@ -633,7 +663,7 @@ void annotate(
                 max_length,
                 flank_length,
                 region_transmaps,
-                true,
+                false,
                 true,
                 force_unique_reads,
                 false
@@ -711,12 +741,31 @@ void annotate(
         throw runtime_error("ERROR: could not write BED log file: " + out_vcf.string());
     }
 
+    ifstream input_vcf(vcf);
+
+    if (not (input_vcf.is_open() and input_vcf.good())){
+        throw runtime_error("ERROR: could not write BED log file: " + vcf.string());
+    }
+
+    // Just copy over the header lines
+    string line;
+    while (getline(input_vcf, line)){
+        if (line.starts_with("##")){
+            out_file << line << '\n';
+        }
+        else{
+            input_vcf.close();
+            break;
+        }
+    }
+
+    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    // TODO: fix duplicated version line
     for (size_t i=0; i<regions.size(); i++){
         const auto& region = regions[i];
         path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "annotated.vcf";
 
         ifstream file(sub_vcf);
-        string line;
         while (getline(file, line)){
             if (line.starts_with('#')){
                 if (i == 0){
