@@ -312,12 +312,6 @@ void compute_graph_evaluation_thread_fn(
         bool cluster,
         atomic<size_t>& job_index
 ){
-    // TODO: finish implementing tandem track as a user input
-    unordered_map<string,vector<interval_t>> tandem_track;
-    for (const auto& [key,value]: ref_sequences){
-        tandem_track[key] = {};
-    }
-
     size_t i = job_index.fetch_add(1);
 
     path vcf;

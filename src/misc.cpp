@@ -229,4 +229,35 @@ void lowercase_string(string& str) {
     for (size_t i=0; i<length; i++) str.at(i)=(char)tolower(str.at(i));
 }
 
+
+bool less_than(int32_t a, int32_t b, int32_t c, int32_t d, bool or_equal){
+    if (or_equal){
+        return (a <= b) and (b <= c) and (c <= d);
+    }
+    else{
+        return (a < b) and (b < c) and (c < d);
+    }
+}
+
+
+bool less_than(int32_t a, int32_t b, int32_t c, bool or_equal){
+    if (or_equal){
+        return (a <= b) and (b <= c);
+    }
+    else{
+        return (a < b) and (b < c);
+    }
+}
+
+
+bool point_is_contained(int32_t p, const coord_t& i, bool or_equal){
+    return less_than(i.first, p, i.second, or_equal) or less_than(i.second, p, i.first, or_equal);
+}
+
+
+bool point_is_contained(int32_t p, const Region& r, bool or_equal){
+    return less_than(r.start, p, r.stop, or_equal) or less_than(r.stop, p, r.start, or_equal);
+}
+
+
 }

@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Region.hpp"
 #include <unordered_set>
 #include <set>
 #include <utility>
@@ -63,5 +63,14 @@ bool files_equal(path p1, path p2);
 bool equal_ignore_case(const string& str1, const string& str2);
 
 void lowercase_string(string& str);
+
+bool less_than(int32_t a, int32_t b, int32_t c, int32_t d, bool or_equal);
+
+bool less_than(int32_t a, int32_t b, int32_t c, bool or_equal);
+
+bool point_is_contained(int32_t p, const coord_t& i, bool or_equal);
+
+bool point_is_contained(int32_t p, const Region& r, bool or_equal);
+
 
 }

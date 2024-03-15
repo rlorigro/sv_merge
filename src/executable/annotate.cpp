@@ -12,6 +12,10 @@
 
 using lib_interval_tree::interval_tree_t;
 
+#include "bdsg/hash_graph.hpp"
+
+using bdsg::HandleGraph;
+
 #include <filesystem>
 
 using std::filesystem::path;
@@ -164,6 +168,8 @@ class VariantSupport{
 public:
     // is_spanning -> is_reverse -> Q
     array <array <vector<float>, 2>, 2> identity;
+    int32_t length_of_evaluated_region = -1;
+    bool is_tandem = false;
 
     [[nodiscard]] size_t get_coverage(bool is_spanning, bool is_reverse) const;
     void get_identity_distribution(bool is_spanning, bool is_reverse, array<size_t,6>& result) const;
@@ -233,6 +239,7 @@ void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse
             // q = 6, p(correct) = 0.984375
             // q = 7, p(correct) = 0.9921875
             auto q = -log2(1-i);
+            // Compute q and make the bottom bin open ended
             q = max(0.0f,q-2.0f);
 
             // Bin the q value into one of the distribution indexes, with the top bin open ended
@@ -261,10 +268,12 @@ void compute_graph_evaluation_thread_fn(
         int32_t flank_length,
         atomic<size_t>& job_index
 ){
-    // TODO: finish implementing tandem track as a user input
-    unordered_map<string,vector<interval_t>> tandem_track;
-    for (const auto& [key,value]: ref_sequences){
-        tandem_track[key] = {};
+    unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
+
+    for (const auto& [contig,intervals]: contig_tandems) {
+        for (const auto& interval: intervals) {
+            contig_interval_trees[contig].insert({interval.first, interval.second});
+        }
     }
 
     size_t i = job_index.fetch_add(1);
@@ -275,7 +284,6 @@ void compute_graph_evaluation_thread_fn(
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
-        const auto& transmap = region_transmaps.at(region);
 
         path subdir = output_dir / region.to_unflanked_string('_', flank_length);
 
@@ -328,12 +336,14 @@ void compute_graph_evaluation_thread_fn(
             continue;
         }
 
-        size_t total_coverage = 0;
+        size_t l_coverage = 0;
+        size_t r_coverage = 0;
         int32_t variant_flank_length = 50;
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
 
-        // Update variant graph to contain all the paths of the (SPANNING ONLY) alignments
+        // Iterate the alignments and accumulate their stats w.r.t. variants
+        // For tandem-contained variants, stats pertain to entire tandem
         unordered_map<string,size_t> counter;
         for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
             auto& path = alignment.get_path();
@@ -357,10 +367,18 @@ void compute_graph_evaluation_thread_fn(
             // Create a unique name and add the path to variant graph
             auto name = alignment.get_query_name() + "_" + to_string(c);
 
-            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
+//                cerr << "TESTING: " << _record.id << '\n';
+
+                auto record = _record;
+
+                if (record.sv_type == VcfReader::TYPE_BREAKEND){
+                    throw runtime_error("ERROR: tandem-aware annotation not implemented for BNDs");
+                }
+
                 unordered_set<edge_t> vcf_edges(edges_of_the_record.begin(), edges_of_the_record.end());
 
-                int32_t total_length = 0;
+                int32_t path_length = 0;
                 vector<int32_t> lengths;
                 vector<handle_t> handles;
                 for (const auto& [n,is_reverse]: path){
@@ -369,40 +387,94 @@ void compute_graph_evaluation_thread_fn(
 
                     lengths.emplace_back(length);
                     handles.emplace_back(h);
-                    total_length += length;
+                    path_length += length;
                 }
 
-                int32_t ref_min = total_length + 1;
-                int32_t ref_max = 0;
-                int32_t ref_coord = 0;
-                for (size_t p=0; p < path.size() - 1; p++){
+                coord_t ref_coord;
+                record.get_reference_coordinates(false, ref_coord);
+                bool is_tandem = false;
+
+                contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
+                    is_tandem = true;
+                    return false;
+                });
+
+                int32_t target_min = variant_graph.get_flank_boundary_left(region.name, ref_coord.first, variant_flank_length);
+                int32_t target_max = variant_graph.get_flank_boundary_right(region.name, ref_coord.second, variant_flank_length);
+
+                // Coordinates of path sequence to evaluate
+                int32_t path_min = path_length + 1;
+                int32_t path_max = 0;
+
+                // Temp variable which is incremented during traversal
+                int32_t path_coord = 0;
+                Region node_region;
+
+                // Observed path coordinates that match target_min/max (there could be more than one, if path is cyclic)
+                vector<int32_t> path_target_mins;
+                vector<int32_t> path_target_maxes;
+
+//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << '\n';
+                for (size_t p=0; p < path.size(); p++){
                     auto h1 = handles[p];
-                    auto h2 = handles[p+1];
-                    auto a_length = lengths[p];
+                    auto length = lengths[p];
 
-                    // Get forward and reverse edges
-                    edge_t e(h1,h2);
-                    edge_t e2(variant_graph.graph.flip(h2),variant_graph.graph.flip(h1));
+                    variant_graph.get_region_of_node(h1, node_region);
 
-                    // Update the ref coord so it is now up to the edge junction
-                    ref_coord += a_length;
+//                    cerr << variant_graph.graph.get_id(h1) << ',' << variant_graph.graph.get_is_reverse(h1) << ',' << node_region.to_string() << '\n';
+                    // If the node contains one of the target flanks, record its location
+                    if (point_is_contained(target_min, node_region, true)){
+//                        cerr << "FOUND new target_min: " << target_min << ',' << path_coord << '\n';
+                        path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
+                    }
+                    if (point_is_contained(target_max, node_region, true)){
+//                        cerr << "FOUND new target_max: " << target_max << ',' << path_coord << '\n';
+                        path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
+                    }
 
-                    // If the edge is one of the relevant VCF edges then track min and max
-                    if (vcf_edges.find(e) != vcf_edges.end() or vcf_edges.find(e2) != vcf_edges.end()){
-                        if (ref_coord < ref_min){
-                            ref_min = ref_coord;
-                        }
-                        if (ref_coord > ref_max){
-                            ref_max = ref_coord;
+                    if (p < path.size() - 1) {
+                        auto h2 = handles[p+1];
+
+                        // Get forward and reverse edges
+                        edge_t e(h1,h2);
+                        edge_t e2(variant_graph.graph.flip(h2), variant_graph.graph.flip(h1));
+
+                        // Update the path ref coord so it is now up to the edge junction
+                        path_coord += length;
+
+                        // If the edge is one of the relevant VCF edges then track min and max
+                        if (vcf_edges.find(e) != vcf_edges.end() or vcf_edges.find(e2) != vcf_edges.end()) {
+                            if (path_coord < path_min) {
+                                path_min = path_coord;
+                            }
+                            if (path_coord > path_max) {
+                                path_max = path_coord;
+                            }
                         }
                     }
                 }
 
-                // Compute flanks that are relevant to the variant
-                ref_min = max(0, ref_min - variant_flank_length);
-                ref_max = min(total_length, ref_max + variant_flank_length);
+                // Find the smallest path interval that intersects the target region
+                coord_t target_interval = {0,path_length};
 
-                vector<interval_t> ref_intervals = {{ref_min,ref_max}};
+                for (auto a: path_target_mins){
+                    for (auto b: path_target_maxes){
+//                        cerr << "Testing: " << a << '<' << path_min << '<' << path_max << '<' << b << '\n';
+                        if (point_is_contained(path_min, {a, b}, true) and point_is_contained(path_max, {a, b}, true)){
+                            auto x = b-a;
+                            auto y = target_interval.second - target_interval.first;
+                            if (x < y){
+                                target_interval = {min(a,b), max(a,b)};
+                            }
+                        }
+                    }
+                }
+
+                // Make sure we aren't exceeding 0 or path_length
+                target_interval.first = max(0, target_interval.first);
+                target_interval.second = min(path_length, target_interval.second);
+
+                vector<interval_t> ref_intervals = {target_interval};
                 vector<interval_t> query_intervals = {};
 
                 AlignmentSummary summary;
@@ -411,13 +483,25 @@ void compute_graph_evaluation_thread_fn(
                 },{});
 
                 variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(summary.compute_identity());
-//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << total_length << ',' << ref_min << ',' << ref_max << ',' << summary.compute_identity() << '\n';
+                variant_supports[id].is_tandem = is_tandem;
+                variant_supports[id].length_of_evaluated_region = target_interval.second - target_interval.first;
+
+//                cerr << region.to_string() << ',' << target_min << ',' << target_max << '\n';
+//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << path_length << ',' << target_interval.first << ',' << target_interval.second << ',' << summary.compute_identity() << ',' << is_tandem << '\n';
             });
 
-            // Increment counter
-            total_coverage++;
+            // Increment coverage if this alignment covers the left flanking node
+            if (l) {
+                l_coverage++;
+            }
+            if (r) {
+                r_coverage++;
+            }
+
             c++;
         });
+
+        auto total_coverage = float(l_coverage + r_coverage) / 2.0;
 
         path output_path = subdir / "annotated.vcf";
         ofstream out_file(output_path);
@@ -425,18 +509,16 @@ void compute_graph_evaluation_thread_fn(
             throw runtime_error("ERROR: file could not be written: " + output_path.string());
         }
 
-        out_file << "##INFO=<ID=" + label + ",Number=25,Type=.,Description=\"Coverage computed by hapestry of the form: window coverage, and then 4 vectors of 6 values each representing the Q distribution of Forward/Rev and Spanning/Non-Spanning reads from threshold Q=<10,<20,<30,<inf\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        out_file << "##INFO=<ID=" + label + ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         vcf_reader.print_minimal_header(out_file);
         string s;
 
         for (size_t v=0; v<variant_supports.size(); v++){
-            auto& r = variant_graph.vcf_records[v];
+            auto& record = variant_graph.vcf_records[v];
 
-//            cerr << '\n';
-//            cerr << r.id << '\n';
             variant_supports[v].get_support_string(s);
-            r.info += ";" + label + "=" + to_string(total_coverage) + ',' + s;
-            r.print(out_file);
+            record.info += ";" + label + "=" + to_string(total_coverage) + ',' + s + ',' + to_string(int(variant_supports[v].is_tandem) + ',' + variant_supports[v].length_of_evaluated_region);
+            record.print(out_file);
             out_file << '\n';
         }
 

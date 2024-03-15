@@ -178,6 +178,10 @@ public:
      */
     void paths_to_vcf_records(ofstream& outstream);
 
+    void get_main_chromosome(string& result);
+
+    void get_region_of_node(const handle_t& h, Region& result);
+
     /**
      * If `mode=TRUE`, makes `out` the set of all IDs of nodes that have neighbors only on one side. Otherwise, prints
      * information about dangling nodes to STDERR.
@@ -307,6 +311,26 @@ public:
      */
     void insertion_handles_set_insert(const string& node_label, const vector<string>& node_labels);
 
+    /**
+     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
+     *
+     * @param pos zero-based; can be equal to `chromosome_length`;
+     * @param flank_length >0;
+     * @return the largest `x` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
+     * `y<pos`; returns `INT32_MAX` if no such interval exists.
+     */
+    int32_t get_flank_boundary_left(const string& chromosome_id, int32_t pos, int32_t flank_length);
+
+    /**
+     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
+     *
+     * @param pos zero-based;
+     * @param flank_length >0;
+     * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
+     * `x>=pos`; returns `INT32_MAX` if no such interval exists.
+     */
+    int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
+
 private:
     /**
      * GFA constants
@@ -435,26 +459,6 @@ private:
      * @param out positions in `vcf_records`, sorted.
      */
     void get_vcf_records_with_edges_impl(const vector<edge_t>& edges, bool identical, vector<size_t>& out);
-
-    /**
-     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
-     *
-     * @param pos zero-based;
-     * @param flank_length >0;
-     * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
-     * `x>=pos`; returns `INT32_MAX` if no such interval exists.
-     */
-    int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
-
-    /**
-     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
-     *
-     * @param pos zero-based; can be equal to `chromosome_length`;
-     * @param flank_length >0;
-     * @return the largest `x` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
-     * `y<pos`; returns `INT32_MAX` if no such interval exists.
-     */
-    int32_t get_flank_boundary_left(const string& chromosome_id, int32_t pos, int32_t flank_length);
 
     /**
      * Remark: this is a recursive procedure that creates new string objects. It should be implemented more efficiently

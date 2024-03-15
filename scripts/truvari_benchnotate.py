@@ -13,6 +13,7 @@ def benchnotate(truth_vcf_path, query_vcf_path, output_dir):
         "-b", truth_vcf_path,
         "-c", query_vcf_path,
         "--pctseq", str(0.9),
+        "--sizemin", str(20),
         "-o", output_dir
     ]
 

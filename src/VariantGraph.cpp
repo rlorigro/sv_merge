@@ -804,6 +804,34 @@ void VariantGraph::print_supported_vcf_records(ofstream& supported, ofstream& un
 }
 
 
+void VariantGraph::get_main_chromosome(string& result) {
+    result = main_chromosome;
+}
+
+
+void VariantGraph::get_region_of_node(const handle_t& h, Region& result){
+    nid_t n = graph.get_id(h);
+    bool is_reverse = graph.get_is_reverse(h);
+
+    auto iter = node_to_chromosome.find(n);
+
+    result.name.clear();
+    result.start = -1;
+    result.stop = -1;
+    if (iter != node_to_chromosome.end()){
+        auto l = graph.get_length(h);
+
+        result.name = iter->second.first;
+        result.start = iter->second.second;
+        result.stop = result.start + int32_t(l);
+
+        if (is_reverse){
+            std::swap(result.start, result.stop);
+        }
+    }
+}
+
+
 void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
     const string DEFAULT_QUAL = "60";  // Arbitrary
     const string DEFAULT_FILTER = VcfReader::PASS_STR;
