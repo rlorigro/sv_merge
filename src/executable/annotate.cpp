@@ -493,7 +493,7 @@ void compute_graph_evaluation_thread_fn(
                         cigar_length = abs(i.query_stop - i.query_start);
                     }
 
-                    if ((cigar_length > 1)){
+                    if ((cigar_length > 0)){
                         summary.update(i,true);
                     }
                 },{});
