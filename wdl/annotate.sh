@@ -2,7 +2,7 @@
 
 #VCF="/home/ryan/data/test_hapestry/vcf/hg002_nist/HG002.truvari_collapsed.vcf.gz"
 VCF="/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/truvari_output/truvari_HG002_collapsed_NIST_benchnotated.vcf.gz"
-LABEL="truvari_hg002_nist_tandem_max50kbp_benchnotate"
+LABEL="truvari_hg002_nist_tandem_max50kbp_benchnotate_50flank_1_skip"
 
 
 #LABEL="truvari_hg002_nist"

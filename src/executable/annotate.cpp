@@ -345,7 +345,7 @@ void compute_graph_evaluation_thread_fn(
 
         size_t l_coverage = 0;
         size_t r_coverage = 0;
-        int32_t variant_flank_length = 30;
+        int32_t variant_flank_length = 50;
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
 
@@ -373,10 +373,10 @@ void compute_graph_evaluation_thread_fn(
 
             // Create a unique name and add the path to variant graph
             auto name = alignment.get_query_name() + "_" + to_string(c);
-            cerr << "Alignment: " << name << '\n';
+//            cerr << "Alignment: " << name << '\n';
 
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
-                cerr << "TESTING: " << _record.id << '\n';
+//                cerr << "TESTING: " << _record.id << '\n';
 
                 auto record = _record;
 
@@ -422,21 +422,21 @@ void compute_graph_evaluation_thread_fn(
                 vector<int32_t> path_target_mins;
                 vector<int32_t> path_target_maxes;
 
-                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << '\n';
+//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << '\n';
                 for (size_t p=0; p < path.size(); p++){
                     auto h1 = handles[p];
                     auto length = lengths[p];
 
                     variant_graph.get_region_of_node(h1, node_region);
 
-                    cerr << variant_graph.graph.get_id(h1) << ',' << variant_graph.graph.get_is_reverse(h1) << ',' << node_region.to_string() << '\n';
+//                    cerr << variant_graph.graph.get_id(h1) << ',' << variant_graph.graph.get_is_reverse(h1) << ',' << node_region.to_string() << '\n';
                     // If the node contains one of the target flanks, record its location
                     if (point_is_contained(target_min, node_region, true)){
-                        cerr << "FOUND new target_min: " << target_min << ',' << path_coord << '\n';
+//                        cerr << "FOUND new target_min: " << target_min << ',' << path_coord << '\n';
                         path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
                     }
                     if (point_is_contained(target_max, node_region, true)){
-                        cerr << "FOUND new target_max: " << target_max << ',' << path_coord << '\n';
+//                        cerr << "FOUND new target_max: " << target_max << ',' << path_coord << '\n';
                         path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
                     }
 
@@ -467,7 +467,7 @@ void compute_graph_evaluation_thread_fn(
 
                 for (auto a: path_target_mins){
                     for (auto b: path_target_maxes){
-                        cerr << "Testing: " << a << '<' << path_min << '<' << path_max << '<' << b << '\n';
+//                        cerr << "Testing: " << a << '<' << path_min << '<' << path_max << '<' << b << '\n';
                         if (point_is_contained(path_min, {a, b}, true) and point_is_contained(path_max, {a, b}, true)){
                             auto x = b-a;
                             auto y = target_interval.second - target_interval.first;
@@ -487,16 +487,27 @@ void compute_graph_evaluation_thread_fn(
 
                 AlignmentSummary summary;
                 for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
-                    // Skp SNP
-                    if (i.code == 8){
-                        return;
+                    int32_t cigar_length = i.length;
+
+                    if (i.code == 1) {  // I
+                        cigar_length = abs(i.query_stop - i.query_start);
                     }
-                    // Skip short indel
-                    if ((i.code == 1 or i.code == 2) and i.length < 3){
-                        return;
+
+                    if ((cigar_length > 1)){
+                        summary.update(i,true);
                     }
-                    summary.update(i,true);
                 },{});
+
+                // If we are in a DEL, arbitrarily augment the identity with as many matches as the length of the DEL
+                if (record.sv_type == VcfReader::TYPE_DELETION) {
+                    CigarInterval placeholder;
+                    coord_t variant_coord;
+                    record.get_reference_coordinates(false, variant_coord);
+
+                    placeholder.length = variant_coord.second - variant_coord.first;
+                    placeholder.code = 7;   // '=' operation
+                    summary.update(placeholder,true);
+                }
 
                 variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(summary.compute_identity());
                 variant_supports[id].is_tandem = is_tandem;
@@ -505,8 +516,8 @@ void compute_graph_evaluation_thread_fn(
                     variant_supports[id].length_of_evaluated_region = target_interval.second - target_interval.first;
                 }
 
-                cerr << region.to_string() << ',' << target_min << ',' << target_max << '\n';
-                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << path_length << ',' << target_interval.first << ',' << target_interval.second << ',' << summary.compute_identity() << ',' << is_tandem << '\n';
+//                cerr << region.to_string() << ',' << target_min << ',' << target_max << '\n';
+//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << path_length << ',' << target_interval.first << ',' << target_interval.second << ',' << summary.compute_identity() << ',' << is_tandem << '\n';
             });
 
             // Increment coverage if this alignment covers the left flanking node
@@ -536,7 +547,7 @@ void compute_graph_evaluation_thread_fn(
             auto& record = variant_graph.vcf_records[v];
 
             variant_supports.at(v).get_support_string(s);
-            cerr << v << ',' << variant_supports.at(v).length_of_evaluated_region << '\n';
+//            cerr << v << ',' << variant_supports.at(v).length_of_evaluated_region << '\n';
             record.info += ";" + label + "=" + to_string(total_coverage) + "," + s + "," + to_string(int(variant_supports.at(v).is_tandem)) + "," + to_string(variant_supports.at(v).length_of_evaluated_region);
             record.print(out_file);
             out_file << '\n';
@@ -548,7 +559,7 @@ void compute_graph_evaluation_thread_fn(
 
 
 void train_error_distribution_thread_fn(
-        array <array <array <array <unordered_map<int32_t,int64_t>, 2>, 4>, 10>, 8>& error_distribution,
+        array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8>& error_distribution,
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
         const unordered_map<Region,TransMap>& region_transmaps,
@@ -655,6 +666,7 @@ void train_error_distribution_thread_fn(
                     throw runtime_error("ERROR: tandem-aware annotation not implemented for BNDs");
                 }
 
+                vector<interval_t> non_ref_intervals = {};
                 vector<interval_t> ref_intervals = {};
                 vector<interval_t> query_intervals = {};
 
@@ -666,12 +678,20 @@ void train_error_distribution_thread_fn(
                     // If we are in a ref node, then we want to track the cigar operations, and use them to train the
                     // distribution
                     // (GAF node IDs are numeric because we wrote them)
-                    if (variant_graph.is_reference_node(stoll(n))){
-                        ref_intervals.emplace_back(path_length, path_length + length);
+                    if (not variant_graph.is_reference_node(stoll(n))){
+                        non_ref_intervals.emplace_back(path_length, path_length + length);
                     }
 
                     path_length += length;
                 }
+
+                // Construct the complement of the non-ref intervals
+                int32_t prev = 0;
+                for (auto& interval: non_ref_intervals){
+                    ref_intervals.emplace_back(prev,interval.first);
+                    prev = interval.second;
+                }
+                ref_intervals.emplace_back(prev,path_length);
 
                 coord_t ref_coord;
                 record.get_reference_coordinates(false, ref_coord);
@@ -699,8 +719,10 @@ void train_error_distribution_thread_fn(
                 sv_length_bin = min(int64_t(error_distribution[record.sv_type].size() - 1), sv_length_bin);
                 sv_length_bin = max(int64_t(0), sv_length_bin);
 
+//                cerr << region.to_string() << ',' << name << '\n';
+                AlignmentSummary summary;
                 for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
-
+                    int32_t cigar_length = i.length;
                     size_t i_c;
                     if (i.code == 7){
                         i_c = 0;
@@ -708,20 +730,30 @@ void train_error_distribution_thread_fn(
                     else if (i.code == 8){
                         i_c = 1;
                     }
-                    else if (i.code == 1){
+                    else if (i.code == 1){  // I
+                        cigar_length = abs(i.query_stop - i.query_start);
                         i_c = 2;
                     }
-                    else if (i.code == 2){
+                    else if (i.code == 2){  // D
                         i_c = 3;
                     }
                     else{
                         throw runtime_error("ERROR: cannot learn error distribution on unrecognized cigar code: " + to_string(i.code) + " for alignment: " + name);
                     }
 
-//                    cerr << "in thread: " << record.sv_type << ',' << sv_length_bin << ',' << i_c << ',' << is_tandem << ',' << i.length << '\n';
+//                    cerr << int(record.sv_type) << ',' << cigar_code_to_char[i.code] << ',' << cigar_length << ',' << i.length << '\n';
 
-                    error_distribution[record.sv_type][sv_length_bin][i_c][is_tandem][i.length]++;
+                    if (cigar_length == 0){
+                        cerr << "anomalous length" << '\n';
+                    }
+
+                    summary.update(i, true);
+
                 },{});
+
+                auto x = int32_t(round(summary.compute_identity()*100));
+                error_distribution[record.sv_type][sv_length_bin][is_tandem][x]++;
+
             });
 
             c++;
@@ -899,7 +931,7 @@ void compute_error_distribution(
 
     // SVTYPE -> SVLENGTH -> CIGAR TYPE -> IS_TANDEM -> LENGTH_OF_CIGAR -> count
     //    7   ->    10    ->      4     ->     2     -> [hashtable]
-    vector<array <array <array <array <unordered_map<int32_t,int64_t>, 2>, 4>, 10>, 8> > error_distributions(n_threads);
+    vector<array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8> > error_distributions(n_threads);
 
     // Convert VCFs to graphs and run graph aligner
     {
@@ -939,15 +971,13 @@ void compute_error_distribution(
 
     // Accumulate the total counts across all threads
     // SVTYPE -> IS_TANDEM -> CIGAR TYPE -> LENGTH -> count
-    array <array <array <array <unordered_map<int32_t,int64_t>, 2>, 4>, 10>, 8> total_distribution = {};
+    array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8> total_distribution = {};
     for (const auto& item: error_distributions){
         for (size_t sv=0; sv<item.size(); sv++){
             for (size_t l=0; l<item[sv].size(); l++) {
-                for (size_t c=0; c<item[sv][l].size(); c++){
-                    for (size_t t=0; t<item[sv][l][c].size(); t++){
-                        for (auto [cigar_length,count]: item[sv][l][c][t]) {
-                            total_distribution[sv][l][c][t][cigar_length] += count;
-                        }
+                for (size_t t=0; t<item[sv][l].size(); t++){
+                    for (auto [cigar_length,count]: item[sv][l][t]) {
+                        total_distribution[sv][l][t][cigar_length] += count;
                     }
                 }
             }
@@ -957,7 +987,7 @@ void compute_error_distribution(
     path output_path = output_dir / "error_distribution.csv";
     ofstream file(output_path);
 
-    file << "sv_type,sv_length_lower_bound,sv_length_upper_bound,cigar,is_tandem,distribution" << '\n';
+    file << "sv_type,sv_length_lower_bound,sv_length_upper_bound,is_tandem,distribution" << '\n';
     array<string,8> sv_key = {
             "NONE??",
             "INSERTION",
@@ -972,13 +1002,6 @@ void compute_error_distribution(
     array<string,2> tandem_key = {
             "0",
             "1"
-    };
-
-    array<string,4> cigar_key = {
-            "=",
-            "X",
-            "I",
-            "D"
     };
 
     // 2^2 = 4      <- Bottomless (everything below 8)
@@ -1019,14 +1042,12 @@ void compute_error_distribution(
 
     for (size_t sv=0; sv<total_distribution.size(); sv++){
         for (size_t l=0; l<total_distribution[sv].size(); l++){
-            for (size_t c=0; c<total_distribution[sv][l].size(); c++){
-                for (size_t t=0; t<total_distribution[sv][l][c].size(); t++) {
-                    file << sv_key[sv] << ',' << sv_length_lower_key[l] << ',' << sv_length_upper_key[l] << ',' << cigar_key[c] << ',' << tandem_key[t] << ',' << '{';
-                    for (auto [cigar_length,count]: total_distribution[sv][l][c][t]){
-                        file << cigar_length << ':' << count << ',';
-                    }
-                    file << '}' << '\n';
+            for (size_t t=0; t<total_distribution[sv][l].size(); t++) {
+                file << sv_key[sv] << ',' << sv_length_lower_key[l] << ',' << sv_length_upper_key[l] << ',' << tandem_key[t] << ',' << '{';
+                for (auto [cigar_length,count]: total_distribution[sv][l][t]){
+                    file << cigar_length << ':' << count << ',';
                 }
+                file << '}' << '\n';
             }
         }
     }

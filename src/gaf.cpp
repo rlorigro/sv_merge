@@ -529,7 +529,7 @@ void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
             n_mismatch += float(c.length); // X
             break;
         case 1:
-            n_insert += float(c.length);   // I
+            n_insert += float(abs(c.query_stop - c.query_start));   // I
             break;
         case 2:
             n_delete += float(c.length);   // D
