@@ -621,6 +621,7 @@ void evaluate(
             region_transmaps,
             true,
             true,
+            true,
             force_unique_reads,
             false
     );

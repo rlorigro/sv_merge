@@ -223,7 +223,7 @@ void for_cigar_interval_in_alignment(
             }
 
             // In some cases, the window could be completely non overlapping
-            if (l > 0 or (l==0 and not is_ref_move[c.code])) {
+            if (l >= 0) {
                 f_ref(intersection, *ref_iter);
             }
 
@@ -292,8 +292,8 @@ void for_cigar_interval_in_alignment(
             }
 
             // In some cases, the window could be completely non overlapping
-            if (l > 0 or (l==0 and not is_query_move[c.code])) {
-                f_query(intersection, *query_iter);
+            if (l >= 0) {
+                f_ref(intersection, *ref_iter);
             }
 
             bool window_exceeds_cigar;

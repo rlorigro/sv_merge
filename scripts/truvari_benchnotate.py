@@ -18,6 +18,8 @@ def benchnotate(truth_vcf_path, query_vcf_path, output_dir):
         "-o", output_dir
     ]
 
+    out_filename = "annotated.vcf"
+
     sys.stderr.write(" ".join(args)+'\n')
 
     try:
@@ -55,7 +57,7 @@ def benchnotate(truth_vcf_path, query_vcf_path, output_dir):
         record.INFO["TRUVARI_HG002_NIST"] = 1
         all_records.append(record)
 
-    out_path = os.path.join(output_dir, "input_annotated.vcf")
+    out_path = os.path.join(output_dir, out_filename)
 
     chroms = {
         "chr1",
@@ -135,9 +137,13 @@ def benchnotate(truth_vcf_path, query_vcf_path, output_dir):
 
 
 def main():
-    truth_vcf_path = "/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/GRCh38_HG002-T2TQ100-V0.9_stvar.vcf.gz"
-    vcf_path = "/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/HG002.truvari_collapsed.vcf.gz"
-    output_dir = "/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/truvari_output"
+    # truth_vcf_path = "/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/GRCh38_HG002-T2TQ100-V0.9_stvar_confident_only.vcf.gz"
+    # vcf_path = "/home/ryan/data/test_hapestry/vcf/hg002_nist/HG002.truvari_collapsed_confident_only.vcf.gz"
+    # output_dir = "/home/ryan/data/test_hapestry/vcf/hg002_nist/truvari_8x_bench/truvari_output_confident_only"
+
+    truth_vcf_path = "/home/ryan/data/test_hapestry/vcf/hg002_nist/GRCh38_HG002-T2TQ100-V0.9_stvar_confident_only.vcf.gz"
+    vcf_path = "/home/ryan/data/test_hapestry/vcf/kanpig_compare/kanpig_score_xgb_confident_only.vcf.gz"
+    output_dir = "/home/ryan/data/test_hapestry/vcf/kanpig_compare/kanpig_output_confident_only"
 
     benchnotate(truth_vcf_path=truth_vcf_path, query_vcf_path=vcf_path, output_dir=output_dir)
 

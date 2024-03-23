@@ -93,6 +93,11 @@ void write_region_subsequences_to_file_thread_fn(
         ofstream file(output_fasta);
 
         t.for_each_read([&](const string& name, int64_t id){
+            auto& s = t.get_sequence(id);
+            if (s.empty()){
+                return;
+            }
+
             file << '>' << name << '\n';
             file << t.get_sequence(id) << '\n';
         });
@@ -322,12 +327,15 @@ void compute_graph_evaluation_thread_fn(
         path fasta_path = subdir / fasta_filename;
 
         string command = "GraphAligner"
-                  " -x " "vg"
-                  " --multimap-score-fraction " "1"
-                  " -t " "1"
-                  " -a " + gaf_path.string() +
-                  " -g " + gfa_path.string() +
-                  " -f " + fasta_path.string();
+                         " --seeds-mum-count " "-1"
+                         " --seeds-mxm-windowsize " "0"
+                         " -b " "10"
+                         " --max-cluster-extend " "10"
+                         " --multimap-score-fraction  " "1"
+                         " -t " "1"
+                         " -a " + gaf_path.string() +
+                         " -g " + gfa_path.string() +
+                         " -f " + fasta_path.string();
 
         // Run GraphAligner and check how long it takes, if it times out
         Timer t;
@@ -621,8 +629,11 @@ void train_error_distribution_thread_fn(
         path fasta_path = subdir / fasta_filename;
 
         string command = "GraphAligner"
-                         " -x " "vg"
-                         " --multimap-score-fraction " "1"
+                         " --seeds-mum-count " "-1"
+                         " --seeds-mxm-windowsize " "0"
+                         " -b " "10"
+                         " --max-cluster-extend " "10"
+                         " --multimap-score-fraction  " "1"
                          " -t " "1"
                          " -a " + gaf_path.string() +
                          " -g " + gfa_path.string() +
@@ -723,24 +734,6 @@ void train_error_distribution_thread_fn(
                 AlignmentSummary summary;
                 for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
                     int32_t cigar_length = i.length;
-                    size_t i_c;
-                    if (i.code == 7){
-                        i_c = 0;
-                    }
-                    else if (i.code == 8){
-                        i_c = 1;
-                    }
-                    else if (i.code == 1){  // I
-                        cigar_length = abs(i.query_stop - i.query_start);
-                        i_c = 2;
-                    }
-                    else if (i.code == 2){  // D
-                        i_c = 3;
-                    }
-                    else{
-                        throw runtime_error("ERROR: cannot learn error distribution on unrecognized cigar code: " + to_string(i.code) + " for alignment: " + name);
-                    }
-
 //                    cerr << int(record.sv_type) << ',' << cigar_code_to_char[i.code] << ',' << cigar_length << ',' << i.length << '\n';
 
                     if (cigar_length == 0){
@@ -1174,7 +1167,8 @@ void annotate(
                 flank_length,
                 region_transmaps,
                 false,
-                true,
+                false,
+                false,
                 force_unique_reads,
                 false
         );

@@ -82,6 +82,7 @@ void fetch_reads_from_clipped_bam(
         int32_t flank_length,
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
+        bool get_flank_query_coords = false,
         bool first_only = false,
         bool append_sample_to_read = false,
         bool force_forward = false

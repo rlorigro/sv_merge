@@ -415,6 +415,7 @@ void extract_flanked_subregion_coords_from_sample(
         const string& sample_name,
         const vector<Region>& subregions,
         bool require_spanning,
+        bool get_flank_query_coords,
         bool unclip_coords,
         int32_t flank_length,
         path bam_path
@@ -520,13 +521,15 @@ void extract_flanked_subregion_coords_from_sample(
                         for (auto& region: overlapping_regions){
                             auto& [inner_coord, outer_coord] = query_coords_per_region.at(region).at(name);
 
-                            update_coord(
-                                    intersection,
-                                    inner_coord,
-                                    false,
-                                    region.start + flank_length,
-                                    region.stop - flank_length
-                            );
+                            if (get_flank_query_coords){
+                                update_coord(
+                                        intersection,
+                                        inner_coord,
+                                        false,
+                                        region.start + flank_length,
+                                        region.stop - flank_length
+                                );
+                            }
 
                             update_coord(
                                     intersection,
@@ -549,7 +552,11 @@ void extract_flanked_subregion_coords_from_sample(
 
                 // Require all four bounds are touched by alignment
                 if (require_spanning) {
-                    bool inner_pass = (inner_coord.ref_start == region.start + flank_length and inner_coord.ref_stop == region.stop - flank_length);
+                    bool inner_pass = true;
+                    if (get_flank_query_coords){
+                        inner_pass = (inner_coord.ref_start == region.start + flank_length and inner_coord.ref_stop == region.stop - flank_length);
+                    }
+
                     bool outer_pass = (outer_coord.ref_start == region.start and outer_coord.ref_stop == region.stop);
                     pass = (inner_pass and outer_pass);
                 }
@@ -607,6 +614,7 @@ void extract_subregion_coords_from_sample_thread_fn(
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
         bool require_spanning,
+        bool get_flank_query_coords,
         int32_t flank_length,
         atomic<size_t>& job_index
 ){
@@ -623,6 +631,7 @@ void extract_subregion_coords_from_sample_thread_fn(
                 sample_name,
                 regions,
                 require_spanning,
+                get_flank_query_coords,
                 true,
                 flank_length,
                 bam_path
@@ -705,7 +714,8 @@ void get_read_coords_for_each_bam_subregion(
         path bam_csv,
         int64_t n_threads,
         int32_t flank_length,
-        bool require_spanning
+        bool require_spanning,
+        bool get_flank_query_coords
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -743,6 +753,7 @@ void get_read_coords_for_each_bam_subregion(
                     std::cref(sample_bams),
                     std::cref(regions),
                     std::ref(require_spanning),
+                    std::ref(get_flank_query_coords),
                     flank_length,
                     std::ref(job_index)
             );
@@ -929,6 +940,7 @@ void fetch_reads_from_clipped_bam(
         int32_t flank_length,
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
+        bool get_flank_query_coords,
         bool first_only,
         bool append_sample_to_read,
         bool force_forward
@@ -948,7 +960,8 @@ void fetch_reads_from_clipped_bam(
             bam_csv,
             n_threads,
             flank_length,
-            require_spanning
+            require_spanning,
+            get_flank_query_coords
     );
 
     // Construct template transmap with only samples
@@ -1015,9 +1028,19 @@ void fetch_reads_from_clipped_bam(
                     throw runtime_error("ERROR: invalid query coords: " + region.to_string() + " " + name + " " + to_string(outer_coord.query_start) + "," + to_string(outer_coord.query_stop));
                 }
 
-                if (l_inner > max_length or l_left > max_length or l_right > max_length or l > max_length){
-                    cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name + " longer than " + to_string(max_length) + " in window " + region.to_string() << '\n';
-                    continue;
+                if (get_flank_query_coords) {
+                    if (l_inner > max_length or l_left > max_length or l_right > max_length or l > max_length) {
+                        cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name +
+                                " longer than " + to_string(max_length) + " in window " + region.to_string() << '\n';
+                        continue;
+                    }
+                }
+                else {
+                    if (l > max_length) {
+                        cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name +
+                                " longer than " + to_string(max_length) + " in window " + region.to_string() << '\n';
+                        continue;
+                    }
                 }
 
                 const auto& seq = sample_queries.at(sample_name).at(name);
@@ -1052,7 +1075,9 @@ void fetch_reads_from_clipped_bam(
                 transmap.add_flank_coord(name, inner_coord.query_start, inner_coord.query_stop);
 
                 // If there are multiple sequences, only choose the first sequence arbitrarily
-                break;
+                if (first_only) {
+                    break;
+                }
             }
         }
     }
