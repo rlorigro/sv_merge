@@ -8,5 +8,5 @@ workflows:
 - name: hapestry_validate
   subclass: wdl
   publish: True
-  primaryDescriptorPath: /wdl/GraphEvaluation.wdl
+  primaryDescriptorPath: /wdl/hapestry_validate.wdl
   testParameterFiles:
