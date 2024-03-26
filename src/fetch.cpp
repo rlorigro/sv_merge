@@ -1,5 +1,5 @@
 #include "fetch.hpp"
-
+#include <span>
 
 namespace sv_merge{
 
@@ -123,32 +123,15 @@ void update_coord(
  * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
  * @param bam_path
  */
-void extract_subregions_from_sample(
+void extract_subregions_from_sample_contig(
         GoogleAuthenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
-        const vector<Region>& subregions,
+        const span<const Region>& subregions,
         bool require_spanning,
         bool force_forward,
         const path& bam_path
 ){
-    if (subregions.empty()){
-        throw runtime_error("ERROR: subregions empty");
-    }
-
-    // Generate a super-region to encompass all subregions, and assume that subregions are sorted, contiguous.
-    // If they are not contiguous and sorted, the iterator function will detect that and error out.
-    Region super_region;
-    super_region.name = subregions[0].name;
-    super_region.start = subregions[0].start;
-    super_region.stop = subregions.back().stop;
-
-    CigarInterval placeholder;
-    placeholder.query_start = numeric_limits<int32_t>::max();
-    placeholder.query_stop = numeric_limits<int32_t>::min();
-    placeholder.ref_start = numeric_limits<int32_t>::max();
-    placeholder.ref_stop = numeric_limits<int32_t>::min();
-
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
     unordered_map<string,string> query_sequences;
@@ -162,6 +145,19 @@ void extract_subregions_from_sample(
     // For this application of directly fetching sequence from the BAM, it doesn't make sense to reinterpret the coords
     // in native/unclipped query sequence space. An error will be thrown if a hardclip is found (see below)
     bool unclip_coords = false;
+
+    // Generate a super-region to encompass all subregions, and assume that subregions are sorted, contiguous.
+    // If they are not contiguous and sorted, the iterator function will detect that and error out.
+    Region super_region;
+    super_region.name = subregions.front().name;
+    super_region.start = subregions.front().start;
+    super_region.stop = subregions.back().stop;
+
+    CigarInterval placeholder;
+    placeholder.query_start = numeric_limits<int32_t>::max();
+    placeholder.query_stop = numeric_limits<int32_t>::min();
+    placeholder.ref_start = numeric_limits<int32_t>::max();
+    placeholder.ref_stop = numeric_limits<int32_t>::min();
 
     // Make sure the system has the necessary authentication env variable to fetch a remote GS URI
     authenticator.try_with_authentication(3, [&](){
@@ -270,6 +266,58 @@ void extract_subregions_from_sample(
                 }
             }
         }
+    }
+}
+
+
+/**
+ *
+ * @param authenticator
+ * @param sample_to_region_reads must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
+ * @param sample_name any unique name that identifies the sample from which the reads are derived
+ * @param subregions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
+ * @param require_spanning any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ * @param bam_path
+ */
+void extract_subregions_from_sample(
+        GoogleAuthenticator& authenticator,
+        sample_region_read_map_t& sample_to_region_reads,
+        const string& sample_name,
+        const vector<Region>& subregions,
+        bool require_spanning,
+        bool force_forward,
+        const path& bam_path
+){
+    if (subregions.empty()){
+        throw runtime_error("ERROR: subregions empty");
+    }
+
+    // Split regions into chunks for each contig
+    vector <span <const Region> > contig_regions;
+
+    size_t prev_index = 0;
+
+    for (size_t i=0; i<subregions.size(); i++){
+        const auto& region = subregions[i];
+
+        // Find the indexes where the contig name changes and then update the contig_regions with a span of the same extent
+        if (i > 0 and region.name != subregions[i-1].name){
+            contig_regions.emplace_back(span{subregions}.subspan(prev_index, i - prev_index));
+            prev_index = i;
+        }
+    }
+
+    for (const auto& regions: contig_regions){
+        extract_subregions_from_sample_contig(
+            authenticator,
+            sample_to_region_reads,
+            sample_name,
+            regions,
+            require_spanning,
+            force_forward,
+            bam_path
+        );
     }
 }
 
@@ -409,11 +457,11 @@ void extract_subregion_coords_from_sample(
  * @param flank_length : length of flank that will be SUBTRACTED from the ends of regions
  * @param bam_path
  */
-void extract_flanked_subregion_coords_from_sample(
+void extract_flanked_subregion_coords_from_sample_contig(
         GoogleAuthenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const string& sample_name,
-        const vector<Region>& subregions,
+        const span<const Region>& subregions,
         bool require_spanning,
         bool get_flank_query_coords,
         bool unclip_coords,
@@ -571,6 +619,66 @@ void extract_flanked_subregion_coords_from_sample(
             }
         }
     });
+}
+
+
+/**
+ * Fetch query coords for each region AND the flank boundaries
+ * @param authenticator
+ * @param sample_to_region_coords : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
+ * @param sample_name
+ * @param subregions : regions to be fetched by htslib. MUST ALREADY INCLUDE FLANKS.
+ * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param unclip_coords : reinterpret hardclips as softclips so that query coords are in the native/unclipped sequence
+ * @param flank_length : length of flank that will be SUBTRACTED from the ends of regions
+ * @param bam_path
+ */
+void extract_flanked_subregion_coords_from_sample(
+        GoogleAuthenticator& authenticator,
+        sample_region_flanked_coord_map_t& sample_to_region_coords,
+        const string& sample_name,
+        const vector<Region>& subregions,
+        bool require_spanning,
+        bool get_flank_query_coords,
+        bool unclip_coords,
+        int32_t flank_length,
+        path bam_path
+){
+    if (subregions.empty()){
+        throw runtime_error("ERROR: subregions empty");
+    }
+
+    // Split regions into chunks for each contig
+    vector <span <const Region> > contig_regions;
+
+    size_t prev_index = 0;
+
+    for (size_t i=0; i<subregions.size(); i++){
+        const auto& region = subregions[i];
+
+        // Find the indexes where the contig name changes and then update the contig_regions with a span of the same extent
+        if (i > 0 and region.name != subregions[i-1].name){
+            contig_regions.emplace_back(span{subregions}.subspan(prev_index, i - prev_index));
+            prev_index = i;
+        }
+    }
+
+    contig_regions.emplace_back(span{subregions}.subspan(prev_index, subregions.size() - prev_index));
+
+    for (const auto& regions: contig_regions){
+        extract_flanked_subregion_coords_from_sample_contig(
+            authenticator,
+            sample_to_region_coords,
+            sample_name,
+            regions,
+            require_spanning,
+            get_flank_query_coords,
+            unclip_coords,
+            flank_length,
+            bam_path
+        );
+    }
+
 }
 
 

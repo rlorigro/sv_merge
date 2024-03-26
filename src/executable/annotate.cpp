@@ -356,6 +356,7 @@ void compute_graph_evaluation_thread_fn(
         int32_t variant_flank_length = 50;
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
+        vector<float> max_observed_identities(variant_graph.vcf_records.size());
 
         // Iterate the alignments and accumulate their stats w.r.t. variants
         // For tandem-contained variants, stats pertain to entire tandem
@@ -517,9 +518,17 @@ void compute_graph_evaluation_thread_fn(
                     summary.update(placeholder,true);
                 }
 
-                variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(summary.compute_identity());
+                // Update the histogram for this variant
+                auto identity = summary.compute_identity();
+                variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(identity);
                 variant_supports[id].is_tandem = is_tandem;
 
+                // Update the max observed identity for this variant
+                if (identity > max_observed_identities[id]){
+                    max_observed_identities[id] = identity;
+                }
+
+                // If there is no previous length, then add one, otherwise only override if this is a spanning read
                 if (variant_supports[id].length_of_evaluated_region == 0 or (l and r)){
                     variant_supports[id].length_of_evaluated_region = target_interval.second - target_interval.first;
                 }
@@ -548,6 +557,7 @@ void compute_graph_evaluation_thread_fn(
         }
 
         out_file << "##INFO=<ID=" + label + ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        out_file << "##INFO=<ID=" + label + "_MAX" + ",Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         vcf_reader.print_minimal_header(out_file);
         string s;
 
@@ -555,8 +565,8 @@ void compute_graph_evaluation_thread_fn(
             auto& record = variant_graph.vcf_records[v];
 
             variant_supports.at(v).get_support_string(s);
-//            cerr << v << ',' << variant_supports.at(v).length_of_evaluated_region << '\n';
             record.info += ";" + label + "=" + to_string(total_coverage) + "," + s + "," + to_string(int(variant_supports.at(v).is_tandem)) + "," + to_string(variant_supports.at(v).length_of_evaluated_region);
+            record.info += ";" + label + "_MAX" + "=" + to_string(max_observed_identities.at(v));
             record.print(out_file);
             out_file << '\n';
         }
@@ -1245,7 +1255,7 @@ void annotate(
 
     if (not train_error_distribution) {
         auto vcf_prefix = get_vcf_name_prefix(vcf);
-        path out_vcf = output_dir / (vcf_prefix + "_annotated.vcf");
+        path out_vcf = output_dir / ("annotated.vcf");
         ofstream out_file(out_vcf);
 
         if (not (out_file.is_open() and out_file.good())){
@@ -1365,7 +1375,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--interval_max_length",
             interval_max_length,
-            "How much flanking sequence to use when fetching and aligning reads")
+            "How long a window can be in bp before it is skipped")
             ->required();
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
@@ -1376,7 +1386,12 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--train_error_distribution", train_error_distribution, "Invoke this to accumulate and write the error distribution for events not in SV alignments (SKIPS NORMAL EXECUTION OF ANNOTATION).");
 
-    app.parse(argc, argv);
+    try{
+        app.parse(argc, argv);
+    }
+    catch (const CLI::ParseError &e) {
+        return app.exit(e);
+    }
 
     annotate(
         vcf,
