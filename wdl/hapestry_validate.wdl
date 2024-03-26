@@ -1,5 +1,16 @@
 version 1.0
 
+struct RuntimeAttributes {
+    Int? cpu
+    Int? command_mem_gb
+    Int? additional_mem_gb
+    Int? disk_size_gb
+    Int? boot_disk_size_gb
+    Boolean? use_ssd
+    Int? preemptible
+    Int? max_retries
+}
+
 # Define the task
 task validate {
     input {
@@ -106,6 +117,8 @@ workflow hapestry_validate {
 
         String docker
         File? monitoring_script
+
+        RuntimeAttributes? validate_runtime_attributes
     }
 
     parameter_meta {
@@ -135,6 +148,7 @@ workflow hapestry_validate {
             annotation_label = annotation_label,
             docker = docker,
             monitoring_script = monitoring_script,
+            runtime_attributes = validate_runtime_attributes
     }
 
     output {
