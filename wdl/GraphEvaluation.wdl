@@ -143,6 +143,9 @@ task EvaluateChromosome {
         --flank_length ~{flank_length} \
         --debug ~{if force_unique_reads then "--force_unique_reads" else ""}
 
+        # Ensure write buffers are flushed to disk
+        sync
+
         # Stopping resource monitoring
         kill ${MONITOR_JOB}
         tail -n 100 ${MONITOR_FILE}
