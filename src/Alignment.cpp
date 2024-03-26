@@ -293,7 +293,7 @@ void for_cigar_interval_in_alignment(
 
             // In some cases, the window could be completely non overlapping
             if (l >= 0) {
-                f_ref(intersection, *ref_iter);
+                f_query(intersection, *query_iter);
             }
 
             bool window_exceeds_cigar;

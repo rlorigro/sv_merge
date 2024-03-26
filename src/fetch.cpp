@@ -1155,7 +1155,7 @@ void fetch_reads_from_clipped_bam(
 
                 if (seq.empty() or (i > seq.size() - 1) or (i + l > seq.size())){
                     throw runtime_error("ERROR: fetch_reads_from_clipped_bam coord slice attempted on empty or undersized sequence: \n" +
-                                        sample_name + ',' + sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l));
+                                        sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l) + ',' + "region=" + region.to_string());
                 }
 
                 string s = seq.substr(i, l);
