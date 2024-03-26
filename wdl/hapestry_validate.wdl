@@ -1,67 +1,5 @@
 version 1.0
 
-# Create main workflow which calls the IdentifyTrainingSites task
-workflow hapestry_validate {
-    input {
-        File vcf_gz
-        File vcf_gz_tbi
-        File training_resource_bed
-
-        # Hapestry specific args
-        Float? min_score = 0.9
-        Int? interval_max_length = 50000
-        Int? flank_length = 200
-        Int n_threads
-        File tandems_bed
-        File reference_fa
-        File haps_vs_ref_csv
-        Boolean? force_unique_reads = false
-        String? annotation_label = "HAPESTRY_REF"
-
-        String docker
-        File? monitoring_script
-
-        RuntimeAttributes runtime_attributes = {}
-    }
-
-    parameter_meta {
-        min_score: "Minimum identity observed spanning a variant to consider a true positive w.r.t. assembly alignments"
-        interval_max_length: "Maximum length of each window evaluated"
-        flank_length: "Length of flanking sequence to include in each window"
-        n_threads: "Maximum number of threads to use"
-        tandems_bed: "BED file of tandem repeats"
-        reference_fa: "Reference fasta file"
-        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
-        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
-        annotation_label: "Name to give the INFO field in the VCF for annotations, usually upper case"
-    }
-
-    call IdentifyTrainingSites {
-        input:
-            vcf_gz = vcf_gz,
-            vcf_gz_tbi = vcf_gz_tbi,
-            training_resource_bed = training_resource_bed,
-            interval_max_length = interval_max_length,
-            flank_length = flank_length,
-            n_threads = n_threads,
-            tandems_bed = tandems_bed,
-            reference_fa = reference_fa,
-            haps_vs_ref_csv = haps_vs_ref_csv,
-            force_unique_reads = force_unique_reads,
-            annotation_label = annotation_label,
-            docker = docker,
-            monitoring_script = monitoring_script,
-            runtime_attributes = runtime_attributes
-    }
-
-    output {
-        File training_vcf_gz = IdentifyTrainingSites.training_vcf_gz
-        File training_vcf_gz_tbi = IdentifyTrainingSites.training_vcf_gz_tbi
-        File? monitoring_log = IdentifyTrainingSites.monitoring_log
-    }
-}
-
-
 # Define the task
 task validate {
     input {
@@ -146,3 +84,64 @@ task validate {
         File? monitoring_log = "monitoring.log"
     }
 }
+
+
+# Create main workflow which calls the IdentifyTrainingSites task
+workflow hapestry_validate {
+    input {
+        File vcf_gz
+        File vcf_gz_tbi
+        File training_resource_bed
+
+        # Hapestry specific args
+        Float? min_score = 0.9
+        Int? interval_max_length = 50000
+        Int? flank_length = 200
+        Int n_threads
+        File tandems_bed
+        File reference_fa
+        File haps_vs_ref_csv
+        Boolean? force_unique_reads = false
+        String? annotation_label = "HAPESTRY_REF"
+
+        String docker
+        File? monitoring_script
+    }
+
+    parameter_meta {
+        min_score: "Minimum identity observed spanning a variant to consider a true positive w.r.t. assembly alignments"
+        interval_max_length: "Maximum length of each window evaluated"
+        flank_length: "Length of flanking sequence to include in each window"
+        n_threads: "Maximum number of threads to use"
+        tandems_bed: "BED file of tandem repeats"
+        reference_fa: "Reference fasta file"
+        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
+        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
+        annotation_label: "Name to give the INFO field in the VCF for annotations, usually upper case"
+    }
+
+    call validate {
+        input:
+            vcf_gz = vcf_gz,
+            vcf_gz_tbi = vcf_gz_tbi,
+            training_resource_bed = training_resource_bed,
+            interval_max_length = interval_max_length,
+            flank_length = flank_length,
+            n_threads = n_threads,
+            tandems_bed = tandems_bed,
+            reference_fa = reference_fa,
+            haps_vs_ref_csv = haps_vs_ref_csv,
+            force_unique_reads = force_unique_reads,
+            annotation_label = annotation_label,
+            docker = docker,
+            monitoring_script = monitoring_script,
+    }
+
+    output {
+        File training_vcf_gz = validate.training_vcf_gz
+        File training_vcf_gz_tbi = validate.training_vcf_gz_tbi
+        File? monitoring_log = validate.monitoring_log
+    }
+}
+
+
