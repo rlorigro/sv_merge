@@ -130,7 +130,7 @@ SHELL ["/bin/bash", "-c"]
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip install cmake --upgrade
-ARG HAPESTRY_COMMIT=62db320998988330927b0eddb9acbad79aa739c6
+ARG HAPESTRY_COMMIT=8e384ecd35e9a400d3a4ed612d4b7accb0ee9e35
 RUN git clone https://github.com/rlorigro/sv_merge.git \
     && cd sv_merge \
     && git checkout ${HAPESTRY_COMMIT} \
