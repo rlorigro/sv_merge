@@ -111,7 +111,7 @@ workflow hapestry_validate {
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
-        Boolean? force_unique_reads = false
+        Boolean force_unique_reads = false
         String? annotation_label = "HAPESTRY_REF"
 
         String docker
