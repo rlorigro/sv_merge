@@ -60,10 +60,10 @@ task validate {
         --label ~{annotation_label} ~{if force_unique_reads then "--force_unique_reads" else ""}
 
         # use bcftools view -i to filter the true positive sites according to the annotation_label + _MAX > min_score
-        bcftools view -i "INFO/~{annotation_label}_MAX > ~{min_score}" ~{output_dir}/run/annotated.vcf.gz -Oz -o ~{output_dir}/run/annotated_tp.vcf.gz
+        bcftools view -i "INFO/~{annotation_label}_MAX > ~{min_score}" ~{output_dir}/run/annotated.vcf -Oz -o ~{output_dir}/run/annotated_tp.vcf.gz
 
         # index the training vcf
-        bcftools index -t ~{output_dir}/run/annotated.vcf.gz
+        bcftools index -t ~{output_dir}/run/annotated_tp.vcf.gz
     >>>
 
     parameter_meta {
