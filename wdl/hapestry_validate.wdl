@@ -46,12 +46,12 @@ task validate {
         fi
 
         # use bcftools to subset the vcf by the training resource bed
-        bcftools view -R ~{training_resource_bed} ~{vcf_gz} -Oz -o training.vcf.gz
+        bcftools view -R ~{training_resource_bed} ~{vcf_gz} -Ov -o training.vcf
 
         ~{docker_dir}/sv_merge/build/annotate \
         --output_dir ~{output_dir}/run/ \
         --bam_csv ~{haps_vs_ref_csv} \
-        --vcf training.vcf.gz \
+        --vcf training.vcf \
         --tandems ~{tandems_bed} \
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
