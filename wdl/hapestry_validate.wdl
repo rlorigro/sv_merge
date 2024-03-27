@@ -49,16 +49,15 @@ task validate {
         bcftools view -R ~{training_resource_bed} ~{vcf_gz} -Oz -o training.vcf.gz
 
         ~{docker_dir}/sv_merge/build/annotate \
-          --output_dir ~{output_dir}/run/ \
-          --bam_csv ~{haps_vs_ref_csv} \
-          --vcf training.vcf.gz \
-          --tandems ~{tandems_bed} \
-          --ref ~{reference_fa} \
-          --interval_max_length ~{interval_max_length} \
-          --flank_length ~{flank_length} \
-          --n_threads ~{n_threads} \
-          --force_unique_reads ~{force_unique_reads} \
-          --label ~{annotation_label}
+        --output_dir ~{output_dir}/run/ \
+        --bam_csv ~{haps_vs_ref_csv} \
+        --vcf training.vcf.gz \
+        --tandems ~{tandems_bed} \
+        --ref ~{reference_fa} \
+        --interval_max_length ~{interval_max_length} \
+        --flank_length ~{flank_length} \
+        --n_threads ~{n_threads} \
+        --label ~{annotation_label} ~{if force_unique_reads then "--force_unique_reads" else ""}
 
         # use bcftools view -i to filter the true positive sites according to the annotation_label + _MAX > min_score
         bcftools view -i "INFO/~{annotation_label}_MAX > ~{min_score}" ~{output_dir}/run/annotated.vcf.gz -Oz -o ~{output_dir}/run/annotated_tp.vcf.gz
