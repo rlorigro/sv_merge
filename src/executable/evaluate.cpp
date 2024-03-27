@@ -443,8 +443,15 @@ void compute_graph_evaluation(
 
         r.get_reference_coordinates(false, record_coord);
 
+        auto result = contig_interval_trees.find(r.chrom);
+
+        // First make sure there are actually some windows in this contig (might fail with small satellite contigs)
+        if (result == contig_interval_trees.end()){
+            return;
+        }
+
         // For each overlapping region, put the VcfRecord in that region
-        contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
+        result->second.overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
             coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
 
             // Skip large events in the population
