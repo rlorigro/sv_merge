@@ -140,6 +140,8 @@ workflow hapestry_annotate {
             vcf_gz = vcf_gz,
             vcf_gz_tbi = vcf_gz_tbi,
             confident_bed = confident_bed,
+            min_score = min_score,
+            bam_not_hardclipped = bam_not_hardclipped,
             interval_max_length = interval_max_length,
             flank_length = flank_length,
             n_threads = n_threads,
