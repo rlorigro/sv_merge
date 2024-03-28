@@ -12,7 +12,7 @@ struct RuntimeAttributes {
 }
 
 # Define the task
-task validate {
+task annotate {
     input {
         File vcf_gz
         File vcf_gz_tbi
@@ -98,7 +98,7 @@ task validate {
 }
 
 
-workflow hapestry_validate {
+workflow hapestry_annotate {
     input {
         File vcf_gz
         File vcf_gz_tbi
@@ -119,7 +119,7 @@ workflow hapestry_validate {
         String docker
         File? monitoring_script
 
-        RuntimeAttributes? validate_runtime_attributes
+        RuntimeAttributes? annotate_runtime_attributes
     }
 
     parameter_meta {
@@ -135,11 +135,11 @@ workflow hapestry_validate {
         annotation_label: "Name to give the INFO field in the VCF for annotations, usually upper case"
     }
 
-    call validate {
+    call annotate {
         input:
             vcf_gz = vcf_gz,
             vcf_gz_tbi = vcf_gz_tbi,
-            confident = confident,
+            confident_bed = confident_bed,
             interval_max_length = interval_max_length,
             flank_length = flank_length,
             n_threads = n_threads,
@@ -150,12 +150,12 @@ workflow hapestry_validate {
             annotation_label = annotation_label,
             docker = docker,
             monitoring_script = monitoring_script,
-            runtime_attributes = validate_runtime_attributes
+            runtime_attributes = annotate_runtime_attributes
     }
 
     output {
-        File annotated_vcf_gz = validate.annotated_vcf_gz
-        File annotated_vcf_gz_tbi = validate.annotated_vcf_gz_tbi
-        File? monitoring_log = validate.monitoring_log
+        File annotated_vcf_gz = annotate.annotated_vcf_gz
+        File annotated_vcf_gz_tbi = annotate.annotated_vcf_gz_tbi
+        File? monitoring_log = annotate.monitoring_log
     }
 }
