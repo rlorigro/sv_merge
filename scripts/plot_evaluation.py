@@ -11,10 +11,12 @@ import matplotlib
 import numpy as np
 from matplotlib.ticker import FormatStrFormatter
 
+
 def _invert(x, limits):
     """inverts a value x on a scale from
     limits[0] to limits[1]"""
     return limits[1] - (x - limits[0])
+
 
 def _scale_data(data, ranges):
     """scales data[1:] to ranges[0],
@@ -40,6 +42,7 @@ def _scale_data(data, ranges):
         sdata.append((d-y1) / (y2-y1) * (x2 - x1) + x1)
 
     return sdata
+
 
 def set_rgrids(self, radii, labels=None, angle=None, fmt=None,
                **kwargs):
@@ -78,6 +81,7 @@ def set_rgrids(self, radii, labels=None, angle=None, fmt=None,
         t.update(kwargs)
 
     return self.yaxis.get_gridlines(), self.yaxis.get_ticklabels()
+
 
 # taken from:
 # https://datascience.stackexchange.com/questions/6084/how-do-i-create-a-complex-radar-chart
@@ -174,7 +178,13 @@ def plot_6_major_distributions(histograms: dict, title, colors):
             if is_reverse[series_label]:
                 cdf = 1 - cdf
 
-            axes[i][j].plot(bins,cdf, label=sample_label, alpha=0.7, linewidth=2, color=colors[sample_label])
+            c = "red"
+            if sample_label not in colors:
+                sys.stderr.write("WARNING: could not find color for %s, using default of red" % sample_label)
+            else:
+                c = colors[sample_label]
+
+            axes[i][j].plot(bins,cdf, label=sample_label, alpha=0.7, linewidth=2, color=c)
             axes[i][j].set_xlabel(series_label)
 
             axes[i][j].set_ylim([0,1.05])
@@ -330,7 +340,12 @@ def load_dir(input_dir: str, data: defaultdict[lambda: defaultdict[list]]):
 
             with open(path) as file:
                 for l,line in enumerate(file):
-                    x = float(line.strip())
+                    x = 0
+
+                    if line.strip() == "-nan":
+                        continue
+                    else:
+                        x = float(line.strip())
 
                     if x < 0:
                         continue
@@ -406,7 +421,7 @@ def evaluate(input_dir):
             histograms[sample_label][series_label] = (h,bins)
 
     # TODO: ratio of supported/unsupported vars by length
-    plot_6_major_distributions(data, os.path.basename(input_dir), colors=colors)
+    plot_6_major_distributions(data, title=os.path.basename(input_dir), colors=colors)
 
 
 def plot_radar(data, data_ranges, title, colors):
