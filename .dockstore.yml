@@ -10,3 +10,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/hapestry_validate.wdl
   testParameterFiles:
+- name: hapestry_annotate
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_annotate.wdl
+  testParameterFiles:
