@@ -89,8 +89,8 @@ task validate {
     }
 
     output {
-        File training_vcf_gz = output_dir + "/run/annotated.vcf.gz"
-        File training_vcf_gz_tbi = output_dir + "/run/annotated.vcf.gz.tbi"
+        File training_vcf_gz = output_dir + "/run/annotated_tp.vcf.gz"
+        File training_vcf_gz_tbi = output_dir + "/run/annotated_tp.vcf.gz.tbi"
         File? monitoring_log = "monitoring.log"
     }
 }
