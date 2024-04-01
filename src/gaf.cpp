@@ -412,6 +412,10 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
     string token;
 
     while (file.get(c)){
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + gaf_path.string());
+        }
+
         if (c == delimiter){
             switch (n_delimiters){
                 case 0:

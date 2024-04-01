@@ -42,6 +42,11 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
             n_delimiters++;
             continue;
         }
+
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + bed_path.string());
+        }
+
         if (c == '\n'){
             int64_t start = stoll(start_token);
             int64_t stop = stoll(stop_token);

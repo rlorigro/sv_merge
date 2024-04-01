@@ -25,11 +25,14 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
     char delimiter = ',';
 
     while (file.get(c)){
-//        cerr << c << ' ' << sample_name << ' ' << bam_path << '\n';
         if (c == delimiter){
             n_delimiters++;
             continue;
         }
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + bam_csv.string());
+        }
+
         if (c == '\n'){
             if (n_char_in_line == 0){
                 continue;
@@ -40,6 +43,7 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
             }
 
             f(sample_name, bam_path);
+            cerr << "input BAM: " << sample_name << " '" << bam_path << "' " << '\n';
 
             sample_name.clear();
             bam_path.clear();
