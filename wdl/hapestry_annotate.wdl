@@ -61,7 +61,7 @@ task annotate {
         --label ~{annotation_label} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
 
         # convert to bgzipped vcf
-        bcftools view -Oz -o ~{output_dir}/run/annotated_tp.vcf.gz ~{output_dir}/run/annotated.vcf
+        bcftools view -Oz -o ~{output_dir}/run/annotated.vcf.gz ~{output_dir}/run/annotated.vcf
 
         # index the vcf
         bcftools index -t ~{output_dir}/run/annotated.vcf.gz
