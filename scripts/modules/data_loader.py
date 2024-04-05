@@ -16,7 +16,7 @@ def get_type_index(record: vcfpy.Record):
         return 3
 
 
-def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str, filter_fn=None):
+def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str, annotation_name: str, filter_fn=None, contigs=None):
     print(vcf_path)
     reader = vcfpy.Reader.from_path(vcf_path)
 
@@ -28,20 +28,19 @@ def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str,
         info = record.INFO
         ref_length = float(len(record.REF))/bp_norm
         alt_length = float(len(record.ALT[0].serialize()))/bp_norm
-        reads = list(map(float,info["HAPESTRY_READS"]))
 
         if filter_fn is not None:
             if not(filter_fn(record)):
                 continue
 
-        caller_support = [0,0,0]
-        for item in record.ID:
-            if "sniffles" in item.lower():
-                caller_support[0] = 1
-            elif "pbsv" in item.lower():
-                caller_support[1] = 1
-            else:
-                caller_support[2] = 1
+        if contigs is not None:
+            if record.CHROM not in contigs:
+                continue
+
+        if record.calls is None:
+            exit("ERROR: no calls in record: " + record.ID)
+        elif len(record.calls) != 1:
+            exit("ERROR: multiple calls in record: " + record.ID)
 
         # q = 0, p(correct) <= 0.0  Merged with above
         # q = 1, p(correct) <= 0.5  Merged with above
@@ -58,39 +57,51 @@ def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str,
         # i 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26
         # [ 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, x]
         if truth_info_name.lower() == "hapestry":
-            ref = list(map(float,info["HAPESTRY_REF"]))
-            is_true = any(ref[4-1:7]) or any(ref[10-1:13]) or any(ref[16-1:19]) or any(ref[22-1:25])
+            is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
         elif truth_info_name is not None:
             is_true = info[truth_info_name]
         else:
             is_true = 0
 
-        # print(ref_length, alt_length, reads, ref, is_true)
+        caller_support = [0,0,0]
+        caller_support[0] = info["SUPP_PAV"] if "SUPP_PAV" in info else 0
+        caller_support[1] = info["SUPP_PBSV"] if "SUPP_PBSV" in info else 0
+        caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
         t = type_vector
         t[get_type_index(record)] = 1
 
         y.append(is_true)
-
-        reads[-1] /= bp_norm
-
         x.append([])
+
         x[-1].extend(type_vector)
         x[-1].extend(caller_support)
-        x[-1].append(ref_length)
-        x[-1].append(alt_length)
-        x[-1].extend(reads)
-
+        x[-1].append(float(ref_length)/float(bp_norm))
+        x[-1].append(float(alt_length)/float(bp_norm))
         x[-1].append(record.QUAL if record.QUAL is not None else 0)
+        # x[-1].append(float(info["SVLEN"][0])/float(bp_norm) if "SVLEN" in info else 0)
+        x[-1].append(float(info["STDEV_POS"])/float(bp_norm) if "STDEV_POS" in info else 0)
+        x[-1].append(float(info["STDEV_LEN"])/float(bp_norm) if "STDEV_LEN" in info else 0)
+
+        if annotation_name.lower() == "hapestry":
+            reads = list(map(float,info["HAPESTRY_READS"]))
+            reads[-1] /= bp_norm
+            x[-1].extend(reads)
+
+        elif annotation_name.lower() == "sniffles":
+            call = record.calls[0]
+            x[-1].append(call.data["GQ"])
+            x[-1].append(call.data["DR"])
+            x[-1].append(call.data["DV"])
 
 
 class VcfDataset(Dataset):
-    def __init__(self, vcf_paths: list, truth_info_name, filter_fn=None):
+    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, filter_fn=None, contigs=None):
         x = list()
         y = list()
 
         for p in vcf_paths:
-            load_features_from_vcf(x=x,y=y,vcf_path=p,truth_info_name=truth_info_name,filter_fn=filter_fn)
+            load_features_from_vcf(x=x,y=y,vcf_path=p,truth_info_name=truth_info_name,annotation_name=annotation_name,filter_fn=filter_fn,contigs=contigs)
 
         x = np.array(x)
         y = np.array(y)
