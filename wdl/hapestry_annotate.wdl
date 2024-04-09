@@ -162,6 +162,7 @@ workflow hapestry_annotate {
     output {
         File annotated_vcf_gz = annotate.annotated_vcf_gz
         File annotated_vcf_gz_tbi = annotate.annotated_vcf_gz_tbi
+        File hapestry_annotate_data = annotate.hapestry_annotate_data
         File? monitoring_log = annotate.monitoring_log
     }
 }
