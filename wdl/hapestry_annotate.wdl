@@ -65,6 +65,9 @@ task annotate {
 
         # index the vcf
         bcftools index -t ~{output_dir}/run/annotated.vcf.gz
+
+        # tarball the output directory
+        tar -cvzf ~{output_dir}/hapestry.tar.gz ~{output_dir}/run
     >>>
 
     parameter_meta {
@@ -93,6 +96,7 @@ task annotate {
     output {
         File annotated_vcf_gz = output_dir + "/run/annotated.vcf.gz"
         File annotated_vcf_gz_tbi = output_dir + "/run/annotated.vcf.gz.tbi"
+        File hapestry_annotate_data = output_dir + "/hapestry.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
 }
