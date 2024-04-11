@@ -19,7 +19,6 @@ task annotate {
         File confident_bed
 
         # Hapestry specific args
-        Float? min_score = 0.9
         Int? interval_max_length = 50000
         Int? flank_length = 200
         Int n_threads
@@ -66,12 +65,11 @@ task annotate {
         # index the vcf
         bcftools index -t ~{output_dir}/run/annotated.vcf.gz
 
-        # tarball the output directory
-        tar -cvzf ~{output_dir}/hapestry.tar.gz ~{output_dir}/run
+        # tarball the output directory -- WARNING omitted because tar takes 2 hours on these outputs...
+        # tar -cvzf ~{output_dir}/hapestry.tar.gz ~{output_dir}/run
     >>>
 
     parameter_meta {
-        min_score: "Minimum identity observed spanning a variant to consider a true positive w.r.t. assembly alignments"
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
         n_threads: "Maximum number of threads to use"
@@ -96,7 +94,7 @@ task annotate {
     output {
         File annotated_vcf_gz = output_dir + "/run/annotated.vcf.gz"
         File annotated_vcf_gz_tbi = output_dir + "/run/annotated.vcf.gz.tbi"
-        File hapestry_annotate_data = output_dir + "/hapestry.tar.gz"
+#        File hapestry_annotate_data = output_dir + "/hapestry.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
 }
@@ -109,7 +107,6 @@ workflow hapestry_annotate {
         File confident_bed
 
         # Hapestry specific args
-        Float? min_score = 0.9
         Int? interval_max_length = 50000
         Int? flank_length = 200
         Int n_threads
@@ -127,7 +124,6 @@ workflow hapestry_annotate {
     }
 
     parameter_meta {
-        min_score: "Minimum identity observed spanning a variant to consider a true positive w.r.t. assembly alignments"
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
         n_threads: "Maximum number of threads to use"
@@ -144,7 +140,6 @@ workflow hapestry_annotate {
             vcf_gz = vcf_gz,
             vcf_gz_tbi = vcf_gz_tbi,
             confident_bed = confident_bed,
-            min_score = min_score,
             bam_not_hardclipped = bam_not_hardclipped,
             interval_max_length = interval_max_length,
             flank_length = flank_length,
@@ -162,7 +157,7 @@ workflow hapestry_annotate {
     output {
         File annotated_vcf_gz = annotate.annotated_vcf_gz
         File annotated_vcf_gz_tbi = annotate.annotated_vcf_gz_tbi
-        File hapestry_annotate_data = annotate.hapestry_annotate_data
+#        File hapestry_annotate_data = annotate.hapestry_annotate_data
         File? monitoring_log = annotate.monitoring_log
     }
 }
