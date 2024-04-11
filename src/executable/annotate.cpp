@@ -1122,7 +1122,7 @@ void annotate(
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
         path bed_log_path = output_dir / "windows_omitted.bed";
-        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, regions, bed_log_path);
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, regions, bed_log_path, true);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
