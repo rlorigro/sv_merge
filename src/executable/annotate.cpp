@@ -358,6 +358,22 @@ void compute_graph_evaluation_thread_fn(
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
         vector<float> max_observed_identities(variant_graph.vcf_records.size());
 
+        // First annotate all the variants as tandem or not
+        for (size_t v=0; v<variant_supports.size(); v++){
+            auto& record = variant_graph.vcf_records[v];
+            coord_t ref_coord;
+            record.get_reference_coordinates(false, ref_coord);
+
+            bool is_tandem = false;
+
+            contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
+                is_tandem = true;
+                return false;
+            });
+
+            variant_supports[v].is_tandem = is_tandem;
+        }
+
         // Iterate the alignments and accumulate their stats w.r.t. variants
         // For tandem-contained variants, stats pertain to entire tandem
         unordered_map<string,size_t> counter;
@@ -409,13 +425,8 @@ void compute_graph_evaluation_thread_fn(
 
                 coord_t ref_coord;
                 record.get_reference_coordinates(false, ref_coord);
-                bool is_tandem = false;
 
-                contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
-                    is_tandem = true;
-                    return false;
-                });
-
+                // Ref coordinates of target region are computed using VariantGraph's tandem-aware flanking
                 int32_t target_min = variant_graph.get_flank_boundary_left(region.name, ref_coord.first, variant_flank_length);
                 int32_t target_max = variant_graph.get_flank_boundary_right(region.name, ref_coord.second, variant_flank_length);
 
@@ -521,7 +532,6 @@ void compute_graph_evaluation_thread_fn(
                 // Update the histogram for this variant
                 auto identity = summary.compute_identity();
                 variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(identity);
-                variant_supports[id].is_tandem = is_tandem;
 
                 // Update the max observed identity for this variant
                 if (identity > max_observed_identities[id]){
@@ -570,197 +580,6 @@ void compute_graph_evaluation_thread_fn(
             record.print(out_file);
             out_file << '\n';
         }
-
-        i = job_index.fetch_add(1);
-    }
-}
-
-
-void train_error_distribution_thread_fn(
-        array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8>& error_distribution,
-        unordered_map<Region,vector<VcfRecord> >& region_records,
-        const unordered_map<string,vector<interval_t> >& contig_tandems,
-        const unordered_map<Region,TransMap>& region_transmaps,
-        const unordered_map<string,string>& ref_sequences,
-        const vector<Region>& regions,
-        const VcfReader& vcf_reader,
-        const string& label,
-        const path& output_dir,
-        int32_t flank_length,
-        atomic<size_t>& job_index
-){
-    unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
-
-    for (const auto& [contig,intervals]: contig_tandems) {
-        for (const auto& interval: intervals) {
-            contig_interval_trees[contig].insert({interval.first, interval.second});
-        }
-    }
-
-    // Zero initialize (hopefully?)
-    error_distribution = {};
-
-    size_t i = job_index.fetch_add(1);
-
-    path vcf;
-    vcf_reader.get_file_path(vcf);
-    string vcf_name_prefix = get_vcf_name_prefix(vcf);
-
-    while (i < regions.size()){
-        const auto& region = regions.at(i);
-
-        path subdir = output_dir / region.to_unflanked_string('_', flank_length);
-
-        auto records = region_records.at(region);
-
-        create_directories(subdir);
-
-        path gfa_path = subdir / "graph.gfa";
-        path fasta_filename = subdir / "haplotypes.fasta";
-
-        VariantGraph variant_graph(ref_sequences, contig_tandems);
-
-        // Check if the region actually contains any usable variants, and use corresponding build() functions
-        if (variant_graph.would_graph_be_nontrivial(records)){
-            variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
-        }
-        else{
-            // VariantGraph assumes that the flank length needs to be added to the region
-            variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
-        }
-
-        cerr << "WRITING GFA to file: " << gfa_path << '\n';
-        variant_graph.to_gfa(gfa_path);
-
-        path gaf_path = subdir / "alignments.gaf";
-
-        auto name_prefix = get_vcf_name_prefix(vcf);
-
-        path fasta_path = subdir / fasta_filename;
-
-        string command = "GraphAligner"
-                         " --seeds-mum-count " "-1"
-                         " --seeds-mxm-windowsize " "0"
-                         " -b " "10"
-                         " --max-cluster-extend " "10"
-                         " --multimap-score-fraction  " "1"
-                         " -t " "1"
-                         " -a " + gaf_path.string() +
-                         " -g " + gfa_path.string() +
-                         " -f " + fasta_path.string();
-
-        // Run GraphAligner and check how long it takes, if it times out
-        Timer t;
-        bool success = run_command(command, false, 90);
-        string time_csv = t.to_csv();
-
-        write_time_log(subdir, vcf_name_prefix, time_csv, success);
-
-        // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
-        if (not success) {
-            cerr << "WARNING: Command timed out: " << command << '\n';
-            i = job_index.fetch_add(1);
-            continue;
-        }
-
-        // Iterate the alignments and accumulate their stats w.r.t. variants
-        // For tandem-contained variants, stats pertain to entire tandem
-        unordered_map<string,size_t> counter;
-        for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
-            auto& path = alignment.get_path();
-            if (path.size() < 2){
-                return;
-            }
-
-            // Fetch (or construct) the count for this read name (default = 0)
-            auto& c = counter[alignment.get_query_name()];
-
-            // Create a unique name and add the path to variant graph
-            auto name = alignment.get_query_name() + "_" + to_string(c);
-
-            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
-//                cerr << "TESTING: " << _record.id << '\n';
-
-                auto record = _record;
-
-                if (record.sv_type == VcfReader::TYPE_BREAKEND){
-                    throw runtime_error("ERROR: tandem-aware annotation not implemented for BNDs");
-                }
-
-                vector<interval_t> non_ref_intervals = {};
-                vector<interval_t> ref_intervals = {};
-                vector<interval_t> query_intervals = {};
-
-                int32_t path_length = 0;
-                for (const auto& [n,is_reverse]: path){
-                    auto h = variant_graph.graph.get_handle(stoll(n), is_reverse);
-                    auto length = int32_t(variant_graph.graph.get_length(h));
-
-                    // If we are in a ref node, then we want to track the cigar operations, and use them to train the
-                    // distribution
-                    // (GAF node IDs are numeric because we wrote them)
-                    if (not variant_graph.is_reference_node(stoll(n))){
-                        non_ref_intervals.emplace_back(path_length, path_length + length);
-                    }
-
-                    path_length += length;
-                }
-
-                // Construct the complement of the non-ref intervals
-                int32_t prev = 0;
-                for (auto& interval: non_ref_intervals){
-                    ref_intervals.emplace_back(prev,interval.first);
-                    prev = interval.second;
-                }
-                ref_intervals.emplace_back(prev,path_length);
-
-                coord_t ref_coord;
-                record.get_reference_coordinates(false, ref_coord);
-                bool is_tandem = false;
-
-                contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
-                    is_tandem = true;
-                    return false;
-                });
-
-                int32_t variant_length = max(ref_coord.second - ref_coord.first, abs(record.sv_length));
-
-                // 2^2 = 4      <- Bottomless (everything below 8)
-                // 2^3 = 8
-                // 2^4 = 16
-                // 2^5 = 32
-                // 2^6 = 64
-                // 2^7 = 128
-                // 2^8 = 256
-                // 2^9 = 512
-                // 2^10 = 1024
-                // 2^11 = 2048  <- Topless (everything above 2048)
-                auto sv_length_bin = int64_t(floor(log2(variant_length)) - 2);
-
-                sv_length_bin = min(int64_t(error_distribution[record.sv_type].size() - 1), sv_length_bin);
-                sv_length_bin = max(int64_t(0), sv_length_bin);
-
-//                cerr << region.to_string() << ',' << name << '\n';
-                AlignmentSummary summary;
-                for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
-                    int32_t cigar_length = i.length;
-//                    cerr << int(record.sv_type) << ',' << cigar_code_to_char[i.code] << ',' << cigar_length << ',' << i.length << '\n';
-
-                    if (cigar_length == 0){
-                        cerr << "anomalous length" << '\n';
-                    }
-
-                    summary.update(i, true);
-
-                },{});
-
-                auto x = int32_t(round(summary.compute_identity()*100));
-                error_distribution[record.sv_type][sv_length_bin][is_tandem][x]++;
-
-            });
-
-            c++;
-        });
 
         i = job_index.fetch_add(1);
     }
@@ -875,196 +694,6 @@ void compute_graph_evaluation(
 }
 
 
-void compute_error_distribution(
-        const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
-        const unordered_map<string,vector<interval_t> >& contig_tandems,
-        const unordered_map<Region,TransMap>& region_transmaps,
-        const unordered_map<string,string>& ref_sequences,
-        const vector<Region>& regions,
-        const string& label,
-        const path& vcf,
-        size_t n_threads,
-        int32_t flank_length,
-        int32_t interval_max_length,
-        const path& output_dir
-        ){
-
-    unordered_map<Region,vector<VcfRecord> > region_records;
-    region_records.reserve(regions.size());
-
-    // Load records for this VCF
-    VcfReader vcf_reader(vcf);
-    vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 1;
-    vcf_reader.progress_n_lines = 100'000;
-    coord_t record_coord;
-
-    cerr << "Reading VCF... " << '\n';
-    vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        // TODO: allow breakends in evaluation
-        if (r.sv_type == VcfReader::TYPE_BREAKEND){
-            cerr << "WARNING: skipping breakend"  << '\n';
-            return;
-        }
-
-        r.get_reference_coordinates(false, record_coord);
-
-        // For each overlapping region, put the VcfRecord in that region
-        contig_interval_trees.at(r.chrom).overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
-            coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
-
-            // Skip large events in the population
-            // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
-            // for very large events
-            if (record_coord.second - record_coord.first > interval_max_length){
-                return true;
-            }
-
-            // Check if this record exceeds the region
-            if (record_coord.first < unflanked_window.first or record_coord.second > unflanked_window.second){
-                cerr << "WARNING: skipping record that exceeds the un-flanked window. Record: " << record_coord.first << ',' << record_coord.second << " window: " << unflanked_window.first << ',' << unflanked_window.second << '\n';
-                return true;
-            }
-
-            Region region(r.chrom, iter->low(), iter->high());
-            region_records[region].emplace_back(r);
-            return true;
-        });
-    });
-
-    // Before moving on, make sure every region has at least an empty vector
-    for (const auto& r: regions){
-        if (region_records.find(r) == region_records.end()){
-            region_records[r] = {};
-        }
-    }
-
-    // SVTYPE -> SVLENGTH -> CIGAR TYPE -> IS_TANDEM -> LENGTH_OF_CIGAR -> count
-    //    7   ->    10    ->      4     ->     2     -> [hashtable]
-    vector<array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8> > error_distributions(n_threads);
-
-    // Convert VCFs to graphs and run graph aligner
-    {
-        // Thread-related variables
-        atomic<size_t> job_index = 0;
-        vector<thread> threads;
-
-        threads.reserve(n_threads);
-
-        // Launch threads
-        for (size_t n=0; n<n_threads; n++) {
-            try {
-                cerr << "launching: " << n << '\n';
-                threads.emplace_back(train_error_distribution_thread_fn,
-                                     std::ref(error_distributions[n]),
-                                     std::ref(region_records),
-                                     std::cref(contig_tandems),
-                                     std::cref(region_transmaps),
-                                     std::cref(ref_sequences),
-                                     std::cref(regions),
-                                     std::cref(vcf_reader),
-                                     std::cref(label),
-                                     std::cref(output_dir),
-                                     flank_length,
-                                     std::ref(job_index)
-                );
-            } catch (const exception &e) {
-                throw e;
-            }
-        }
-
-        // Wait for threads to finish
-        for (auto &n: threads) {
-            n.join();
-        }
-    }
-
-    // Accumulate the total counts across all threads
-    // SVTYPE -> IS_TANDEM -> CIGAR TYPE -> LENGTH -> count
-    array <array <array <unordered_map<int32_t,int64_t>, 2>, 10>, 8> total_distribution = {};
-    for (const auto& item: error_distributions){
-        for (size_t sv=0; sv<item.size(); sv++){
-            for (size_t l=0; l<item[sv].size(); l++) {
-                for (size_t t=0; t<item[sv][l].size(); t++){
-                    for (auto [cigar_length,count]: item[sv][l][t]) {
-                        total_distribution[sv][l][t][cigar_length] += count;
-                    }
-                }
-            }
-        }
-    }
-
-    path output_path = output_dir / "error_distribution.csv";
-    ofstream file(output_path);
-
-    file << "sv_type,sv_length_lower_bound,sv_length_upper_bound,is_tandem,distribution" << '\n';
-    array<string,8> sv_key = {
-            "NONE??",
-            "INSERTION",
-            "DELETION",
-            "INVERSION",
-            "DUPLICATION",
-            "BREAKEND",
-            "REPLACEMENT",
-            "CNV"
-    };
-
-    array<string,2> tandem_key = {
-            "0",
-            "1"
-    };
-
-    // 2^2 = 4      <- Bottomless (everything below 8)
-    // 2^3 = 8
-    // 2^4 = 16
-    // 2^5 = 32
-    // 2^6 = 64
-    // 2^7 = 128
-    // 2^8 = 256
-    // 2^9 = 512
-    // 2^10 = 1024
-    // 2^11 = 2048  <- Topless (everything above 2048)
-    array<string,10> sv_length_lower_key = {
-            to_string(int(round(pow(2,0)))),
-            to_string(int(round(pow(2,3)))),
-            to_string(int(round(pow(2,4)))),
-            to_string(int(round(pow(2,5)))),
-            to_string(int(round(pow(2,6)))),
-            to_string(int(round(pow(2,7)))),
-            to_string(int(round(pow(2,8)))),
-            to_string(int(round(pow(2,9)))),
-            to_string(int(round(pow(2,10)))),
-            to_string(int(round(pow(2,11))))
-    };
-
-    array<string,10> sv_length_upper_key = {
-            to_string(int(round((pow(2,3))))),
-            to_string(int(round((pow(2,4))))),
-            to_string(int(round((pow(2,5))))),
-            to_string(int(round((pow(2,6))))),
-            to_string(int(round((pow(2,7))))),
-            to_string(int(round((pow(2,8))))),
-            to_string(int(round((pow(2,9))))),
-            to_string(int(round((pow(2,10))))),
-            to_string(int(round((pow(2,11))))),
-            "inf"
-    };
-
-    for (size_t sv=0; sv<total_distribution.size(); sv++){
-        for (size_t l=0; l<total_distribution[sv].size(); l++){
-            for (size_t t=0; t<total_distribution[sv][l].size(); t++) {
-                file << sv_key[sv] << ',' << sv_length_lower_key[l] << ',' << sv_length_upper_key[l] << ',' << tandem_key[t] << ',' << '{';
-                for (auto [cigar_length,count]: total_distribution[sv][l][t]){
-                    file << cigar_length << ':' << count << ',';
-                }
-                file << '}' << '\n';
-            }
-        }
-    }
-
-}
-
-
 void annotate(
         path vcf,
         path output_dir,
@@ -1078,8 +707,7 @@ void annotate(
         int32_t n_threads,
         bool debug,
         bool force_unique_reads,
-        bool bam_not_hardclipped,
-        bool train_error_distribution
+        bool bam_not_hardclipped
 ){
     Timer t;
 
@@ -1240,13 +868,7 @@ void annotate(
     //
     cerr << "Generating graph alignments for VCF: " << vcf << '\n';
 
-    auto f = compute_graph_evaluation;
-
-    if (train_error_distribution) {
-        f = compute_error_distribution;
-    }
-
-    f(
+    compute_graph_evaluation(
             contig_interval_trees,
             contig_tandems,
             region_transmaps,
@@ -1260,49 +882,47 @@ void annotate(
             staging_dir
     );
 
-    if (not train_error_distribution) {
-        auto vcf_prefix = get_vcf_name_prefix(vcf);
-        path out_vcf = output_dir / ("annotated.vcf");
-        ofstream out_file(out_vcf);
+    auto vcf_prefix = get_vcf_name_prefix(vcf);
+    path out_vcf = output_dir / ("annotated.vcf");
+    ofstream out_file(out_vcf);
 
-        if (not (out_file.is_open() and out_file.good())){
-            throw runtime_error("ERROR: could not write BED log file: " + out_vcf.string());
+    if (not (out_file.is_open() and out_file.good())){
+        throw runtime_error("ERROR: could not write BED log file: " + out_vcf.string());
+    }
+
+    ifstream input_vcf(vcf);
+
+    if (not (input_vcf.is_open() and input_vcf.good())){
+        throw runtime_error("ERROR: could not write BED log file: " + vcf.string());
+    }
+
+    // Just copy over the header lines
+    string line;
+    while (getline(input_vcf, line)){
+        if (line.starts_with("##")){
+            out_file << line << '\n';
         }
-
-        ifstream input_vcf(vcf);
-
-        if (not (input_vcf.is_open() and input_vcf.good())){
-            throw runtime_error("ERROR: could not write BED log file: " + vcf.string());
+        else{
+            input_vcf.close();
+            break;
         }
+    }
 
-        // Just copy over the header lines
-        string line;
-        while (getline(input_vcf, line)){
-            if (line.starts_with("##")){
-                out_file << line << '\n';
-            }
-            else{
-                input_vcf.close();
-                break;
-            }
-        }
+    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    // TODO: fix duplicated version line
+    for (size_t i=0; i<regions.size(); i++){
+        const auto& region = regions[i];
+        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "annotated.vcf";
 
-        // Copy over the mutable parts of the header and then the main contents of the filtered VCF
-        // TODO: fix duplicated version line
-        for (size_t i=0; i<regions.size(); i++){
-            const auto& region = regions[i];
-            path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "annotated.vcf";
-
-            ifstream file(sub_vcf);
-            while (getline(file, line)){
-                if (line.starts_with('#')){
-                    if (i == 0){
-                        out_file << line << '\n';
-                    }
-                }
-                else{
+        ifstream file(sub_vcf);
+        while (getline(file, line)){
+            if (line.starts_with('#')){
+                if (i == 0){
                     out_file << line << '\n';
                 }
+            }
+            else{
+                out_file << line << '\n';
             }
         }
     }
@@ -1324,7 +944,6 @@ int main (int argc, char* argv[]){
     int32_t interval_max_length = 15000;
     int32_t n_threads = 1;
     bool debug = false;
-    bool train_error_distribution = false;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
@@ -1391,8 +1010,6 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
 
-    app.add_flag("--train_error_distribution", train_error_distribution, "Invoke this to accumulate and write the error distribution for events not in SV alignments (SKIPS NORMAL EXECUTION OF ANNOTATION).");
-
     try{
         app.parse(argc, argv);
     }
@@ -1413,8 +1030,7 @@ int main (int argc, char* argv[]){
         n_threads,
         debug,
         force_unique_reads,
-        bam_not_hardclipped,
-        train_error_distribution
+        bam_not_hardclipped
     );
 
     return 0;
