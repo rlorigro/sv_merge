@@ -57,7 +57,7 @@ workflow multiannotate {
             n_threads = n_threads,
             tandems_bed = tandems_bed,
             reference_fa = reference_fa,
-            haps_vs_ref_csv = haps_vs_ref_csv,
+            haps_vs_ref_csv = reads_vs_ref_csv,
             force_unique_reads = force_unique_reads,
             annotation_label = "HAPESTRY_READS",
             docker = docker,
