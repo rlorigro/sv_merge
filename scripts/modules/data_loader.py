@@ -83,16 +83,20 @@ def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str,
         x[-1].append(float(info["STDEV_POS"])/float(bp_norm) if "STDEV_POS" in info else 0)
         x[-1].append(float(info["STDEV_LEN"])/float(bp_norm) if "STDEV_LEN" in info else 0)
 
+        reads = list(map(float,info["HAPESTRY_READS"]))
+        reads[-1] /= bp_norm
+
         if annotation_name.lower() == "hapestry":
-            reads = list(map(float,info["HAPESTRY_READS"]))
-            reads[-1] /= bp_norm
             x[-1].extend(reads)
+            max_align_score = info["HAPESTRY_READS_MAX"]
+            x[-1].append(max_align_score)
 
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
             x[-1].append(call.data["GQ"])
             x[-1].append(call.data["DR"])
             x[-1].append(call.data["DV"])
+            x[-1].extend(reads[-2:])
 
 
 class VcfDataset(Dataset):

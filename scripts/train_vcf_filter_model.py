@@ -1,6 +1,6 @@
 from modules.shallow_linear import ShallowLinear
 from modules.data_loader import VcfDataset
-from modules.misc import plot_roc_curve, write_recalibrated_vcf, plot_confusion
+# from modules.misc import plot_roc_curve, write_recalibrated_vcf, plot_confusion
 
 from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
@@ -14,10 +14,10 @@ from sklearn.metrics import roc_curve
 
 from matplotlib import pyplot
 
-import pandas as pd
 import numpy as np
 
 from datetime import datetime
+from collections import OrderedDict
 import random
 import time
 import numpy
@@ -136,7 +136,7 @@ def test_batch(model, x, y):
 
 
 def plot_loss(train_losses, test_losses):
-    fig = pyplot.gcf()
+    fig = pyplot.figure()
     fig.set_size_inches(8,6)
     ax = pyplot.axes()
     ax.set_xlabel("Iteration")
@@ -146,14 +146,16 @@ def plot_loss(train_losses, test_losses):
     pyplot.plot(x_loss, test_losses, label="test")
 
 
-def run(dataset_train, dataset_test, downsample=False):
+def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
     learning_rate = 1e-3
     weight_decay = 1e-4
 
-    n_epochs = 8
+    n_epochs = 4
 
     goal_batch_size = 2048
+
+    config_path = os.path.join(output_dir, "config.txt")
 
     # Batch size is the number of training examples used to calculate each iteration's gradient
     batch_size_train = min(goal_batch_size, len(dataset_train))
@@ -163,6 +165,15 @@ def run(dataset_train, dataset_test, downsample=False):
         batch_size_train = int(min(goal_batch_size, minority_class_size*2))
 
     print("Using batch size: ", batch_size_train)
+
+    # write the hyperparameters to a file
+    with open(config_path, "w") as f:
+        f.write("learning_rate: {}\n".format(learning_rate))
+        f.write("weight_decay: {}\n".format(weight_decay))
+        f.write("n_epochs: {}\n".format(n_epochs))
+        f.write("goal_batch_size: {}\n".format(goal_batch_size))
+        f.write("downsample: {}\n".format(downsample))
+        f.write("batch_size_train: {}\n".format(batch_size_train))
 
     data_loader_train = None
 
@@ -240,22 +251,57 @@ def downsample_test_data(y_true, y_predict, seed=37):
     return y_true, y_predict
 
 
+def plot_roc_curve(y_true, y_predict, label, axes):
+    fpr, tpr, thresholds = roc_curve(y_true, y_predict)
+
+    axes.plot(fpr, tpr, label=label)
+
+    axes.set_xlabel("False positive rate")
+    axes.set_ylabel("True positive rate")
+
+    # add major and minor gridlines at 5 and 10% intervals
+    axes.grid(which='major', color='black', linestyle='-', linewidth=0.5)
+    axes.grid(which='minor', color='black', linestyle=':', linewidth=0.5)
+
+    return axes
+
+
+def write_recalibrated_vcf(y_predict, input_vcf_path, output_vcf_path):
+    reader = vcfpy.Reader.from_path(input_vcf_path)
+
+    mapping = OrderedDict({
+        'ID': 'HAPESTRY_SCORE',
+        'Number': 1,
+        'Type': 'Float',
+        'Description': 'Recalibrated q score from model trained with hapestry'
+    })
+
+    writer = vcfpy.Writer.from_path(output_vcf_path, reader.header)
+    writer.header.add_info_line(mapping)
+
+    for record, score in zip(reader, y_predict):
+        record.INFO["HAPESTRY_SCORE"] = score
+        writer.write_record(record)
+
+
+def min50bp(record):
+    return record.INFO["SVLEN"][0] >= 50
+
+
 def main():
-    output_path = "test_annotation.vcf"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+    output_dir = os.path.join("output/", timestamp)
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     vcf_paths = [
-        "/home/ryan/data/test_hapestry/vcf/hprc_8x_annotation_test/hapestry_and_truvari_and_sniffles/HG002_truvari_hapestry_sniffles_annotated.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/hprc_8x_annotation_test/hapestry_and_truvari_and_sniffles/HG00438_truvari_hapestry_sniffles_annotated.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/hprc_8x_annotation_test/hapestry_and_truvari_and_sniffles/HG00621_truvari_hapestry_sniffles_annotated.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/hprc_8x_annotation_test/hapestry_and_truvari_and_sniffles/HG00673_truvari_hapestry_sniffles_annotated.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/hprc_8x_annotation_test/hapestry_and_truvari_and_sniffles/HG00733_truvari_hapestry_sniffles_annotated.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG002_truvari_hapestry_sniffles.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00438_truvari_hapestry_sniffles.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00621_truvari_hapestry_sniffles.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00673_truvari_hapestry_sniffles.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00733_truvari_hapestry_sniffles.vcf.gz",
     ]
-
-    # truth_info_name = "Hapestry"
-    truth_info_name = "TruvariBench_TP"
-
-    annotation_name = "Hapestry"
-    # annotation_name = "Sniffles"
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
     test_contigs = {"chr6", "chr7", "chr8"}
@@ -263,56 +309,75 @@ def main():
     # train_contigs = {"chr1", "chr2"}
     # test_contigs = {"chr6"}
 
-    dataset_train = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=train_contigs)
-    dataset_test = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=test_contigs)
-
-    # Print information on the train and test datasets
-    print('Train datapoints: ', len(dataset_train))
-    print('Test datapoints: ', len(dataset_test))
-    print('Input shape: ', dataset_train[0][0].shape)
-    print('Output shape: ', dataset_train[0][1].shape)
-
-    train_losses, test_losses, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True)
-
-    y_true, y_predict = downsample_test_data(y_true, y_predict)
-
-    # Get the current date and time
-    now = datetime.now()
-
-    # Format the date and time
-    model_output_path = now.strftime("%Y-%m-%d_%H_%M_%S.pt")
-
-    torch.save(model.state_dict(), model_output_path)
-
-    # calculate and plot loss
-    print("Final loss:", sum(train_losses[-100:])/100)
-    plot_loss(train_losses=train_losses, test_losses=test_losses)
-
-    # print shape of y_predict and y_true; print all values in one element
-    print("y_predict shape: ", y_predict.shape)
-    print("y_true shape: ", y_true.shape)
-    print('y_predict y')
-    print(y_predict[0], y_true[0])
-
-    y_predict = numpy.array(y_predict.data)
+    # filter_fn = min50bp
+    filter_fn = None
 
     fig = pyplot.figure()
     fig.set_size_inches(8,6)
+
     axes = pyplot.axes()
 
-    axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label="trained on " + truth_info_name + " truth labels and " + annotation_name + " features")
+    for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
+        for annotation_name in ["Hapestry", "Sniffles"]:
+            label = truth_info_name + " truth labels and " + annotation_name + " features"
+
+            dataset_train = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=train_contigs, filter_fn=filter_fn)
+            dataset_test = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=test_contigs, filter_fn=filter_fn)
+
+            n_train = len(dataset_train)
+            n_test = len(dataset_test)
+
+            # Print information on the train and test datasets
+            print('Train datapoints: ', n_train)
+            print('Test datapoints: ', n_test)
+            print('Input shape: ', dataset_train[0][0].shape)
+            print('Output shape: ', dataset_train[0][1].shape)
+
+            train_losses, test_losses, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+
+            y_true, y_predict = downsample_test_data(y_true, y_predict)
+
+            # Format the date and time
+            model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
+            torch.save(model.state_dict(), model_output_path)
+
+            # calculate and plot loss
+            print("Final loss:", sum(train_losses[-100:])/100)
+            plot_loss(train_losses=train_losses, test_losses=test_losses)
+
+            # print shape of y_predict and y_true; print all values in one element
+            print("y_predict shape: ", y_predict.shape)
+            print("y_true shape: ", y_true.shape)
+            print('y_predict y')
+            print(y_predict[0], y_true[0])
+
+            y_predict = numpy.array(y_predict.data)
+
+            axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label)
+
+            # Compute points for trivial support classifier
+            print(dataset_test.x_data[:,4:7].shape)
+
+            y_predict_trivial = torch.sum(dataset_test.x_data[:,4:7], dim=1) >= 2
+            y_true_trivial = dataset_test.y_data
+
+            y_true_trivial, y_predict_trivial = downsample_test_data(y_true_trivial, y_predict_trivial)
+            print(y_predict_trivial.shape)
+            print(y_true_trivial.shape)
+
+            fpr, tpr, thresholds = roc_curve(y_true_trivial, y_predict_trivial)
+
+            color = axes.lines[-1].get_color()
+            axes.scatter(fpr, tpr, marker='o', color=color)
 
     # Generate a legend for axes and force bottom right location
+    axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
     axes.legend(loc="lower right")
-    pyplot.savefig("roc_curve_" + truth_info_name + "_" + annotation_name + ".png", dpi=200)
 
-    axes = plot_confusion(y_true=y_true, y_predict=y_predict, title="trained on " + truth_info_name + " truth labels and " + annotation_name + " features", threshold=0.5)
-    pyplot.savefig("confusion_" + truth_info_name + "_" + annotation_name + ".png", dpi=200)
+    fig.savefig(os.path.join(output_dir,"roc_curve_all_combos.png"), dpi=200)
 
     pyplot.show()
     pyplot.close()
-
-    # write_recalibrated_vcf(test_paths=test_paths, output_path="test_annotation.vcf", y_predict=y_true_hapestry, as_phred=False)
 
 
 if __name__ == "__main__":
