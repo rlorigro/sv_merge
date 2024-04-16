@@ -12,7 +12,6 @@ workflow multiannotate {
         File confident_bed
 
         String sample_id
-        String truvari_bench_flags
         Int max_length = 50000
         Int min_length = 0
         Int flank_length = 200
@@ -88,8 +87,7 @@ workflow multiannotate {
             input_vcf_gz = annotate_ref.annotated_vcf_gz,
             input_vcf_gz_tbi = annotate_ref.annotated_vcf_gz_tbi,
             truth_vcf_gz = truth_vcf_gz,
-            truth_tbi = truth_vcf_gz_tbi,
-            truvari_bench_flags = truvari_bench_flags
+            truth_tbi = truth_vcf_gz_tbi
     }
 
     call sniffles.GetRegenotypedVcfImpl as sniffles_annotate {
