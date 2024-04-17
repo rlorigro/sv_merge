@@ -100,7 +100,6 @@ task bcftools_collapse {
 
     parameter_meta {
         bed: "BED file to subset the VCF"
-        norm_biallelic: "Normalize the VCF to biallelic sites"
         vcf_gz: "VCF file to annotate"
         vcf_gz_tbi: "Tabix index for the VCF"
     }
