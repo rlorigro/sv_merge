@@ -18,8 +18,6 @@ task bcftools_norm {
     input {
         File vcf_gz
         File vcf_gz_tbi
-        File? bed
-        Boolean norm_biallelic = false
 
         String docker
         File? monitoring_script
@@ -34,25 +32,14 @@ task bcftools_norm {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
-        # Use bcftools to subset the vcf by the BED if it was provided
-        if ~{defined(bed)}; then
-            bcftools view -R ~{bed} -Oz -o temp.vcf.gz ~{vcf_gz}
-            mv temp.vcf.gz ~{vcf_gz}
-        fi
-
-        # Normalize the vcf to biallelic if requested
-        if ~{norm_biallelic}; then
-            bcftools norm --multiallelics - -Oz -o temp.vcf.gz ~{vcf_gz}
-            mv temp.vcf.gz ~{vcf_gz}
-        fi
+        bcftools norm --multiallelics - -Oz -o temp.vcf.gz ~{vcf_gz}
+        mv temp.vcf.gz ~{vcf_gz}
 
         # Index the vcf
         bcftools index -t ~{vcf_gz}
     >>>
 
     parameter_meta {
-        bed: "BED file to subset the VCF"
-        norm_biallelic: "Normalize the VCF to biallelic sites"
         vcf_gz: "VCF file to annotate"
         vcf_gz_tbi: "Tabix index for the VCF"
     }
@@ -81,6 +68,8 @@ task bcftools_collapse {
         Array[File] vcfs_gz
         Array[File] vcfs_gz_tbi
 
+        File? bed
+
         String docker
         File? monitoring_script
 
@@ -99,6 +88,14 @@ task bcftools_collapse {
 
         # Index the vcf
         bcftools index -t out.vcf.gz
+
+        # Use bcftools to subset the vcf by the BED if it was provided
+        if ~{defined(bed)}; then
+            bcftools view -R ~{bed} -Oz -o temp.vcf.gz out.vcf.gz
+            mv temp.vcf.gz out.vcf.gz
+            bcftools index -t out.vcf.gz
+        fi
+
     >>>
 
     parameter_meta {
@@ -149,6 +146,7 @@ workflow bcftools_workflow {
         input:
             vcfs_gz = vcfs_gz,
             vcfs_gz_tbi = vcfs_gz_tbi,
+            bed = bed,
             docker = docker
     }
 
@@ -157,8 +155,6 @@ workflow bcftools_workflow {
             input:
                 vcf_gz = bcf_collapse.out_vcf_gz,
                 vcf_gz_tbi = bcf_collapse.out_vcf_gz_tbi,
-                bed = bed,
-                norm_biallelic = norm_biallelic,
                 docker = docker
         }
     }
