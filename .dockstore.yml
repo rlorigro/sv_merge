@@ -20,3 +20,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/multi_annotate.wdl
   testParameterFiles:
+- name: bcftools_collapse
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/bcftools_collapse.wdl
+  testParameterFiles:
