@@ -100,8 +100,8 @@ task bcftools_collapse {
 
     parameter_meta {
         bed: "BED file to subset the VCF"
-        vcf_gz: "VCF file to annotate"
-        vcf_gz_tbi: "Tabix index for the VCF"
+        vcfs_gz: "Array of VCF files to annotate"
+        vcfs_gz_tbi: "Tabix indexes for the VCF"
     }
 
     runtime {
