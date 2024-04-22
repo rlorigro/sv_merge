@@ -25,3 +25,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/bcftools_collapse.wdl
   testParameterFiles:
+- name: samtools_merge
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/samtools_merge.wdl
+  testParameterFiles:
