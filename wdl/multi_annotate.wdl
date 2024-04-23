@@ -1,6 +1,6 @@
 version 1.0
 
-import "https://raw.githubusercontent.com/fabio-cunial/callset_integration/bc14ad6bb0165bf0b709fa5be2f6e42308e6889a/wdl/GetRegenotypedVcfSniffles.wdl" as sniffles
+import "https://raw.githubusercontent.com/fabio-cunial/callset_integration/319e4133beba230cb23a855522b9e1747698919d/wdl/GetRegenotypedVcfSniffles.wdl" as sniffles
 import "https://github.com/fabio-cunial/callset_integration/raw/4c3a061b5db1eb99b08dae6564d75a76ad87e933/wdl/AddTruvariAnnotations.wdl" as truvari
 import "hapestry_annotate.wdl" as hapestry_annotate
 
