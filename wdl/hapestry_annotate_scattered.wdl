@@ -154,8 +154,8 @@ task chunk_vcf {
         tree ~{output_dir}
 
         # use each of the generated BEDs to subset the VCF
-        for filename in ~{output_dir}/run; do
-            [ -e "$filename" ] || continue
+        for file in ~{output_dir}/run/*; do
+            [ -e "$file" ] || continue
             echo "processing ${file}"
             bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
