@@ -107,7 +107,7 @@ task chunk_vcf {
     input {
         File vcf_gz
         File vcf_gz_tbi
-        File confident_bed
+        File? confident_bed
 
         # Hapestry specific args
         Int interval_max_length = 50000
@@ -131,27 +131,32 @@ task chunk_vcf {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
-        # use bcftools to subset the vcf by the confident bed
-        bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+        if ~{defined(confident_bed)}
+        then
+            # use bcftools to subset the vcf by the confident bed
+            bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
 
-        # convert to bgzipped vcf
-        bcftools view -Oz -o confident.vcf.gz confident.vcf
+            # convert to bgzipped vcf and overwrite the input VCF
+            bcftools view -Oz -o ~{vcf_gz} confident.vcf
 
-        # index the vcf
-        bcftools index -t confident.vcf.gz
+            # index the vcf
+            bcftools index -t ~{vcf_gz}
+        fi
+
+
 
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
-        --vcf confident.vcf \
+        --vcf ~{vcf_gz} \
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length} \
 
         # use each of the generated BEDs to subset the VCF
         for file in ~{output_dir}/run/*; do
-            bcftools view -R ${file} ~{vcf_gz} -Oz -o "~{output_dir}/${file}.vcf.gz"
-            bcftools index -t "~{output_dir}/${file}.vcf.gz"
+            bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
         >>>
 
