@@ -127,6 +127,8 @@ task chunk_vcf {
     command <<<
         set -eou pipefail
 
+        mkdir ~{output_dir}
+
         if [ -s ~{monitoring_script} ]; then
           bash ~{monitoring_script} > monitoring.log &
         fi
