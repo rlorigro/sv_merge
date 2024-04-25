@@ -21,15 +21,15 @@ task annotate {
         File confident_bed
 
         # Hapestry specific args
-        Int? interval_max_length = 50000
-        Int? flank_length = 200
+        Int interval_max_length = 50000
+        Int flank_length = 200
         Int n_threads
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
-        String? annotation_label = "HAPESTRY_REF"
+        String annotation_label = "HAPESTRY_REF"
 
         String docker
         File? monitoring_script
@@ -110,8 +110,9 @@ task chunk_vcf {
         File confident_bed
 
         # Hapestry specific args
-        Int? interval_max_length = 50000
-        Int? flank_length = 200
+        Int interval_max_length = 50000
+        Int flank_length = 200
+        Int n_chunks = 32
         File tandems_bed
 
         String docker
@@ -149,8 +150,8 @@ task chunk_vcf {
 
         # use each of the generated BEDs to subset the VCF
         for file in ~{output_dir}/run/*; do
-            bcftools view -R ${file} ~{vcf_gz} -Oz -o ~{output_dir}/$file.vcf.gz
-            bcftools index -t ~{output_dir}/$file.vcf.gz
+            bcftools view -R ${file} ~{vcf_gz} -Oz -o "~{output_dir}/${file}.vcf.gz"
+            bcftools index -t "~{output_dir}/${file}.vcf.gz"
         done
         >>>
 
@@ -192,7 +193,7 @@ task bcftools_concat{
         set -eou pipefail
 
         # Concatenate the VCFs
-        bcftools concat ~{sep=" ", vcf_gz} -Oz -o concatenated.vcf.gz
+        bcftools concat ~{sep=" " vcf_gz} -Oz -o concatenated.vcf.gz
         bcftools sort --write-index -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
     >>>
 
@@ -220,15 +221,16 @@ workflow hapestry_annotate {
         File confident_bed
 
         # Hapestry specific args
-        Int? interval_max_length = 50000
-        Int? flank_length = 200
+        Int interval_max_length = 50000
+        Int flank_length = 200
         Int n_threads
+        Int n_chunks
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
-        String? annotation_label = "HAPESTRY_REF"
+        String annotation_label = "HAPESTRY_REF"
 
         String docker
         File? monitoring_script
@@ -256,6 +258,7 @@ workflow hapestry_annotate {
             interval_max_length = interval_max_length,
             flank_length = flank_length,
             tandems_bed = tandems_bed,
+            n_chunks = n_chunks,
             docker = docker,
             monitoring_script = monitoring_script
     }
