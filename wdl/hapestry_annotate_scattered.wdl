@@ -122,7 +122,7 @@ task chunk_vcf {
     }
 
     String docker_dir = "/hapestry"
-    String output_dir = "output/"
+    String output_dir = "output"
 
     command <<<
         set -eou pipefail
@@ -149,10 +149,13 @@ task chunk_vcf {
         --vcf ~{vcf_gz} \
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
-        --flank_length ~{flank_length} \
+        --flank_length ~{flank_length}
+
+        tree ~{output_dir}
 
         # use each of the generated BEDs to subset the VCF
-        for file in ~{output_dir}/run/*; do
+        for filename in ~{output_dir}/run; do
+            [ -e "$filename" ] || continue
             echo "processing ${file}"
             bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
