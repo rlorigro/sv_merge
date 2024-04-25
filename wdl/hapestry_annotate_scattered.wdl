@@ -143,8 +143,6 @@ task chunk_vcf {
             bcftools index -t ~{vcf_gz}
         fi
 
-
-
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
@@ -155,9 +153,12 @@ task chunk_vcf {
 
         # use each of the generated BEDs to subset the VCF
         for file in ~{output_dir}/run/*; do
+            echo "processing ${file}"
             bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
+
+        tree ~{output_dir}
         >>>
 
     parameter_meta {
