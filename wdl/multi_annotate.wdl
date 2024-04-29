@@ -26,6 +26,7 @@ workflow multiannotate {
         File alignments_bam
         File alignments_bai
         Boolean force_unique_reads = false
+        String truvari_bench_flags = "--sizemin 0 --sizefilt 0 --sizemax 1000000 --pctsize 0.9 --pctseq 0.9 --pick multi"
 
         String docker
 
@@ -81,13 +82,14 @@ workflow multiannotate {
             runtime_attributes = annotate_runtime_attributes
     }
 
-    call truvari.AddTruvariAnnotationsImpl as truvari_benchnotate{
+    call truvari.AddTruvariAnnotationsImpl as truvari_benchnotate {
         input:
             sample_id = sample_id,
             input_vcf_gz = annotate_ref.annotated_vcf_gz,
             input_vcf_gz_tbi = annotate_ref.annotated_vcf_gz_tbi,
             truth_vcf_gz = truth_vcf_gz,
-            truth_tbi = truth_vcf_gz_tbi
+            truth_tbi = truth_vcf_gz_tbi,
+            truvari_bench_flags = truvari_bench_flags
     }
 
     call sniffles.GetRegenotypedVcfImpl as sniffles_annotate {
