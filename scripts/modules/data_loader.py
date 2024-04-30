@@ -1,6 +1,7 @@
 from torch.utils.data.dataset import Dataset
 import numpy as np
 import torch
+import sys
 
 import vcfpy
 
@@ -59,6 +60,10 @@ def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str,
         if truth_info_name.lower() == "hapestry":
             is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
         elif truth_info_name is not None:
+            if truth_info_name not in info:
+                sys.stderr.write("ERROR: truth info not found in record: " + str(record.ID) + "\n")
+                continue
+
             is_true = info[truth_info_name]
         else:
             is_true = 0
@@ -117,6 +122,8 @@ class VcfDataset(Dataset):
 
         self.x_data = torch.from_numpy(x).type(x_dtype) + 1e-6
         self.y_data = torch.from_numpy(y).type(y_dtype)
+
+        self.filter_fn = filter_fn
 
     def __getitem__(self, index):
         return self.x_data[index], self.y_data[index]

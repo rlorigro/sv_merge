@@ -1,5 +1,8 @@
 from modules.shallow_linear import ShallowLinear
 from modules.data_loader import VcfDataset
+
+from torch import multiprocessing
+
 # from modules.misc import plot_roc_curve, write_recalibrated_vcf, plot_confusion
 
 from torch.utils.data.dataset import Dataset
@@ -10,7 +13,7 @@ from torch import optim
 import torch.nn as nn
 
 from sklearn.metrics import confusion_matrix
-from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_curve, roc_auc_score
 
 from matplotlib import pyplot
 
@@ -26,6 +29,9 @@ import torch
 import sys
 import os
 
+# set matplotlib to use the Agg backend
+pyplot.switch_backend('Agg')
+
 
 print("USING pytorch VERSION: ", torch.__version__)
 
@@ -33,13 +39,20 @@ print("USING pytorch VERSION: ", torch.__version__)
 def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
     train_losses = list()
     test_losses = list()
+    test_aucs = list()
+    models = list()
 
     model.eval()
-    _, _, starting_test_loss = test(model=model, loader=test_loader, loss_fn=torch.nn.BCELoss())
+    y_predict, y_true, test_loss = test(model=model, loader=test_loader, loss_fn=loss_fn)
+    test_losses.append(test_loss)
+    test_aucs.append(roc_auc_score(y_true=y_true, y_score=y_predict))
+    models.append(model.state_dict())
     model.train()
 
     n_total_positive = 0
     n_total_negative = 0
+
+    prev_model = None
 
     batch_index = 0
     for e in range(epochs):
@@ -56,24 +69,30 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
 
             batch_index += 1
 
-            if len(test_losses) > 0:
-                test_losses.append(test_losses[-1])
-            else:
-                test_losses.append(starting_test_loss)
-
         if e % 1 == 0:
             model.eval()
-            y_predict, y_test, mean_loss = test(model=model, loader=test_loader, loss_fn=torch.nn.BCELoss())
+            y_predict, y_true, test_loss = test(model=model, loader=test_loader, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
+
+            auc = roc_auc_score(y_true=y_true, y_score=y_predict)
+
+            test_losses.append(test_loss)
+            test_aucs.append(auc)
+            models.append(model.state_dict())
             model.train()
 
-            test_losses[-1] = mean_loss
+            if len(test_losses) > 1:
+                test_loss_worsened = test_losses[-1] > 1.1*test_losses[-2]
+                test_auc_worsened = test_aucs[-1] > 1.02*test_aucs[-2]
 
-        print("Epoch: ", e+1)
-        print("Batches: ", batch_index)
-        print("n_total_positive: ", n_total_positive)
-        print("n_total_negative: ", n_total_negative)
+                print(f"Epoch:{e}\tbatches:{batch_index}\tn_positive:{n_total_positive}\tn_negative:{n_total_negative}\tprev_loss:{test_losses[-2]:.3f}\tloss:{test_losses[-1]:.3f}\tworsened:{test_loss_worsened}\tprev_auc:{test_aucs[-2]:.3f}\tauc:{test_aucs[-1]:.3f}\tworsened:{test_auc_worsened}")
 
-    return train_losses, test_losses
+    # Get index of greatest AUC
+    max_auc_index = test_aucs.index(max(test_aucs))
+
+    # Get the model with the greatest AUC
+    model.load_state_dict(models[max_auc_index])
+
+    return train_losses, test_losses, test_aucs
 
 
 def train_batch(model, x, y, optimizer, loss_fn):
@@ -103,14 +122,14 @@ def train_batch(model, x, y, optimizer, loss_fn):
     return loss.data.item()
 
 
-def test(model, loader, loss_fn):
+def test(model, loader, loss_fn, use_sigmoid=False):
     y_vectors = list()
     y_predict_vectors = list()
     losses = list()
 
     batch_index = 0
     for x, y in loader:
-        y, y_predict = test_batch(model=model, x=x, y=y)
+        y_predict = model.forward(x, use_sigmoid=use_sigmoid)
 
         y_vectors.append(y.data.numpy())
         y_predict_vectors.append(y_predict.data.numpy())
@@ -123,35 +142,38 @@ def test(model, loader, loss_fn):
     y_predict_vector = np.concatenate(y_predict_vectors)
     y_vector = np.concatenate(y_vectors)
 
-    mean_loss = numpy.mean(losses)
+    loss = numpy.sum(losses)
 
-    return y_predict_vector, y_vector, mean_loss
-
-
-def test_batch(model, x, y):
-    # run forward calculation
-    y_predict = model.forward(x)
-
-    return y, y_predict
+    return y_predict_vector, y_vector, loss
 
 
-def plot_loss(train_losses, test_losses):
-    fig = pyplot.figure()
-    fig.set_size_inches(8,6)
-    ax = pyplot.axes()
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Loss")
-    x_loss = list(range(len(train_losses)))
-    pyplot.plot(x_loss, train_losses, label="train")
-    pyplot.plot(x_loss, test_losses, label="test")
+def plot_loss(train_losses, test_losses, test_aucs, label, output_dir=None):
+    fig,ax = pyplot.subplots(nrows=3)
+    ax[0].set_xlabel("Iteration")
+    ax[0].set_ylabel("Train Loss")
+    ax[1].set_ylabel("Test Loss")
+    ax[2].set_ylabel("Test AUC")
+
+    x_train = list(range(len(train_losses)))
+    x_test = list(range(len(test_losses)))
+
+    ax[0].plot(x_train, train_losses, label="train")
+    ax[1].plot(x_test, test_losses, label="test")
+    ax[2].plot(x_test, test_aucs, label="test")
+
+    fig.suptitle(label)
+
+    if output_dir is not None:
+        fig.savefig(os.path.join(output_dir, label + "_loss.png"), dpi=200)
 
 
 def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
     learning_rate = 1e-3
-    weight_decay = 1e-4
+    weight_decay = 1e-3
+    dropout_rate = 0.05
 
-    n_epochs = 4
+    n_epochs = 12
 
     goal_batch_size = 2048
 
@@ -174,6 +196,8 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
         f.write("goal_batch_size: {}\n".format(goal_batch_size))
         f.write("downsample: {}\n".format(downsample))
         f.write("batch_size_train: {}\n".format(batch_size_train))
+        f.write("dropout_rate: {}\n".format(dropout_rate))
+        f.write("filter_fn: {}\n".format(str(dataset_train.filter_fn.__name__)))
 
     data_loader_train = None
 
@@ -188,7 +212,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
 
     input_size = len(dataset_train[0][0])
     print("using input size: ", input_size)
-    shallow_model = ShallowLinear(input_size=input_size)
+    shallow_model = ShallowLinear(input_size=input_size, dropout_rate=dropout_rate)
 
     # Initialize the optimizer with above parameters
     optimizer = optim.AdamW(shallow_model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -197,14 +221,15 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     loss_fn = nn.BCEWithLogitsLoss()  # cross entropy
 
     # Train and get the resulting loss per iteration
-    train_losses, test_losses = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, loss_fn=loss_fn, epochs=n_epochs)
+    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, loss_fn=loss_fn, epochs=n_epochs)
 
     # Test and get the resulting predicted y values
     shallow_model.eval() # switch to eval mode to disable dropout
 
-    y_predict, y_test, mean_loss = test(model=shallow_model, loader=data_loader_test, loss_fn=torch.nn.BCELoss())
+    # Need to use_sigmoid this time to get meaningful 0-1 values
+    y_predict, y_test, mean_loss = test(model=shallow_model, loader=data_loader_test, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
 
-    return train_losses, test_losses, y_predict.squeeze(), y_test, shallow_model
+    return train_losses, test_losses, test_aucs, y_predict.squeeze(), y_test, shallow_model
 
 
 def compute_downsampling_weight_tensor(y_data):
@@ -276,8 +301,8 @@ def write_recalibrated_vcf(y_predict, input_vcf_path, output_vcf_path):
         'Description': 'Recalibrated q score from model trained with hapestry'
     })
 
+    reader.header.add_info_line(mapping)
     writer = vcfpy.Writer.from_path(output_vcf_path, reader.header)
-    writer.header.add_info_line(mapping)
 
     for record, score in zip(reader, y_predict):
         record.INFO["HAPESTRY_SCORE"] = score
@@ -288,6 +313,38 @@ def min50bp(record):
     return record.INFO["SVLEN"][0] >= 50
 
 
+def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir):
+    print("Thread started with ", truth_info_name, annotation_name)
+
+    label = truth_info_name + " truth labels and " + annotation_name + " features"
+
+    dataset_train = VcfDataset(vcf_paths=train_vcfs, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=train_contigs, filter_fn=filter_fn)
+    dataset_test = VcfDataset(vcf_paths=test_vcfs, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=test_contigs, filter_fn=filter_fn)
+
+    n_train = len(dataset_train)
+    n_test = len(dataset_test)
+
+    # Print information on the train and test datasets
+    print('Train datapoints: ', n_train)
+    print('Test datapoints: ', n_test)
+    print('Input shape: ', dataset_train[0][0].shape)
+    print('Output shape: ', dataset_train[0][1].shape)
+
+    train_losses, test_losses, test_aucs, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+
+    # Format the date and time
+    model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
+    torch.save(model.state_dict(), model_output_path)
+
+    # calculate and plot loss
+    print("Final loss:", sum(train_losses[-100:])/100)
+    plot_loss(train_losses=train_losses, test_losses=test_losses, test_aucs=test_aucs, label=label, output_dir=output_dir)
+
+    y_true, y_predict = downsample_test_data(y_true, y_predict)
+
+    return y_true, y_predict, label
+
+
 def main():
     timestamp = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
     output_dir = os.path.join("output/", timestamp)
@@ -295,80 +352,67 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    vcf_paths = [
-        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG002_truvari_hapestry_sniffles.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00438_truvari_hapestry_sniffles.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00621_truvari_hapestry_sniffles.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00673_truvari_hapestry_sniffles.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/test_annotation_rerun_tandem/HG00733_truvari_hapestry_sniffles.vcf.gz",
+    train_vcfs = [
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG002_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG005_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00438_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00621_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
     ]
 
-    train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
-    test_contigs = {"chr6", "chr7", "chr8"}
+    test_vcfs = [
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00673_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+    ]
 
-    # train_contigs = {"chr1", "chr2"}
-    # test_contigs = {"chr6"}
+    with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
+        for path in train_vcfs:
+            f.write(path + "\n")
 
-    # filter_fn = min50bp
-    filter_fn = None
+    with open(os.path.join(output_dir, "test_vcfs.txt"), "w") as f:
+        for path in test_vcfs:
+            f.write(path + "\n")
+
+    train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
+    # train_contigs = {"chr17"}
+    test_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
+    # test_contigs = {"chr18"}
+
+    with open(os.path.join(output_dir, "train_contigs.txt"), "w") as f:
+        for contig in train_contigs:
+            f.write(contig + "\n")
+
+    with open(os.path.join(output_dir, "test_contigs.txt"), "w") as f:
+        for contig in test_contigs:
+            f.write(contig + "\n")
+
+    filter_fn = min50bp
+    # filter_fn = None
 
     fig = pyplot.figure()
     fig.set_size_inches(8,6)
 
     axes = pyplot.axes()
 
+    args = list()
+
     for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
         for annotation_name in ["Hapestry", "Sniffles"]:
-            label = truth_info_name + " truth labels and " + annotation_name + " features"
+            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir))
 
-            dataset_train = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=train_contigs, filter_fn=filter_fn)
-            dataset_test = VcfDataset(vcf_paths=vcf_paths, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=test_contigs, filter_fn=filter_fn)
+    with multiprocessing.Pool(4) as pool:
+        results = pool.starmap(thread_fn, args)
 
-            n_train = len(dataset_train)
-            n_test = len(dataset_test)
+    for y_true, y_predict, label in results:
+        # print shape of y_predict and y_true; print all values in one element
+        print("y_predict shape: ", y_predict.shape)
+        print("y_true shape: ", y_true.shape)
+        print('y_predict y')
+        print(y_predict[0], y_true[0])
 
-            # Print information on the train and test datasets
-            print('Train datapoints: ', n_train)
-            print('Test datapoints: ', n_test)
-            print('Input shape: ', dataset_train[0][0].shape)
-            print('Output shape: ', dataset_train[0][1].shape)
+        y_predict = numpy.array(y_predict.data)
 
-            train_losses, test_losses, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+        axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label)
 
-            y_true, y_predict = downsample_test_data(y_true, y_predict)
-
-            # Format the date and time
-            model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
-            torch.save(model.state_dict(), model_output_path)
-
-            # calculate and plot loss
-            print("Final loss:", sum(train_losses[-100:])/100)
-            plot_loss(train_losses=train_losses, test_losses=test_losses)
-
-            # print shape of y_predict and y_true; print all values in one element
-            print("y_predict shape: ", y_predict.shape)
-            print("y_true shape: ", y_true.shape)
-            print('y_predict y')
-            print(y_predict[0], y_true[0])
-
-            y_predict = numpy.array(y_predict.data)
-
-            axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label)
-
-            # Compute points for trivial support classifier
-            print(dataset_test.x_data[:,4:7].shape)
-
-            y_predict_trivial = torch.sum(dataset_test.x_data[:,4:7], dim=1) >= 2
-            y_true_trivial = dataset_test.y_data
-
-            y_true_trivial, y_predict_trivial = downsample_test_data(y_true_trivial, y_predict_trivial)
-            print(y_predict_trivial.shape)
-            print(y_true_trivial.shape)
-
-            fpr, tpr, thresholds = roc_curve(y_true_trivial, y_predict_trivial)
-
-            color = axes.lines[-1].get_color()
-            axes.scatter(fpr, tpr, marker='o', color=color)
+        # write_recalibrated_vcf(y_predict, input_vcf_path=test_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
 
     # Generate a legend for axes and force bottom right location
     axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
@@ -376,8 +420,8 @@ def main():
 
     fig.savefig(os.path.join(output_dir,"roc_curve_all_combos.png"), dpi=200)
 
-    pyplot.show()
-    pyplot.close()
+    # pyplot.show()
+    # pyplot.close()
 
 
 if __name__ == "__main__":
