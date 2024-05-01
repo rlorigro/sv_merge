@@ -916,7 +916,7 @@ void annotate(
 
         ifstream file(sub_vcf);
         while (getline(file, line)){
-            if (line.starts_with('#')){
+            if (line.starts_with('#') and not line.starts_with("##fileformat")){
                 if (i == 0){
                     out_file << line << '\n';
                 }
