@@ -21,6 +21,7 @@ import numpy as np
 
 from datetime import datetime
 from collections import OrderedDict
+from copy import deepcopy
 import random
 import time
 import numpy
@@ -36,7 +37,7 @@ pyplot.switch_backend('Agg')
 print("USING pytorch VERSION: ", torch.__version__)
 
 
-def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
+def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs):
     train_losses = list()
     test_losses = list()
     test_aucs = list()
@@ -57,7 +58,7 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
     batch_index = 0
     for e in range(epochs):
         for x, y in train_loader:
-            loss = train_batch(model=model, x=x, y=y, optimizer=optimizer, loss_fn=loss_fn)
+            loss = train_batch(model=model, x=x, y=y, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn)
 
             n_positive = sum(y.data.numpy())
             n_negative = len(y) - n_positive
@@ -77,14 +78,14 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
 
             test_losses.append(test_loss)
             test_aucs.append(auc)
-            models.append(model.state_dict())
+            models.append(deepcopy(model.state_dict()))
             model.train()
 
             if len(test_losses) > 1:
-                test_loss_worsened = test_losses[-1] > 1.1*test_losses[-2]
-                test_auc_worsened = test_aucs[-1] > 1.02*test_aucs[-2]
+                test_loss_worsened = test_losses[-1] > test_losses[-2]
+                test_auc_worsened = test_aucs[-1] < test_aucs[-2]
 
-                print(f"Epoch:{e}\tbatches:{batch_index}\tn_positive:{n_total_positive}\tn_negative:{n_total_negative}\tprev_loss:{test_losses[-2]:.3f}\tloss:{test_losses[-1]:.3f}\tworsened:{test_loss_worsened}\tprev_auc:{test_aucs[-2]:.3f}\tauc:{test_aucs[-1]:.3f}\tworsened:{test_auc_worsened}")
+                print(f"Epoch:{e}\tbatches:{batch_index}\tlr_rate:{scheduler.get_last_lr()}\tn_positive:{n_total_positive}\tn_negative:{n_total_negative}\tprev_loss:{test_losses[-2]:.3f}\tloss:{test_losses[-1]:.3f}\tworsened:{test_loss_worsened}\tprev_auc:{test_aucs[-2]:.3f}\tauc:{test_aucs[-1]:.3f}\tworsened:{test_auc_worsened}")
 
     # Get index of greatest AUC
     max_auc_index = test_aucs.index(max(test_aucs))
@@ -95,7 +96,7 @@ def train(model, train_loader, test_loader, optimizer, loss_fn, epochs):
     return train_losses, test_losses, test_aucs
 
 
-def train_batch(model, x, y, optimizer, loss_fn):
+def train_batch(model, x, y, optimizer, scheduler, loss_fn):
     # Run forward calculation
     y_predict = model.forward(x)
 
@@ -118,6 +119,9 @@ def train_batch(model, x, y, optimizer, loss_fn):
     # Calling the step function on an Optimizer makes an update to its
     # parameters
     optimizer.step()
+
+    # Update the learning rate
+    scheduler.step()
 
     return loss.data.item()
 
@@ -169,13 +173,13 @@ def plot_loss(train_losses, test_losses, test_aucs, label, output_dir=None):
 
 def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
-    learning_rate = 1e-3
-    weight_decay = 1e-3
-    dropout_rate = 0.05
+    learning_rate_max = 0.5
+    learning_rate_base = 1e-5
+    weight_decay = 1e-5
+    dropout_rate = 0.01
 
-    n_epochs = 12
-
-    goal_batch_size = 2048
+    goal_batch_size = 1024
+    n_epochs = 32
 
     config_path = os.path.join(output_dir, "config.txt")
 
@@ -190,14 +194,18 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
 
     # write the hyperparameters to a file
     with open(config_path, "w") as f:
-        f.write("learning_rate: {}\n".format(learning_rate))
+        f.write("learning_rate_base: {}\n".format(learning_rate_base))
+        f.write("learning_rate_max: {}\n".format(learning_rate_max))
         f.write("weight_decay: {}\n".format(weight_decay))
         f.write("n_epochs: {}\n".format(n_epochs))
         f.write("goal_batch_size: {}\n".format(goal_batch_size))
         f.write("downsample: {}\n".format(downsample))
         f.write("batch_size_train: {}\n".format(batch_size_train))
         f.write("dropout_rate: {}\n".format(dropout_rate))
-        f.write("filter_fn: {}\n".format(str(dataset_train.filter_fn.__name__)))
+        if dataset_train.filter_fn is not None:
+            f.write("filter_fn: {}\n".format(str(dataset_train.filter_fn.__name__)))
+        else:
+            f.write("filter_fn: None\n")
 
     data_loader_train = None
 
@@ -215,13 +223,16 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     shallow_model = ShallowLinear(input_size=input_size, dropout_rate=dropout_rate)
 
     # Initialize the optimizer with above parameters
-    optimizer = optim.AdamW(shallow_model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    optimizer = optim.SGD(shallow_model.parameters(), lr=learning_rate_base, weight_decay=weight_decay)
+
+    # Initialize CLR scheduler
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=len([x for x in data_loader_train]), epochs=n_epochs)
 
     # Define the loss function
     loss_fn = nn.BCEWithLogitsLoss()  # cross entropy
 
     # Train and get the resulting loss per iteration
-    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, loss_fn=loss_fn, epochs=n_epochs)
+    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs)
 
     # Test and get the resulting predicted y values
     shallow_model.eval() # switch to eval mode to disable dropout
@@ -276,10 +287,13 @@ def downsample_test_data(y_true, y_predict, seed=37):
     return y_true, y_predict
 
 
-def plot_roc_curve(y_true, y_predict, label, axes):
+def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-'):
     fpr, tpr, thresholds = roc_curve(y_true, y_predict)
 
-    axes.plot(fpr, tpr, label=label)
+    if color is not None:
+        axes.plot(fpr, tpr, label=label, color=color, linestyle=style)
+    else:
+        axes.plot(fpr, tpr, label=label, linestyle=style)
 
     axes.set_xlabel("False positive rate")
     axes.set_ylabel("True positive rate")
@@ -340,9 +354,9 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print("Final loss:", sum(train_losses[-100:])/100)
     plot_loss(train_losses=train_losses, test_losses=test_losses, test_aucs=test_aucs, label=label, output_dir=output_dir)
 
-    y_true, y_predict = downsample_test_data(y_true, y_predict)
+    x = dataset_test.x_data.numpy()
 
-    return y_true, y_predict, label
+    return x, dataset_test.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
 
 
 def main():
@@ -353,14 +367,14 @@ def main():
         os.makedirs(output_dir)
 
     train_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG002_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG005_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00438_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00621_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG002_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG005_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00438_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00621_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
     ]
 
     test_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/truvari_collapse/HG00673_multiannotated_8x_asm10_10bp_truvari_collapse.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00673_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
     ]
 
     with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
@@ -384,8 +398,8 @@ def main():
         for contig in test_contigs:
             f.write(contig + "\n")
 
-    filter_fn = min50bp
-    # filter_fn = None
+    # filter_fn = min50bp
+    filter_fn = None
 
     fig = pyplot.figure()
     fig.set_size_inches(8,6)
@@ -395,20 +409,35 @@ def main():
     args = list()
 
     for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
-        for annotation_name in ["Hapestry", "Sniffles"]:
+        for annotation_name in ["Hapestry", "Kanpig"]:
             args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir))
 
     with multiprocessing.Pool(4) as pool:
         results = pool.starmap(thread_fn, args)
 
-    for y_true, y_predict, label in results:
+    for r,[x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
+        label = truth_info_name + " truth labels and " + annotation_name + " features"
+
+        if annotation_name.lower() == "kanpig" and truth_info_name.lower() == "truvaribench_tp":
+            # initialize colormap
+            cmap = pyplot.get_cmap('tab20')
+
+            for name,index in feature_indexes.items():
+                if index > 11:
+                    y_trivial = x[:,index]
+                    y, y_trivial = downsample_test_data(y_true, y_trivial)
+
+                    color = cmap(float(index-12)/(len(feature_indexes)-12))
+
+                    axes = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
+
+        y_true, y_predict = downsample_test_data(y_true, y_predict)
+
         # print shape of y_predict and y_true; print all values in one element
         print("y_predict shape: ", y_predict.shape)
         print("y_true shape: ", y_true.shape)
         print('y_predict y')
         print(y_predict[0], y_true[0])
-
-        y_predict = numpy.array(y_predict.data)
 
         axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label)
 

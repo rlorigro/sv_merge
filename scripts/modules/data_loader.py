@@ -17,18 +17,14 @@ def get_type_index(record: vcfpy.Record):
         return 3
 
 
-def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str, annotation_name: str, filter_fn=None, contigs=None):
+def load_features_from_vcf(x: list,y: list, feature_names: list, vcf_path: str, truth_info_name: str, annotation_name: str, filter_fn=None, contigs=None):
     print(vcf_path)
     reader = vcfpy.Reader.from_path(vcf_path)
 
     type_vector = [0,0,0,0]
 
-    bp_norm = 15000
-
     for r,record in enumerate(reader):
         info = record.INFO
-        ref_length = float(len(record.REF))/bp_norm
-        alt_length = float(len(record.ALT[0].serialize()))/bp_norm
 
         if filter_fn is not None:
             if not(filter_fn(record)):
@@ -68,40 +64,128 @@ def load_features_from_vcf(x: list,y: list, vcf_path: str, truth_info_name: str,
         else:
             is_true = 0
 
+        ref_length = float(len(record.REF))
+        alt_length = float(len(record.ALT[0].serialize()))
+
+        t = type_vector
+        t[get_type_index(record)] = 1
+
         caller_support = [0,0,0]
         caller_support[0] = info["SUPP_PAV"] if "SUPP_PAV" in info else 0
         caller_support[1] = info["SUPP_PBSV"] if "SUPP_PBSV" in info else 0
         caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
-        t = type_vector
-        t[get_type_index(record)] = 1
+        hapestry_data = list(map(float,info["HAPESTRY_READS"]))
 
         y.append(is_true)
         x.append([])
 
-        x[-1].extend(type_vector)
-        x[-1].extend(caller_support)
-        x[-1].append(float(ref_length)/float(bp_norm))
-        x[-1].append(float(alt_length)/float(bp_norm))
-        x[-1].append(record.QUAL if record.QUAL is not None else 0)
-        # x[-1].append(float(info["SVLEN"][0])/float(bp_norm) if "SVLEN" in info else 0)
-        x[-1].append(float(info["STDEV_POS"])/float(bp_norm) if "STDEV_POS" in info else 0)
-        x[-1].append(float(info["STDEV_LEN"])/float(bp_norm) if "STDEV_LEN" in info else 0)
+        q_score = record.QUAL if record.QUAL is not None else 0
+        stdev_pos = float(info["STDEV_POS"]) if "STDEV_POS" in info else 0
+        stdev_len = float(info["STDEV_LEN"]) if "STDEV_LEN" in info else 0
 
-        reads = list(map(float,info["HAPESTRY_READS"]))
-        reads[-1] /= bp_norm
+        x[-1].append(q_score)
+        if r == 0:
+            feature_names.append("q_score")
+
+        x[-1].append(stdev_len)
+        if r == 0:
+            feature_names.append("stdev_len")
+
+        x[-1].append(stdev_pos)
+        if r == 0:
+            feature_names.append("stdev_pos")
+
+        x[-1].append(ref_length)
+        if r == 0:
+            feature_names.append("ref_length")
+
+        x[-1].append(alt_length)
+        if r == 0:
+            feature_names.append("alt_length")
+
+        x[-1].extend(type_vector)
+        if r == 0:
+            feature_names.extend(["type_" + str(i) for i in range(len(type_vector))])
+
+        x[-1].extend(caller_support)
+        if r == 0:
+            feature_names.extend(["caller_support_" + str(i) for i in range(len(caller_support))])
 
         if annotation_name.lower() == "hapestry":
-            x[-1].extend(reads)
             max_align_score = info["HAPESTRY_READS_MAX"]
+
+            x[-1].extend(hapestry_data)
+            if r == 0:
+                feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
+
             x[-1].append(max_align_score)
+            if r == 0:
+                feature_names.append("max_align_score")
 
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
+            is_tandem = hapestry_data[-2]
+
             x[-1].append(call.data["GQ"])
+            if r == 0:
+                feature_names.append("GQ")
+
             x[-1].append(call.data["DR"])
+            if r == 0:
+                feature_names.append("DR")
+
             x[-1].append(call.data["DV"])
-            x[-1].extend(reads[-2:])
+            if r == 0:
+                feature_names.append("DV")
+
+            x[-1].append(is_tandem)
+            if r == 0:
+                feature_names.append("is_tandem")
+
+        elif annotation_name.lower() == "kanpig":
+            is_tandem = hapestry_data[-2]
+            call = record.calls[0]
+
+            gt = list(map(float,call.data["GT"].split("|"))) if '|' in call.data["GT"] else [0,0]
+
+            x[-1].extend(gt)
+            if r == 0:
+                feature_names.extend(["GT_" + str(i) for i in range(len(gt))])
+
+            x[-1].extend(call.data["AD"])
+            if r == 0:
+                feature_names.extend(["AD_" + str(i) for i in range(len(call.data["AD"]))])
+
+            x[-1].append(call.data["DP"])
+            if r == 0:
+                feature_names.append("DP")
+
+            x[-1].append(call.data["GQ"])
+            if r == 0:
+                feature_names.append("GQ")
+
+            x[-1].append(call.data["SQ"])
+            if r == 0:
+                feature_names.append("SQ")
+
+            # x[-1].extend(call.data["ZS"])
+            # if r == 0:
+            #     feature_names.extend(["ZS_" + str(i) for i in range(len(call.data["ZS"]))])
+            #
+            # x[-1].extend(call.data["SS"])
+            # if r == 0:
+            #     feature_names.extend(["SS_" + str(i) for i in range(len(call.data["SS"]))])
+
+            x[-1].append(is_tandem)
+            if r == 0:
+                feature_names.append("is_tandem")
+
+        if r == 0:
+            if len(feature_names) != len(x[-1]):
+                print(feature_names)
+                print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
+                exit()
 
 
 class VcfDataset(Dataset):
@@ -109,8 +193,14 @@ class VcfDataset(Dataset):
         x = list()
         y = list()
 
-        for p in vcf_paths:
-            load_features_from_vcf(x=x,y=y,vcf_path=p,truth_info_name=truth_info_name,annotation_name=annotation_name,filter_fn=filter_fn,contigs=contigs)
+        self.feature_indexes = None
+
+        for p,path in enumerate(vcf_paths):
+            feature_names = list()
+            load_features_from_vcf(x=x,y=y,feature_names=feature_names,vcf_path=path,truth_info_name=truth_info_name,annotation_name=annotation_name,filter_fn=filter_fn,contigs=contigs)
+
+            if p == 0:
+                self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
         x = np.array(x)
         y = np.array(y)
@@ -120,8 +210,11 @@ class VcfDataset(Dataset):
 
         self.length = x.shape[0]
 
-        self.x_data = torch.from_numpy(x).type(x_dtype) + 1e-6
+        self.x_data = torch.from_numpy(x).type(x_dtype)
         self.y_data = torch.from_numpy(y).type(y_dtype)
+
+        self.x_data = torch.nn.functional.normalize(self.x_data, dim=0)
+        self.x_data += 1e-12
 
         self.filter_fn = filter_fn
 
