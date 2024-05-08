@@ -398,11 +398,8 @@ void compute_graph_evaluation_thread_fn(
 
             // Create a unique name and add the path to variant graph
             auto name = alignment.get_query_name() + "_" + to_string(c);
-//            cerr << "Alignment: " << name << '\n';
 
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
-//                cerr << "TESTING: " << _record.id << '\n';
-
                 auto record = _record;
 
                 if (record.sv_type == VcfReader::TYPE_BREAKEND){
@@ -442,21 +439,17 @@ void compute_graph_evaluation_thread_fn(
                 vector<int32_t> path_target_mins;
                 vector<int32_t> path_target_maxes;
 
-//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << '\n';
                 for (size_t p=0; p < path.size(); p++){
                     auto h1 = handles[p];
                     auto length = lengths[p];
 
                     variant_graph.get_region_of_node(h1, node_region);
 
-//                    cerr << variant_graph.graph.get_id(h1) << ',' << variant_graph.graph.get_is_reverse(h1) << ',' << node_region.to_string() << '\n';
                     // If the node contains one of the target flanks, record its location
                     if (point_is_contained(target_min, node_region, true)){
-//                        cerr << "FOUND new target_min: " << target_min << ',' << path_coord << '\n';
                         path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
                     }
                     if (point_is_contained(target_max, node_region, true)){
-//                        cerr << "FOUND new target_max: " << target_max << ',' << path_coord << '\n';
                         path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
                     }
 
@@ -487,7 +480,6 @@ void compute_graph_evaluation_thread_fn(
 
                 for (auto a: path_target_mins){
                     for (auto b: path_target_maxes){
-//                        cerr << "Testing: " << a << '<' << path_min << '<' << path_max << '<' << b << '\n';
                         if (point_is_contained(path_min, {a, b}, true) and point_is_contained(path_max, {a, b}, true)){
                             auto x = b-a;
                             auto y = target_interval.second - target_interval.first;
@@ -543,8 +535,6 @@ void compute_graph_evaluation_thread_fn(
                     variant_supports[id].length_of_evaluated_region = target_interval.second - target_interval.first;
                 }
 
-//                cerr << region.to_string() << ',' << target_min << ',' << target_max << '\n';
-//                cerr << id << ',' << record.id << ',' << alignment.get_query_name() << ',' << path_length << ',' << target_interval.first << ',' << target_interval.second << ',' << summary.compute_identity() << ',' << is_tandem << '\n';
             });
 
             // Increment coverage if this alignment covers the left flanking node
@@ -568,6 +558,7 @@ void compute_graph_evaluation_thread_fn(
 
         out_file << "##INFO=<ID=" + label + ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         out_file << "##INFO=<ID=" + label + "_MAX" + ",Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        out_file << "##INFO=<ID=" + label + "_NEIGHBORS" + ",Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
         vcf_reader.print_minimal_header(out_file);
         string s;
 
@@ -577,6 +568,7 @@ void compute_graph_evaluation_thread_fn(
             variant_supports.at(v).get_support_string(s);
             record.info += ";" + label + "=" + to_string(total_coverage) + "," + s + "," + to_string(int(variant_supports.at(v).is_tandem)) + "," + to_string(variant_supports.at(v).length_of_evaluated_region);
             record.info += ";" + label + "_MAX" + "=" + to_string(max_observed_identities.at(v));
+            record.info += ";" + label + "_NEIGHBORS" + "=" + to_string(variant_supports.size());
             record.print(out_file);
             out_file << '\n';
         }
@@ -916,9 +908,11 @@ void annotate(
 
         ifstream file(sub_vcf);
         while (getline(file, line)){
-            if (line.starts_with('#') and not line.starts_with("##fileformat")){
-                if (i == 0){
-                    out_file << line << '\n';
+            if (line.starts_with('#')){
+                if (not line.starts_with("##fileformat")){
+                    if (i == 0){
+                        out_file << line << '\n';
+                    }
                 }
             }
             else{
