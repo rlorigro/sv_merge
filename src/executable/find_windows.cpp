@@ -1,16 +1,13 @@
 #include "windows.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
-#include "misc.hpp"
 #include "bed.hpp"
-#include "bam.hpp"
 
 #include <unordered_map>
 #include <exception>
 #include <stdexcept>
 #include <iostream>
 #include <thread>
-#include <memory>
 #include <limits>
 
 using std::numeric_limits;
@@ -38,8 +35,7 @@ void find_windows(
         path vcf,
         int32_t interval_max_length,
         int32_t flank_length,
-        size_t n_chunks,
-        bool debug
+        size_t n_chunks
         ){
 
     if (std::filesystem::exists(output_dir)){
@@ -111,10 +107,9 @@ int main (int argc, char* argv[]){
     path bam_csv;
     path vcf;
     path ref;
-    int64_t interval_max_length;
-    int64_t flank_length;
+    int32_t interval_max_length;
+    int32_t flank_length;
     size_t n_chunks = 1;
-    bool debug = false;
 
     CLI::App app{"App description"};
 
@@ -152,8 +147,6 @@ int main (int argc, char* argv[]){
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
-    app.add_flag("--debug", debug, "Invoke this to add more logging and output");
-
     CLI11_PARSE(app, argc, argv);
 
     find_windows(
@@ -162,8 +155,7 @@ int main (int argc, char* argv[]){
         vcf,
         interval_max_length,
         flank_length,
-        n_chunks,
-        debug
+        n_chunks
     );
 
     return 0;
