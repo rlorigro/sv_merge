@@ -121,8 +121,7 @@ workflow multiannotate {
             vcf_gz_tbi = sniffles_annotate.regenotyped_sniffles_tbi,
             segdup_bed = segdup_bed,
             tr_bed = telomere_bed,
-            centromere_bed = centromere_bed,
-            docker = docker
+            centromere_bed = centromere_bed
     }
 
     output {
