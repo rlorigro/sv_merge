@@ -4,6 +4,7 @@ version 1.0
 import "https://raw.githubusercontent.com/fabio-cunial/callset_integration/7027bf4f282ab902f306c3fe2d086db18fcd7883/wdl/GetRegenotypedVcfSniffles.wdl" as sniffles
 import "https://github.com/fabio-cunial/callset_integration/raw/4c3a061b5db1eb99b08dae6564d75a76ad87e933/wdl/AddTruvariAnnotations.wdl" as truvari
 import "hapestry_annotate.wdl" as hapestry_annotate
+import "https://raw.githubusercontent.com/fabio-cunial/callset_integration/main/wdl/RepeatAnnotation.wdl" as repeat_annotation
 
 
 workflow multiannotate {
@@ -17,7 +18,13 @@ workflow multiannotate {
         Int min_length = 0
         Int flank_length = 200
         Int n_threads
+
+        # annotations
         File tandems_bed
+        File segdup_bed
+        File telomere_bed
+        File centromere_bed
+
         File reference_fa
         File reference_fai
         File truth_vcf_gz
@@ -40,6 +47,9 @@ workflow multiannotate {
         flank_length: "Length of flanking sequence to include in each window"
         n_threads: "Maximum number of threads to use"
         tandems_bed: "BED file of tandem repeats"
+        segdup_bed: "BED file of segmental duplications"
+        telomere_bed: "BED file of telomeres"
+        centromere_bed: "BED file of centromeres"
         reference_fa: "Reference fasta file"
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
@@ -105,8 +115,18 @@ workflow multiannotate {
             svlen_max = max_length
     }
 
+    call repeat_annotation.RepeatAnnotationImpl as repeat_annotate {
+        input:
+            vcf_gz = sniffles_annotate.regenotyped_sniffles,
+            vcf_gz_tbi = sniffles_annotate.regenotyped_sniffles_tbi,
+            segdup_bed = segdup_bed,
+            tr_bed = telomere_bed,
+            centromere_bed = centromere_bed,
+            docker = docker
+    }
+
     output {
-        File annotated_vcf_gz = sniffles_annotate.regenotyped_sniffles
-        File annotated_vcf_gz_tbi = sniffles_annotate.regenotyped_sniffles_tbi
+        File annotated_vcf_gz = repeat_annotate.annotated_vcf
+        File annotated_vcf_gz_tbi = repeat_annotate.annotated_tbi
     }
 }
