@@ -1,6 +1,6 @@
 from modules.shallow_linear import ShallowLinear
 from modules.data_loader import VcfDataset
-
+from collections import defaultdict
 from torch import multiprocessing
 
 # from modules.misc import plot_roc_curve, write_recalibrated_vcf, plot_confusion
@@ -173,13 +173,13 @@ def plot_loss(train_losses, test_losses, test_aucs, label, output_dir=None):
 
 def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
-    learning_rate_max = 0.5
+    learning_rate_max = 1
     learning_rate_base = 1e-5
     weight_decay = 1e-5
     dropout_rate = 0.01
 
     goal_batch_size = 1024
-    n_epochs = 32
+    n_epochs = 16
 
     config_path = os.path.join(output_dir, "config.txt")
 
@@ -229,7 +229,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=len([x for x in data_loader_train]), epochs=n_epochs)
 
     # Define the loss function
-    loss_fn = nn.BCEWithLogitsLoss()  # cross entropy
+    loss_fn = nn.BCEWithLogitsLoss()
 
     # Train and get the resulting loss per iteration
     train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs)
@@ -287,13 +287,19 @@ def downsample_test_data(y_true, y_predict, seed=37):
     return y_true, y_predict
 
 
-def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-'):
+def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-', use_text=False):
     fpr, tpr, thresholds = roc_curve(y_true, y_predict)
 
     if color is not None:
-        axes.plot(fpr, tpr, label=label, color=color, linestyle=style)
+        if label is not None:
+            axes.plot(fpr, tpr, label=label, color=color, linestyle=style)
+        else:
+            axes.plot(fpr, tpr, color=color, linestyle=style)
     else:
-        axes.plot(fpr, tpr, label=label, linestyle=style)
+        if label is not None:
+            axes.plot(fpr, tpr, label=label, linestyle=style)
+        else:
+            axes.plot(fpr, tpr, linestyle=style)
 
     axes.set_xlabel("False positive rate")
     axes.set_ylabel("True positive rate")
@@ -301,6 +307,18 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-'):
     # add major and minor gridlines at 5 and 10% intervals
     axes.grid(which='major', color='black', linestyle='-', linewidth=0.5)
     axes.grid(which='minor', color='black', linestyle=':', linewidth=0.5)
+
+    if use_text:
+        l = len(thresholds)
+        n = 10
+        interval = max(1,(l//n))
+
+        for i,[x,y,t] in enumerate(zip(fpr, tpr, thresholds)):
+            # only label 1/10 of the points
+            if i % interval == 0:
+                axes.text(x, y, round(t, 2), fontsize='small')
+                # add marker
+                axes.plot(x, y, marker='o', markerfacecolor=color, markeredgewidth=0)
 
     return axes
 
@@ -327,7 +345,7 @@ def min50bp(record):
     return record.INFO["SVLEN"][0] >= 50
 
 
-def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir):
+def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir, skip_training=False):
     print("Thread started with ", truth_info_name, annotation_name)
 
     label = truth_info_name + " truth labels and " + annotation_name + " features"
@@ -344,7 +362,16 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print('Input shape: ', dataset_train[0][0].shape)
     print('Output shape: ', dataset_train[0][1].shape)
 
-    train_losses, test_losses, test_aucs, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+    if not skip_training:
+        train_losses, test_losses, test_aucs, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+    else:
+        # construct dummy data
+        y_true = dataset_test.y_data.numpy()
+        y_predict = numpy.random.rand(n_test)
+        train_losses = numpy.random.rand(100)
+        test_losses = numpy.random.rand(100)
+        test_aucs = numpy.random.rand(100)
+        model = ShallowLinear(input_size=dataset_train[0][0].shape[0])
 
     # Format the date and time
     model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
@@ -356,7 +383,32 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
 
     x = dataset_test.x_data.numpy()
 
-    return x, dataset_test.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
+    return dataset_test.records, x, dataset_test.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
+
+
+def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, output_dir):
+    tandem = [[],[]]
+    non_tandem = [[],[]]
+
+    for r,record in enumerate(records):
+        is_tandem = record.INFO["tr_coverage"] > 0.9
+
+        if is_tandem:
+            tandem[0].append(y_true[r])
+            tandem[1].append(y_predict[r])
+        else:
+            non_tandem[0].append(y_true[r])
+            non_tandem[1].append(y_predict[r])
+
+    label = truth_info_name + " truth labels and " + annotation_name + " features TANDEM"
+    axes = plot_roc_curve(y_true=tandem[0], y_predict=tandem[1], label=label, axes=axes, style=':')
+
+    color = axes.get_lines()[-1].get_color()
+
+    label = truth_info_name + " truth labels and " + annotation_name + " features NON-TANDEM"
+    axes = plot_roc_curve(y_true=non_tandem[0], y_predict=non_tandem[1], label=label, color=color, axes=axes)
+
+    return axes
 
 
 def main():
@@ -367,14 +419,14 @@ def main():
         os.makedirs(output_dir)
 
     train_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG002_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG005_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00438_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00621_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG002_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG005_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00438_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00621_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
     ]
 
     test_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/kanpig/HG00673_multiannotated_kanpig_8x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00673_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
     ]
 
     with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
@@ -386,9 +438,7 @@ def main():
             f.write(path + "\n")
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
-    # train_contigs = {"chr17"}
     test_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
-    # test_contigs = {"chr18"}
 
     with open(os.path.join(output_dir, "train_contigs.txt"), "w") as f:
         for contig in train_contigs:
@@ -402,24 +452,28 @@ def main():
     filter_fn = None
 
     fig = pyplot.figure()
-    fig.set_size_inches(8,6)
-
+    fig.set_size_inches(10,8)
     axes = pyplot.axes()
+
+    tandem_fig = pyplot.figure()
+    tandem_fig.set_size_inches(10,8)
+    tandem_axes = pyplot.axes()
 
     args = list()
 
+    # for truth_info_name in ["TruvariBench_TP"]:
     for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
-        for annotation_name in ["Hapestry", "Kanpig"]:
-            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir))
+        # for annotation_name in ["Sniffles"]:
+        for annotation_name in ["Hapestry", "Sniffles"]:
+            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir, False))
 
     with multiprocessing.Pool(4) as pool:
         results = pool.starmap(thread_fn, args)
 
-    for r,[x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
+    for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
 
-        if annotation_name.lower() == "kanpig" and truth_info_name.lower() == "truvaribench_tp":
-            # initialize colormap
+        if annotation_name.lower() != "hapestry" and truth_info_name.lower() == "truvaribench_tp":
             cmap = pyplot.get_cmap('tab20')
 
             for name,index in feature_indexes.items():
@@ -430,6 +484,8 @@ def main():
                     color = cmap(float(index-12)/(len(feature_indexes)-12))
 
                     axes = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
+
+        tandem_axes = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name, output_dir)
 
         y_true, y_predict = downsample_test_data(y_true, y_predict)
 
@@ -445,9 +501,12 @@ def main():
 
     # Generate a legend for axes and force bottom right location
     axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
-    axes.legend(loc="lower right")
-
+    axes.legend(loc="lower right", fontsize='small')
     fig.savefig(os.path.join(output_dir,"roc_curve_all_combos.png"), dpi=200)
+
+    tandem_axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+    tandem_axes.legend(loc="lower right", fontsize='small')
+    tandem_fig.savefig(os.path.join(output_dir,"roc_curve_tandem_stratified.png"), dpi=200)
 
     # pyplot.show()
     # pyplot.close()
