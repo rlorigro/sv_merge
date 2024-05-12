@@ -150,5 +150,24 @@ int main(){
     }
 
     cerr << success_e12 << ',' << w12 << '\n';
+
+    cerr << "TESTING: exhaustive iteration" << '\n';
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+        cerr << "sample: " << sample_name << '\n';
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            cerr << "read: " << transmap.get_node(read_id).name << '\n';
+            transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                cerr << "path: " << transmap.get_node(path_id).name << '\n';
+                auto [success, weight] = transmap.try_get_edge_weight(read_id, path_id);
+
+                if (not success){
+                    throw runtime_error("ERROR: edge weight not found for read-path edge: " + to_string(read_id) + " " + to_string(path_id));
+                }
+
+                cerr << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << ',' << weight << '\n';
+            });
+        });
+    });
+
     cerr << "PASS" << '\n';
 }

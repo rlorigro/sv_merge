@@ -1133,12 +1133,12 @@ void fetch_reads_from_clipped_bam(
                     throw runtime_error("ERROR: invalid query coords: " + region.to_string() + " " + name + " " + to_string(outer_coord.query_start) + "," + to_string(outer_coord.query_stop));
                 }
 
-                auto i = size_t(outer_coord.query_start);
-                auto l = size_t(outer_coord.query_stop - outer_coord.query_start);
+                auto i = int32_t(outer_coord.query_start);
+                auto l = int32_t(outer_coord.query_stop - outer_coord.query_start);
 
-                auto l_inner = size_t(inner_coord.query_stop - inner_coord.query_start);
-                auto l_left = size_t(inner_coord.query_start - outer_coord.query_start);
-                auto l_right = size_t(outer_coord.query_stop - outer_coord.query_start);
+                auto l_inner = int32_t(inner_coord.query_stop - inner_coord.query_start);
+                auto l_left = int32_t(inner_coord.query_start - outer_coord.query_start);
+                auto l_right = int32_t(outer_coord.query_stop - outer_coord.query_start);
 
                 if (get_flank_query_coords) {
                     if (l_inner > max_length or l_left > max_length or l_right > max_length or l > max_length) {

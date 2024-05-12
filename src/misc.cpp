@@ -24,6 +24,31 @@ using std::runtime_error;
 namespace sv_merge{
 
 
+/**
+ * Append a log file and write the header if it hasn't been written yet
+ * @param output_dir
+ * @param vcf_name_prefix
+ * @param time_csv result of calling Timer::to_csv() immediately after task exits
+ * @param success whether or not the task timed out
+ */
+void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
+    // Begin the logging process
+    path log_path = output_dir / "log.csv";
+
+    // Check if the log file needs to have a header written to it or not
+    bool exists = std::filesystem::exists(log_path);
+
+    ofstream file(log_path, std::ios_base::app);
+
+    // Write the header
+    if (not exists){
+        file << "name,h,m,s,ms,success" << '\n';
+    }
+    // Write the results for this region/tool
+    file << vcf_name_prefix << ',' << time_csv << ',' << success << '\n';
+}
+
+
 void run_command(string& command, string& result, bool trim_result){
     result.clear();
 

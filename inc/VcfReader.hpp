@@ -36,6 +36,10 @@ using std::ofstream;
 
 namespace sv_merge {
 
+
+string get_vcf_name_prefix(const path& vcf);
+
+
 /**
  * Reused container, allocated only once and overwritten with each VCF line.
  *

@@ -100,6 +100,9 @@ public:
             float min_edge_weight,
             const function<bool(const HeteroNode& node)>& criteria,
             const function<void(const HeteroNode& node, int64_t id)>& f) const;
+
+    /// Writing
+    void write_edge_info_to_csv(path output_path) const;
 };
 
 

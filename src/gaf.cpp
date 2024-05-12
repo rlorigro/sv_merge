@@ -76,22 +76,27 @@ void GafAlignment::set_path(const vector<pair<string,bool> >& p){
 }
 
 
-void GafAlignment::set_path(const string& p){
+void GafAlignment::parse_string_as_path(const string& p, vector<pair<string,bool> >& result){
     if (p[0] != '>' and p[0] != '<'){
         throw runtime_error("ERROR: path does not start with > or <, GAF stable path format not supported");
     }
 
-    path.clear();
+    result.clear();
 
     for (auto c: p){
         if (c == '>' or c == '<'){
-            path.emplace_back();
-            path.back().second = parse_path_reversal_token(c);
+            result.emplace_back();
+            result.back().second = parse_path_reversal_token(c);
         }
         else{
-            path.back().first += c;
+            result.back().first += c;
         }
     }
+}
+
+
+void GafAlignment::set_path(const string& p){
+    parse_string_as_path(p, path);
 
     // Hopefully this never happen but is technically possible according to the GAF spec
     if (reversal){
@@ -274,7 +279,7 @@ int32_t GafAlignment::get_map_quality() const{
 }
 
 
-bool GafAlignment::parse_path_reversal_token(char c) const{
+bool GafAlignment::parse_path_reversal_token(char c){
     bool r;
 
     if (c == '>'){

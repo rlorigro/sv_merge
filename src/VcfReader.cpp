@@ -74,6 +74,22 @@ const string VcfReader::CNV_STR = "CNV";
 const uint64_t VcfRecord::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
 
+string get_vcf_name_prefix(const path& vcf){
+    string name_prefix = vcf.filename().string();
+
+    if (name_prefix.ends_with(".gz")){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - 3);
+    }
+    if (name_prefix.ends_with(".vcf")){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - 4);
+    }
+
+    std::replace(name_prefix.begin(), name_prefix.end(), '.', '_');
+
+    return name_prefix;
+}
+
+
 VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency) {
     this->vcf_path=vcf_path;
     this->progress_n_lines=progress_n_lines;

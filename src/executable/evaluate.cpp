@@ -45,23 +45,6 @@ using std::ref;
 using namespace sv_merge;
 
 
-
-string get_vcf_name_prefix(const path& vcf){
-    string name_prefix = vcf.filename().string();
-
-    if (name_prefix.ends_with(".gz")){
-        name_prefix = name_prefix.substr(0,name_prefix.size() - 3);
-    }
-    if (name_prefix.ends_with(".vcf")){
-        name_prefix = name_prefix.substr(0,name_prefix.size() - 4);
-    }
-
-    std::replace(name_prefix.begin(), name_prefix.end(), '.', '_');
-
-    return name_prefix;
-}
-
-
 void write_region_subsequences_to_file_thread_fn(
         const unordered_map<Region,TransMap>& region_transmaps,
         const vector<Region>& regions,
@@ -272,31 +255,6 @@ void get_path_clusters(GafSummary& gaf_summary, const VariantGraph& variant_grap
             throw runtime_error("ERROR: query in gaf summary has no path: " + name);
         }
     }
-}
-
-
-/**
- * Append a log file and write the header if it hasn't been written yet
- * @param output_dir
- * @param vcf_name_prefix
- * @param time_csv result of calling Timer::to_csv() immediately after task exits
- * @param success whether or not the task timed out
- */
-void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
-    // Begin the logging process
-    path log_path = output_dir / "log.csv";
-
-    // Check if the log file needs to have a header written to it or not
-    bool exists = std::filesystem::exists(log_path);
-
-    ofstream file(log_path, std::ios_base::app);
-
-    // Write the header
-    if (not exists){
-        file << "name,h,m,s,ms,success" << '\n';
-    }
-    // Write the results for this region/tool
-    file << vcf_name_prefix << ',' << time_csv << ',' << success << '\n';
 }
 
 

@@ -1,4 +1,8 @@
 #include "TransitiveMap.hpp"
+#include <fstream>
+
+using std::ofstream;
+
 
 namespace sv_merge{
 
@@ -358,6 +362,26 @@ void TransMap::for_node_in_bfs(
     graph.for_node_in_bfs(start_name,min_edge_weight,criteria,f);
 }
 
+
+void TransMap::write_edge_info_to_csv(path output_path) const{
+    ofstream out(output_path);
+
+    out << "sample,read,path,weight" << '\n';
+
+    for_each_sample([&](const string& sample_name, int64_t sample_id){
+        for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            for_each_path_of_read(read_id, [&](int64_t path_id){
+                auto [success, weight] = try_get_edge_weight(read_id, path_id);
+
+                if (not success){
+                    throw runtime_error("ERROR: edge weight not found for read-path edge: " + to_string(read_id) + " " + to_string(path_id));
+                }
+
+                out << sample_name << ',' << get_node(read_id).name << ',' << get_node(path_id).name << ',' << weight << '\n';
+            });
+        });
+    });
+}
 
 
 }
