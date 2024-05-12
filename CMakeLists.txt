@@ -45,7 +45,7 @@ if (debug)
         # Memory debug
 #        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
         set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
-        set(ASAN_OPTIONS=check_initialization_order=1)
+#        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
         set(CMAKE_CXX_FLAGS "-fexceptions")
@@ -597,9 +597,10 @@ endforeach()
 set(EXECUTABLES
         a
         analyze_evaluation
-        find_windows
-        evaluate
         annotate
+        evaluate
+        find_windows
+        hapestry
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
