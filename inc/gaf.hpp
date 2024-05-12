@@ -85,7 +85,8 @@ public:
     [[nodiscard]] const vector<pair<string,bool> >& get_path() const;
 
     /// Helper
-    [[nodiscard]] bool parse_path_reversal_token(char c) const;
+    static bool parse_path_reversal_token(char c);
+    static void parse_string_as_path(const string& p, vector<pair<string,bool> >& result);
     void load_cigar(const string& cigar_string);
 
     /// Iterators and Alignment API fulfillment
