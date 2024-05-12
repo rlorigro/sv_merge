@@ -124,7 +124,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             // Get score and negate it because WFA reports "distance" as negative value
             auto score = -aligner.getAlignmentScore();
 
-            if (score > max_edit_distance) {
+            if (score < max_edit_distance) {
                 transmap.add_edge(id, transmap.get_id(path_name), float(score));
             }
         }
