@@ -94,7 +94,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 }
 
 
-void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, int64_t max_edit_distance){
+void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, int64_t min_percent_score){
     // TODO: test these params?? why is gap extension greater than mismatch cost?
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -117,17 +117,43 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     });
 
     transmap.for_each_read([&](const string& name, int64_t id){
-        auto& seq = transmap.get_sequence(id);
+        auto& read_sequence = transmap.get_sequence(id);
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
-            aligner.alignEnd2End(seq, path_sequence);
+            // TODO: Add length cutoff before aligning
+            aligner.alignEnd2End(read_sequence, path_sequence);
 
             // Get score and negate it because WFA reports "distance" as negative value
-            auto score = -aligner.getAlignmentScore();
+            auto score = aligner.getAlignmentScore();
+
+            // Extract indel edit distance from cigar
+            string cigar = aligner.getCIGAR(false);
+            string length_token;
+
+            // TODO: switch to using mismatches if we ever put small vars in the graph
+            int64_t n_indels = 0;
+
+            for (auto c: cigar){
+                if (isalpha(c) or c == '='){
+                    if (c == 'I' or c == 'D'){
+                        n_indels += stoll(length_token);
+                    }
+
+                    length_token.clear();
+                }
+                else{
+                    length_token += c;
+                }
+            }
+
+            // Can be negative because indels can be greater than the length of the smaller sequence
+            int64_t scaled_score = 100 - (100*n_indels) / min(read_sequence.size(), path_sequence.size());
+
+            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
             // Scale max_edit_distance by 4 as a rough conversion into affine score
-            if (score < max_edit_distance * 4) {
-                transmap.add_edge(id, transmap.get_id(path_name), float(score));
+            if (scaled_score > min_percent_score) {
+                transmap.add_edge(id, transmap.get_id(path_name), float(n_indels));
             }
         }
     });
@@ -211,7 +237,7 @@ void merge_variants_thread_fn(
 ) {
     // TODO: make these parameters
     int64_t min_path_coverage = 1;
-    int64_t max_edit_distance = 250;
+    int64_t min_percent_score = 85;
 
     unordered_map<string, interval_tree_t<int32_t> > contig_interval_trees;
 
@@ -298,7 +324,7 @@ void merge_variants_thread_fn(
         }
 
         // Align all reads to all candidate paths
-        align_reads_vs_paths(transmap, variant_graph, max_edit_distance);
+        align_reads_vs_paths(transmap, variant_graph, min_percent_score);
 
         // Write the full transmap to CSV (in the form of annotated edges)
         path output_csv = subdir / "reads_to_paths.csv";

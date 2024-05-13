@@ -366,7 +366,7 @@ void TransMap::for_node_in_bfs(
 void TransMap::write_edge_info_to_csv(path output_path) const{
     ofstream out(output_path);
 
-    out << "sample,read,path,weight" << '\n';
+    out << "sample,read,path,cost" << '\n';
 
     for_each_sample([&](const string& sample_name, int64_t sample_id){
         for_each_read_of_sample(sample_id, [&](int64_t read_id){

@@ -23,6 +23,9 @@ int main(){
 
     // Display CIGAR & score
     string cigar = aligner.getCIGAR(true);
+
+
+
     cerr << "CIGAR: " << cigar  << '\n';
     cerr << "Alignment score " << aligner.getAlignmentScore() << '\n';
     return 0;
