@@ -312,6 +312,9 @@ void extract_subregions_from_sample(
         }
     }
 
+    // Add the last contig
+    contig_regions.emplace_back(span{subregions}.subspan(prev_index, subregions.size() - prev_index));
+
     for (const auto& regions: contig_regions){
         extract_subregions_from_sample_contig(
             authenticator,

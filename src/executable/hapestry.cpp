@@ -598,12 +598,6 @@ void hapestry(
     );
 
     auto vcf_prefix = get_vcf_name_prefix(vcf);
-    path out_vcf = output_dir / ("annotated.vcf");
-    ofstream out_file(out_vcf);
-
-    if (not (out_file.is_open() and out_file.good())){
-        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
-    }
 
     ifstream input_vcf(vcf);
 
