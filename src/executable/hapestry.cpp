@@ -545,9 +545,9 @@ void hapestry(
                 bam_csv,
                 n_threads,
                 region_transmaps,
-                false,
+                true,
                 force_unique_reads,
-                false
+                true
         );
     }
     else{
@@ -560,11 +560,11 @@ void hapestry(
                 max_length,
                 flank_length,
                 region_transmaps,
-                false,
+                true,
                 false,
                 false,
                 force_unique_reads,
-                false
+                true
         );
     }
 
