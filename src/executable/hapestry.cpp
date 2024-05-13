@@ -95,6 +95,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 
 
 void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, int64_t max_edit_distance){
+    // TODO: test these params?? why is gap extension greater than mismatch cost?
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
     // First extract the sequences of the paths
@@ -124,7 +125,8 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             // Get score and negate it because WFA reports "distance" as negative value
             auto score = -aligner.getAlignmentScore();
 
-            if (score < max_edit_distance) {
+            // Scale max_edit_distance by 4 as a rough conversion into affine score
+            if (score < max_edit_distance * 4) {
                 transmap.add_edge(id, transmap.get_id(path_name), float(score));
             }
         }
