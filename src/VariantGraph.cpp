@@ -1235,6 +1235,26 @@ path_handle_t VariantGraph::load_gaf_path(vector<pair<string,bool>>& path, const
 }
 
 
+void VariantGraph::canonize_gaf_path(string& input_path, string& output_path, string& buffer) {
+    const size_t LENGTH = input_path.length();
+    char c;
+    size_t i;
+
+    output_path.clear(); buffer.clear();
+    for (i=LENGTH-1; i>=0; i--) {
+        c=input_path.at(i);
+        if (c==GAF_FWD_CHAR || c==GAF_REV_CHAR) {
+            output_path.push_back(c==GAF_FWD_CHAR?GAF_REV_CHAR:GAF_FWD_CHAR);
+            std::reverse(buffer.begin(),buffer.end());
+            output_path.append(buffer);
+            buffer.clear();
+        }
+        else buffer.push_back(c);
+    }
+    if (output_path>input_path) output_path=input_path;
+}
+
+
 void VariantGraph::print_edge_histograms() const {
     const char SEPARATOR = ',';
     size_t n_edges = edge_to_vcf_record.size();

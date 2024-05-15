@@ -2,10 +2,12 @@
 #include "VcfReader.hpp"
 #include "bed.hpp"
 #include "CLI11.hpp"
+#include "gaf.hpp"
 
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
 using sv_merge::Region;
+using sv_merge::GafAlignment;
 
 #include <stdexcept>
 #include <filesystem>
@@ -19,6 +21,7 @@ using std::streamsize;
 using std::string;
 using std::vector;
 using std::unordered_map;
+using std::set;
 using std::ifstream;
 using std::runtime_error;
 using std::sort;
@@ -48,8 +51,9 @@ public:
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space;
      * @param log_* keeps track of every window that satisfies at least one of these low-support thresholds.
      */
-    explicit Counts(const vector<string>& tools, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t n_windows = 1e6):
+    explicit Counts(const vector<string>& tools, const string& truth_tool, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t n_windows = 1e6):
         TOOLS(tools),
+        TRUTH_TOOL(truth_tool),
         N_TOOLS(tools.size()),
         coverage_threshold(coverage_threshold),
         max_hap_length(max_hap_length),
@@ -128,6 +132,8 @@ public:
         for (i=0; i<N_TOOLS; i++) { sv_length_supported.emplace_back(); sv_length_supported.at(i).reserve(n_windows); }
         sv_length_unsupported.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { sv_length_unsupported.emplace_back(); sv_length_unsupported.at(i).reserve(n_windows); }
+
+        recall_numerator.reserve(N_TOOLS); recall_denominator.reserve(N_TOOLS);
     };
 
 
@@ -259,6 +265,139 @@ public:
 
 
     /**
+     * Computes a version of recall based on non-ref haplotypes rather than on VCF records. Assume that one of the VCFs
+     * represents the true SVs in a window, and call "true graph" the corresponding graph T. A haplotype is considered
+     * non-reference iff it does not map to the ref walk in T. Every distinct walk in T taken by some non-ref haplotype
+     * contributes one to the denominator of recall (non-ref haplotypes with distinct IDs might map to the same walk).
+     * Given another VCF graph G, if a non-ref haplotype maps well to a walk in G, its walk in T is considered to be
+     * found in G. The numerator of recall for that VCF is incremented by the number of distinct walks in T that are
+     * found in G.
+     *
+     * @param directory assumed to have the same structure as in `load_window()`.
+     */
+    void haplotype_recall(const path& directory, const string& truth_tool) {
+        const float MIN_COVERAGE = 0.9;  // Arbitrary
+        const float MIN_IDENTITY = 0.9;  // Arbitrary
+        bool is_ref;
+        char c;
+        size_t i;
+        size_t numerator, denominator, field, node_id, previous_id, direction, length, reference_path_length;
+        string hap_id, reference_path, canonized_path;
+        path input_file;
+        ifstream file;
+
+        // Finding ref nodes in the truth graph
+        ref_node_ids.clear();
+        input_file=directory/truth_tool/NODES_FILE;
+        file.clear(); file.open(input_file);
+        if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+        file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+        field=0; tmp_buffer_1.clear();
+        while (file.get(c)) {
+            if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
+            else if (c==CSV_DELIMITER) {
+                if (field==0) node_id=stoi(tmp_buffer_1);
+                else if (field==2 && stoi(tmp_buffer_1)==1) ref_node_ids.emplace(node_id);
+                field++; tmp_buffer_1.clear();
+            }
+            else tmp_buffer_1.push_back(c);
+        }
+        file.close();
+
+        // Finding the reference path, which is assumed to be the longest walk that uses only reference nodes with
+        // increasing IDs (this might not exist, since no haplotype might be reference in the window).
+        reference_path=""; reference_path_length=0;
+        input_file=directory/truth_tool/ALIGNMENTS_FILE;
+        file.clear(); file.open(input_file);
+        if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+        field=0;
+        while (file.get(c)) {
+            if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
+            else if (c==TSV_DELIMITER) {
+                if (field==0) hap_id=tmp_buffer_1;
+                else if (field==5) {
+                    GafAlignment::parse_string_as_path(tmp_buffer_1,tmp_path);
+                    is_ref=true; previous_id=-1; direction=-1;
+                    for (auto& [str, is_reverse]: tmp_path) {
+                        node_id=stoi(str);
+                        if (!ref_node_ids.contains(node_id)) { is_ref=false; break; }
+                        if (previous_id==-1) previous_id=node_id;
+                        else if (direction==-1) {
+                            if (node_id==previous_id+1) direction=1;
+                            else if (node_id==previous_id-1) direction=0;
+                            else { is_ref=false; break; }
+                        }
+                        else {
+                            if ((direction==1 && node_id!=previous_id+1) || (direction==0 && node_id!=previous_id-1)) { is_ref=false; break; }
+                        }
+                    }
+                    if (is_ref && tmp_path.size()>reference_path_length) {
+                        reference_path_length=tmp_path.size();
+                        VariantGraph::canonize_gaf_path(tmp_buffer_1,reference_path,tmp_buffer_2);
+                    }
+                    break;
+                }
+                field++; tmp_buffer_1.clear();
+            }
+            else tmp_buffer_1.push_back(c);
+        }
+        file.close();
+
+        // Finding non-ref haplotypes using the true graph
+        nonref_haps.clear(); canonized_paths.clear(); hap2path.clear();
+        input_file=directory/truth_tool/ALIGNMENTS_FILE;
+        file.clear(); file.open(input_file);
+        if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+        field=0;
+        while (file.get(c)) {
+            if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
+            else if (c==TSV_DELIMITER) {
+                if (field==0) hap_id=tmp_buffer_1;
+                else if (field==5) {
+                    VariantGraph::canonize_gaf_path(tmp_buffer_1,canonized_path,tmp_buffer_2);
+                    if (canonized_path!=reference_path) {
+                        canonized_paths.emplace(canonized_path);
+                        nonref_haps.emplace(hap_id);
+                        hap2path.emplace(hap_id,canonized_path);
+                    }
+                }
+                field++; tmp_buffer_1.clear();
+            }
+            else tmp_buffer_1.push_back(c);
+        }
+        file.close();
+        denominator=canonized_paths.size();
+
+        // Updating recall numerator and denominator
+        for (i=0; i<N_TOOLS; i++) {
+            if (TOOLS.at(i)==truth_tool) continue;
+            covered_paths.clear();
+            input_file=directory/TOOLS.at(i)/HAPLOTYPES_FILE;
+            file.clear(); file.open(input_file);
+            if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
+            file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
+            field=0;
+            while (file.get(c)) {
+                if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
+                else if (c==CSV_DELIMITER) {
+                    if (field==0) hap_id=tmp_buffer_1;
+                    else if (field==4) coverage=stof(tmp_buffer_1);
+                    else if (field==5) {
+                        identity=stof(tmp_buffer_1);
+                        if (nonref_haps.contains(hap_id) && coverage>=MIN_COVERAGE && identity>=MIN_IDENTITY) covered_paths.emplace(hap2path.at(hap_id));
+                    }
+                    tmp_buffer_1.clear(); field++;
+                }
+                else tmp_buffer_1.push_back(c);
+            }
+            file.close();
+            recall_numerator.at(i)+=covered_paths.size();
+            recall_denominator.at(i)+=denominator;
+        }
+    }
+
+
+    /**
      * Prints every measure as a separate file in `output_dir`. Every file contains a list numbers (one number per
      * window in `windows_to_print`) sorted in non-decreasing order. Only fractional values whose denominator is nonzero
      * are printed.
@@ -278,6 +417,7 @@ public:
         const size_t N_WINDOWS = windows_to_print.size();
         const string SUFFIX = ".txt";
         size_t i, j;
+        size_t truth_tool;
         vector<size_t> tmp_vector_1;
         vector<double> tmp_vector_2;
         vector<vector<ofstream>> out;
@@ -296,13 +436,16 @@ public:
                 "nonref_edges_covered",  // Fraction
                 "supported_vcf_records","unsupported_vcf_records","supported_del","unsupported_del","supported_ins","unsupported_ins","supported_inv","unsupported_inv","supported_dup","unsupported_dup",  // Fractions
                 "nonref_node_length_vs_coverage","nonref_node_length_vs_identity",  // Pairs
-                "sv_length_supported","sv_length_unsupported"
+                "sv_length_supported","sv_length_unsupported",
+                "recall"
         };
         tmp_vector_1.reserve(N_WINDOWS); tmp_vector_2.reserve(N_WINDOWS);
 
         create_directory(output_dir);
+        truth_tool=-1;
         for (i=0; i<N_TOOLS; i++) {
             const string tool_name = TOOLS.at(i);
+            if (tool_name==TRUTH_TOOL) truth_tool=i;
             create_directory(output_dir/tool_name);
             out.emplace_back();
             for (j=0; j<FILE_NAMES.size(); j++) {
@@ -341,6 +484,7 @@ public:
         print_measures_impl_pair(nonref_node_length_vs_coverage,28,out);
         print_measures_impl_basic(sv_length_supported,29,out);
         print_measures_impl_basic(sv_length_unsupported,30,out);
+        print_measures_impl_normalized(truth_tool,recall_numerator,recall_denominator,31,out);
     }
 
 
@@ -417,14 +561,17 @@ private:
     inline static const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
     inline static const string LOGGED_WINDOWS_FILE = "anomalous_windows.bed";
     inline static const string EXECUTION_FILE = "log.csv";
+    inline static const string ALIGNMENTS_FILE = "alignments.gaf";
     static const char GAF_FWD_CHAR = '>';
     static const char GAF_REV_CHAR = '<';
     static const char CSV_DELIMITER = ',';
+    static const char TSV_DELIMITER = '\t';
     static const char LINE_DELIMITER = '\n';
     static const char CLUSTER_DELIMITER = ' ';
     static const size_t STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
     const vector<string>& TOOLS;
+    const string TRUTH_TOOL;
     const size_t N_TOOLS;
     const double coverage_threshold;
     const size_t max_hap_length;
@@ -478,6 +625,11 @@ private:
     vector<vector<size_t>> sv_length_supported, sv_length_unsupported;
 
     /**
+     * Output measures: recall.
+     */
+     vector<size_t> recall_numerator, recall_denominator;
+
+    /**
      * Output log: row=toolID, column=window.
      */
     unordered_map<size_t,vector<size_t>> logged_windows;
@@ -505,6 +657,13 @@ private:
     vector<double> hap_counts, nonref_hap_counts;
 
     vector<size_t> vcf_counts_supported, vcf_counts_unsupported;
+
+    set<size_t> ref_node_ids;
+    set<string> nonref_haps;
+    vector<pair<string,bool>> tmp_path;
+    unordered_map<string,string> hap2path;
+    set<string> covered_paths;
+    set<string> canonized_paths;
 
 
     /**
@@ -766,6 +925,15 @@ private:
     }
 
 
+    template<class T> void print_measures_impl_normalized(size_t exclude_tool, const vector<T>& numerator, const vector<T>& denominator, size_t column, vector<vector<ofstream>>& out) const {
+        for (size_t i=0; i<N_TOOLS; i++) {
+            if (i==exclude_tool) continue;
+            out.at(i).at(column) << to_string(((double)(numerator.at(i)))/denominator.at(i)) << '\n';
+            out.at(i).at(column).close();
+        }
+    }
+
+
     /**
      * @param nonzero_denom_only FALSE: prints a zero for every fraction with zero denominator.
      */
@@ -891,6 +1059,7 @@ int main (int argc, char* argv[]) {
     double LOG_VCF_RECORDS_SUPPORTED_LEQ = 0.8;
     double LOG_ALIGNMENT_IDENTITY_LEQ = 0.8;
     double LOG_HAP_COVERAGE_LEQ = 0.97;
+    string TRUTH_TOOL = "";
     app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
     app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
     app.add_option("--tools",TOOLS,"List of tools to be evaluated. These names are matched to subdirectories of the input directory.")->expected(1,-1)->required();
@@ -903,6 +1072,8 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the coordinates of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
     app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
     app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
+    app.add_option("--truth_id",TRUTH_TOOL,"Assume that this directory contains the true calls. Used only for computing a haplotype-based recall-like measure.")->capture_default_str();
+
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
 
@@ -913,7 +1084,7 @@ int main (int argc, char* argv[]) {
         b = std::filesystem::weakly_canonical(b);
     }
 
-    Counts counts(TOOLS,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);
+    Counts counts(TOOLS,TRUTH_TOOL,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);
 
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
@@ -950,6 +1121,7 @@ int main (int argc, char* argv[]) {
         current_dir.clear();
         current_dir.append(directories.at(i).name+Counts::SUBDIR_SEPARATOR_1+to_string(directories.at(i).start)+Counts::SUBDIR_SEPARATOR_2+to_string(directories.at(i).stop));
         all_cluster_files_present&=counts.load_window(INPUT_DIR/current_dir);
+        if (!TRUTH_TOOL.empty()) counts.haplotype_recall(INPUT_DIR/current_dir,TRUTH_TOOL);
         if ((i+1)%PROGRESS_N_DIRS==0) cerr << "Loaded " << to_string(i+1) << " directories\n";
     }
     cerr << "Loaded " << to_string(n_directories) << " directories\n";

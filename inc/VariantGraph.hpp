@@ -178,6 +178,13 @@ public:
      */
     void paths_to_vcf_records(ofstream& outstream);
 
+    /**
+     * Sets `output_path` to the lexicographically smaller between `input_path` and its reverse.
+     *
+     * @param buffer temporary space.
+     */
+    static void canonize_gaf_path(string& input_path, string& output_path, string& buffer);
+
     void get_main_chromosome(string& result);
 
     void get_region_of_node(const handle_t& h, Region& result);
