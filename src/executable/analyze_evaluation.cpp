@@ -134,6 +134,7 @@ public:
         for (i=0; i<N_TOOLS; i++) { sv_length_unsupported.emplace_back(); sv_length_unsupported.at(i).reserve(n_windows); }
 
         recall_numerator.reserve(N_TOOLS); recall_denominator.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { recall_numerator.emplace_back(0); recall_denominator.emplace_back(0); }
     };
 
 
@@ -260,6 +261,7 @@ public:
             });
             on_window_end_vcf_counts(i);
         }
+
         return out;
     }
 
@@ -281,12 +283,12 @@ public:
         bool is_ref;
         char c;
         size_t i;
-        size_t numerator, denominator, field, node_id, previous_id, direction, length, reference_path_length;
+        size_t denominator, field, node_id, previous_id, direction, length, reference_path_length;
         string hap_id, reference_path, canonized_path;
         path input_file;
         ifstream file;
 
-        // Finding ref nodes in the truth graph
+        // Finding ref nodes in the true graph
         ref_node_ids.clear();
         input_file=directory/truth_tool/NODES_FILE;
         file.clear(); file.open(input_file);
@@ -310,7 +312,7 @@ public:
         input_file=directory/truth_tool/ALIGNMENTS_FILE;
         file.clear(); file.open(input_file);
         if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-        field=0;
+        field=0; tmp_buffer_1.clear(); tmp_buffer_2.clear();
         while (file.get(c)) {
             if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
             else if (c==TSV_DELIMITER) {
@@ -321,18 +323,17 @@ public:
                     for (auto& [str, is_reverse]: tmp_path) {
                         node_id=stoi(str);
                         if (!ref_node_ids.contains(node_id)) { is_ref=false; break; }
-                        if (previous_id==-1) previous_id=node_id;
-                        else if (direction==-1) {
+                        if (previous_id!=-1 && direction==-1) {
                             if (node_id==previous_id+1) direction=1;
                             else if (node_id==previous_id-1) direction=0;
                             else { is_ref=false; break; }
                         }
-                        else {
-                            if ((direction==1 && node_id!=previous_id+1) || (direction==0 && node_id!=previous_id-1)) { is_ref=false; break; }
-                        }
+                        else if ((direction==1 && node_id!=previous_id+1) || (direction==0 && node_id!=previous_id-1)) { is_ref=false; break; }
+                        previous_id=node_id;
                     }
-                    if (is_ref && tmp_path.size()>reference_path_length) {
-                        reference_path_length=tmp_path.size();
+                    length=tmp_path.size();
+                    if (is_ref && length>reference_path_length) {
+                        reference_path_length=length;
                         VariantGraph::canonize_gaf_path(tmp_buffer_1,reference_path,tmp_buffer_2);
                     }
                     break;
@@ -348,7 +349,7 @@ public:
         input_file=directory/truth_tool/ALIGNMENTS_FILE;
         file.clear(); file.open(input_file);
         if (!file.good() || !file.is_open()) throw runtime_error("ERROR: could not read file: "+input_file.string());
-        field=0;
+        field=0; tmp_buffer_1.clear(); tmp_buffer_2.clear();
         while (file.get(c)) {
             if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
             else if (c==TSV_DELIMITER) {
@@ -367,8 +368,10 @@ public:
         }
         file.close();
         denominator=canonized_paths.size();
+        if (denominator==0) return;
 
-        // Updating recall numerator and denominator
+        // Incrementing recall numerator and denominator
+        tmp_buffer_1.clear();
         for (i=0; i<N_TOOLS; i++) {
             if (TOOLS.at(i)==truth_tool) continue;
             covered_paths.clear();
@@ -378,17 +381,21 @@ public:
             file.ignore(STREAMSIZE_MAX,LINE_DELIMITER);  // Skipping CSV header
             field=0;
             while (file.get(c)) {
-                if (c==LINE_DELIMITER) { tmp_buffer_1.clear(); field=0; }
+                if (c==LINE_DELIMITER) {
+                    identity=stof(tmp_buffer_1);
+                    if (nonref_haps.contains(hap_id) && coverage>=MIN_COVERAGE && identity>=MIN_IDENTITY) covered_paths.emplace(hap2path.at(hap_id));
+                    tmp_buffer_1.clear(); field=0;
+                }
                 else if (c==CSV_DELIMITER) {
                     if (field==0) hap_id=tmp_buffer_1;
                     else if (field==4) coverage=stof(tmp_buffer_1);
-                    else if (field==5) {
-                        identity=stof(tmp_buffer_1);
-                        if (nonref_haps.contains(hap_id) && coverage>=MIN_COVERAGE && identity>=MIN_IDENTITY) covered_paths.emplace(hap2path.at(hap_id));
-                    }
                     tmp_buffer_1.clear(); field++;
                 }
                 else tmp_buffer_1.push_back(c);
+            }
+            if (!tmp_buffer_1.empty()) {
+                identity=stof(tmp_buffer_1);
+                if (nonref_haps.contains(hap_id) && coverage>=MIN_COVERAGE && identity>=MIN_IDENTITY) covered_paths.emplace(hap2path.at(hap_id));
             }
             file.close();
             recall_numerator.at(i)+=covered_paths.size();
@@ -1028,9 +1035,6 @@ void get_windows_to_print(const vector<Region>& directories, const vector<Region
 
 
 
-
-
-
 int main (int argc, char* argv[]) {
     const string SUBDIR_PREFIX = "chr";
     const string SUBDIR_ALL_WINDOWS = "all_windows";
@@ -1072,7 +1076,7 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_vcf_supported",LOG_VCF_RECORDS_SUPPORTED_LEQ,"Stores in a file the coordinates of every input directory whose fraction of supported VCF records is at most this.")->capture_default_str();
     app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
     app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
-    app.add_option("--truth_id",TRUTH_TOOL,"Assume that this directory contains the true calls. Used only for computing a haplotype-based recall-like measure.")->capture_default_str();
+    app.add_option("--truth_id",TRUTH_TOOL,"Assumes that this directory contains the true calls. Used only for computing a haplotype-based recall-like measure.")->capture_default_str();
 
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());

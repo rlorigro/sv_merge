@@ -1236,9 +1236,9 @@ path_handle_t VariantGraph::load_gaf_path(vector<pair<string,bool>>& path, const
 
 
 void VariantGraph::canonize_gaf_path(string& input_path, string& output_path, string& buffer) {
-    const size_t LENGTH = input_path.length();
+    const auto LENGTH = (int32_t)input_path.length();
     char c;
-    size_t i;
+    int32_t i;
 
     output_path.clear(); buffer.clear();
     for (i=LENGTH-1; i>=0; i--) {
