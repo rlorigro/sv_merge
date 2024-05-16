@@ -935,7 +935,7 @@ private:
     template<class T> void print_measures_impl_normalized(size_t exclude_tool, const vector<T>& numerator, const vector<T>& denominator, size_t column, vector<vector<ofstream>>& out) const {
         for (size_t i=0; i<N_TOOLS; i++) {
             if (i==exclude_tool) continue;
-            out.at(i).at(column) << to_string(((double)(numerator.at(i)))/denominator.at(i)) << '\n';
+            out.at(i).at(column) << to_string(numerator.at(i)) << "," << to_string(denominator.at(i)) << "," << to_string(((double)(numerator.at(i)))/denominator.at(i)) << '\n';
             out.at(i).at(column).close();
         }
     }

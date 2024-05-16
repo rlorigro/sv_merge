@@ -6,6 +6,7 @@ version 1.0
 workflow GraphEvaluation {
     input {
         Array[String] vcf_id
+        String truth_vcf_id = ""
         Array[File] vcf_gz
         Array[File] vcf_tbi
         Int interval_max_length
@@ -22,6 +23,7 @@ workflow GraphEvaluation {
     }
     parameter_meta {
         vcf_id: "Distinct name assigned to each VCF to be evaluated"
+        truth_vcf_id: "One of the elements of `vcf_id`, assumed to contain the true set of SVs."
         vcf_gz: "The VCF files to be evaluated. Haplotype clusters are built using the first file in this list."
         interval_max_length: "Do not use windows longer than this for evaluation"
         flank_length: "Ensure this amount of non-tandem sequence around each window"
@@ -37,6 +39,7 @@ workflow GraphEvaluation {
         call EvaluateChromosome {
             input:
                 vcf_id = vcf_id,
+                truth_vcf_id = truth_vcf_id,
                 vcf_gz = vcf_gz,
                 vcf_tbi = vcf_tbi,
                 interval_max_length = interval_max_length,
@@ -65,6 +68,7 @@ workflow GraphEvaluation {
 task EvaluateChromosome {
     input {
         Array[String] vcf_id
+        String truth_vcf_id
         Array[File] vcf_gz
         Array[File] vcf_tbi
         Int interval_max_length
@@ -155,6 +159,12 @@ task EvaluateChromosome {
         ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
         ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
 
+        if [ -n ~{truth_vcf_id} ]; then
+            TRUTH_ID_FLAG="--truth_id ~{truth_vcf_id}"
+        else
+            TRUTH_ID_FLAG=""
+        fi
+
         if ~{defined(evaluation_bed_small_overlap)}
         then
             # Analyzing the evaluation
@@ -166,7 +176,8 @@ task EvaluateChromosome {
             --output_dir ~{work_dir}/${ANALYSIS_NAME_SMALL} \
             --tools ${TOOLS} \
             --beds ${EVALUATION_BEDS_SMALL} \
-            --min_bed_coverage ~{small_overlap} &
+            --min_bed_coverage ~{small_overlap} \
+            ${TRUTH_ID_FLAG} &
         else
             # Make a placeholder so cromwell doesn't whine
             touch ~{work_dir}/${ANALYSIS_NAME_SMALL}.tar.gz
@@ -182,7 +193,8 @@ task EvaluateChromosome {
             --output_dir ~{work_dir}/${ANALYSIS_NAME_LARGE} \
             --tools ${TOOLS} \
             --beds ${EVALUATION_BEDS_LARGE} \
-            --min_bed_coverage ~{large_overlap} &
+            --min_bed_coverage ~{large_overlap} \
+            ${TRUTH_ID_FLAG} &
         else
             # Make a placeholder so cromwell doesn't whine
             touch ~{work_dir}/${ANALYSIS_NAME_LARGE}.tar.gz
@@ -194,7 +206,8 @@ task EvaluateChromosome {
             ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
             --input_dir ~{work_dir}/${EVALUATION_NAME} \
             --output_dir ~{work_dir}/${ANALYSIS_NAME_LARGE} \
-            --tools ${TOOLS} &
+            --tools ${TOOLS} \
+            ${TRUTH_ID_FLAG} &
         fi
 
         wait
