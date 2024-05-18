@@ -38,7 +38,7 @@ inline std::string& rtrim(std::string& s, const char* t = " \t\n\r\f\v");
 
 inline std::string& trim(std::string& s, const char* t = " \t\n\r\f\v");
 
-void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success);
+void write_graphaligner_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success);
 
 void run_command(string& command, string& result, bool trim_result=true);
 

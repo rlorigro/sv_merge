@@ -135,9 +135,9 @@ include(ExternalProject)
 
 
 ExternalProject_Add(project_wfa
-        GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
-        GIT_TAG 4d0b9238857554b958ffa20048b155d29be92e04
-#        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
+#        GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
+#        GIT_TAG cf3eb92dd0aa9bf067d5488a606d8c91173e74eb
+        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.5.tar.gz
         TIMEOUT 5
         CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
         INSTALL_COMMAND make install
@@ -600,7 +600,6 @@ set(EXECUTABLES
         annotate
         evaluate
         find_windows
-        hapestry
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)

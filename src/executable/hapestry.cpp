@@ -1,3 +1,4 @@
+#include "path_optimizer.hpp"
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
@@ -123,9 +124,6 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             // TODO: Add length cutoff before aligning
             aligner.alignEnd2End(read_sequence, path_sequence);
 
-            // Get score and negate it because WFA reports "distance" as negative value
-            auto score = aligner.getAlignmentScore();
-
             // Extract indel edit distance from cigar
             string cigar = aligner.getCIGAR(false);
             string length_token;
@@ -149,7 +147,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             // Can be negative because indels can be greater than the length of the smaller sequence
             int64_t scaled_score = 100 - (100*n_indels) / min(read_sequence.size(), path_sequence.size());
 
-            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
+//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
             // Scale max_edit_distance by 4 as a rough conversion into affine score
             if (scaled_score > min_percent_score) {
@@ -223,7 +221,7 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 }
 
 
-void merge_variants_thread_fn(
+void align_reads_to_paths_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
         unordered_map<Region,TransMap>& region_transmaps,
@@ -303,7 +301,7 @@ void merge_variants_thread_fn(
         bool success = run_command(command, false, 90);
         string time_csv = t.to_csv();
 
-        write_time_log(subdir, vcf_name_prefix, time_csv, success);
+        write_graphaligner_time_log(subdir, vcf_name_prefix, time_csv, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
@@ -323,7 +321,7 @@ void merge_variants_thread_fn(
             }
         }
 
-        // Align all reads to all candidate paths
+        // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, min_percent_score);
 
         // Write the full transmap to CSV (in the form of annotated edges)
@@ -418,7 +416,7 @@ void merge_variants(
         for (size_t n=0; n<n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
-                threads.emplace_back(merge_variants_thread_fn,
+                threads.emplace_back(align_reads_to_paths_thread_fn,
                                      std::ref(region_records),
                                      std::cref(contig_tandems),
                                      std::ref(region_transmaps),
@@ -439,6 +437,16 @@ void merge_variants(
         for (auto &n: threads) {
             n.join();
         }
+    }
+
+    // Finally use all threads to serially solve each transmap with CPSAT
+    for (const auto& r: regions){
+        auto& transmap = region_transmaps.at(r);
+
+        path subdir = output_dir / r.to_unflanked_string('_', flank_length);
+
+        // Optimize
+        optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, subdir);
     }
 }
 

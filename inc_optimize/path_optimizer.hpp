@@ -28,6 +28,7 @@ using operations_research::sat::IntVar;
 using operations_research::sat::BoolVar;
 using operations_research::sat::CpSolverResponse;
 using operations_research::sat::CpSolverStatus;
+using operations_research::sat::SatParameters;
 using operations_research::sat::LinearExpr;
 
 
@@ -73,5 +74,6 @@ void optimize_d(const TransMap& transmap);
 
 void optimize_d_plus_n(const TransMap& transmap, int64_t d_coeff, int64_t n_coeff);
 
+void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n_weight, size_t n_threads, path output_dir);
 
 }

@@ -323,7 +323,7 @@ void compute_graph_evaluation_thread_fn(
         bool success = run_command(command, false, 90);
         string time_csv = t.to_csv();
 
-        write_time_log(input_subdir, vcf_name_prefix, time_csv, success);
+        write_graphaligner_time_log(input_subdir, vcf_name_prefix, time_csv, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {

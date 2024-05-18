@@ -31,7 +31,7 @@ namespace sv_merge{
  * @param time_csv result of calling Timer::to_csv() immediately after task exits
  * @param success whether or not the task timed out
  */
-void write_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
+void write_graphaligner_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
     // Begin the logging process
     path log_path = output_dir / "log.csv";
 
