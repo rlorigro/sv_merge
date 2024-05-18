@@ -23,10 +23,10 @@ from datetime import datetime
 from collections import OrderedDict
 from copy import deepcopy
 import random
-import time
 import numpy
 import vcfpy
 import torch
+import math
 import sys
 import os
 
@@ -178,7 +178,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     weight_decay = 1e-5
     dropout_rate = 0.01
 
-    goal_batch_size = 1024
+    goal_batch_size = 4096
     n_epochs = 16
 
     config_path = os.path.join(output_dir, "config.txt")
@@ -287,19 +287,19 @@ def downsample_test_data(y_true, y_predict, seed=37):
     return y_true, y_predict
 
 
-def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-', use_text=False):
+def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style='-', use_text=False):
     fpr, tpr, thresholds = roc_curve(y_true, y_predict)
 
     if color is not None:
         if label is not None:
-            axes.plot(fpr, tpr, label=label, color=color, linestyle=style)
+            axes.plot(fpr, tpr, label=label, color=color, linestyle=style, alpha=alpha)
         else:
-            axes.plot(fpr, tpr, color=color, linestyle=style)
+            axes.plot(fpr, tpr, color=color, linestyle=style, alpha=alpha)
     else:
         if label is not None:
-            axes.plot(fpr, tpr, label=label, linestyle=style)
+            axes.plot(fpr, tpr, label=label, linestyle=style, alpha=alpha)
         else:
-            axes.plot(fpr, tpr, linestyle=style)
+            axes.plot(fpr, tpr, linestyle=style, alpha=alpha)
 
     axes.set_xlabel("False positive rate")
     axes.set_ylabel("True positive rate")
@@ -318,27 +318,19 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, style='-', use_te
             if i % interval == 0:
                 axes.text(x, y, round(t, 2), fontsize='small')
                 # add marker
-                axes.plot(x, y, marker='o', markerfacecolor=color, markeredgewidth=0)
+                axes.plot(x, y, marker='o', color=color, markeredgewidth=0)
 
     return axes
 
 
-def write_recalibrated_vcf(y_predict, input_vcf_path, output_vcf_path):
+def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf_path):
     reader = vcfpy.Reader.from_path(input_vcf_path)
 
-    mapping = OrderedDict({
-        'ID': 'HAPESTRY_SCORE',
-        'Number': 1,
-        'Type': 'Float',
-        'Description': 'Recalibrated q score from model trained with hapestry'
-    })
-
-    reader.header.add_info_line(mapping)
     writer = vcfpy.Writer.from_path(output_vcf_path, reader.header)
 
-    for record, score in zip(reader, y_predict):
-        record.INFO["HAPESTRY_SCORE"] = score
-        writer.write_record(record)
+    for record, score in zip(records, y_predict):
+        if score > threshold:
+            writer.write_record(record)
 
 
 def min50bp(record):
@@ -386,7 +378,7 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     return dataset_test.records, x, dataset_test.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
 
 
-def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, output_dir):
+def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name):
     tandem = [[],[]]
     non_tandem = [[],[]]
 
@@ -411,6 +403,38 @@ def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
     return axes
 
 
+def get_length(record: vcfpy.Record):
+    if "SVLEN" in record.INFO:
+        return abs(record.INFO["SVLEN"][0])
+    else:
+        return abs(len(record.ALT[0]) - len(record.REF))
+
+
+def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=False):
+    length_stratified_results = defaultdict(lambda: [[],[]])
+    colormap = pyplot.colormaps['viridis']
+
+    for r,record in enumerate(records):
+        length_bin = int(math.log2(get_length(record) + 1))
+
+        if tandem_only and record.INFO["tr_coverage"] <= 0.9:
+            continue
+
+        length_stratified_results[length_bin][0].append(y_true[r])
+        length_stratified_results[length_bin][1].append(y_predict[r])
+
+    for i,(l,result) in enumerate(sorted(length_stratified_results.items(), key=lambda x: x[0])):
+        bin_start = 2**(l)
+        bin_end = 2**(l+1)
+        label = truth_info_name + " truth labels and " + annotation_name + " features " + str(bin_start) + " to " + str(bin_end) + " bp"
+
+        f = float(i)/float(len(length_stratified_results))
+        color = colormap(f)
+        axes = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+
+    return axes
+
+
 def main():
     timestamp = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
     output_dir = os.path.join("output/", timestamp)
@@ -419,14 +443,14 @@ def main():
         os.makedirs(output_dir)
 
     train_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG002_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG005_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00438_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00621_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG002_multiannotated_32x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG005_multiannotated_32x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00438_multiannotated_32x_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00621_multiannotated_32x_asm10_10bp.vcf.gz",
     ]
 
     test_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/repeat_annotated/HG00673_multiannotated_8x_repeats_asm10_10bp.vcf.gz",
+        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00673_multiannotated_32x_asm10_10bp.vcf.gz",
     ]
 
     with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
@@ -459,25 +483,31 @@ def main():
     tandem_fig.set_size_inches(10,8)
     tandem_axes = pyplot.axes()
 
+    length_figs = dict()
+    length_axes = dict()
+
     args = list()
 
-    # for truth_info_name in ["TruvariBench_TP"]:
-    for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
-        # for annotation_name in ["Sniffles"]:
+    # for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
+    for truth_info_name in ["TruvariBench_TP"]:
         for annotation_name in ["Hapestry", "Sniffles"]:
+        # for annotation_name in ["Sniffles"]:
             args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir, False))
+            length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
+            length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
     with multiprocessing.Pool(4) as pool:
         results = pool.starmap(thread_fn, args)
 
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
+        length_axis = length_axes[truth_info_name + "_" + annotation_name]
 
         if annotation_name.lower() != "hapestry" and truth_info_name.lower() == "truvaribench_tp":
             cmap = pyplot.get_cmap('tab20')
 
             for name,index in feature_indexes.items():
-                if index > 11:
+                if index > 12:
                     y_trivial = x[:,index]
                     y, y_trivial = downsample_test_data(y_true, y_trivial)
 
@@ -485,7 +515,11 @@ def main():
 
                     axes = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
-        tandem_axes = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name, output_dir)
+        tandem_axes = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
+        length_axis = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
+
+        # write the filtered VCF (BEFORE DOWNSAMPLING)
+        write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=test_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
 
         y_true, y_predict = downsample_test_data(y_true, y_predict)
 
@@ -495,9 +529,7 @@ def main():
         print('y_predict y')
         print(y_predict[0], y_true[0])
 
-        axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label)
-
-        # write_recalibrated_vcf(y_predict, input_vcf_path=test_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
+        axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
 
     # Generate a legend for axes and force bottom right location
     axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
@@ -507,6 +539,11 @@ def main():
     tandem_axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
     tandem_axes.legend(loc="lower right", fontsize='small')
     tandem_fig.savefig(os.path.join(output_dir,"roc_curve_tandem_stratified.png"), dpi=200)
+
+    for label,length_axis in length_axes.items():
+        length_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+        length_axis.legend(loc="lower right", fontsize='small')
+        length_figs[label].savefig(os.path.join(output_dir,label+"_length.png"), dpi=200)
 
     # pyplot.show()
     # pyplot.close()
