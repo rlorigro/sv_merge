@@ -121,6 +121,10 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         auto& read_sequence = transmap.get_sequence(id);
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
+            if (read_sequence.empty() or path_sequence.empty()){
+                continue;
+            }
+
             // TODO: Add length cutoff before aligning
             aligner.alignEnd2End(read_sequence, path_sequence);
 
