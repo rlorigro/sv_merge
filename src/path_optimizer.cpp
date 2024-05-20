@@ -197,7 +197,7 @@ void parse_read_model_solution(const CpSolverResponse& response_n_d, const PathV
     file << "sample,read,path" << '\n';
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
-    if (response_n_d.status() == CpSolverStatus::OPTIMAL || response_n_d.status() == CpSolverStatus::FEASIBLE) {
+    if (response_n_d.status() == CpSolverStatus::OPTIMAL) {
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
             transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
                 transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
@@ -224,6 +224,12 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
 
     const CpSolverResponse response_d = Solve(model.Build());
 
+    // Check if the first solution is feasible
+    if (response_d.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
+        return;
+    }
+
     int64_t n_max = SolutionIntegerValue(response_d, vars.cost_n);
     int64_t d_min = SolutionIntegerValue(response_d, vars.cost_d);
 
@@ -231,6 +237,12 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
     model.Minimize(vars.cost_n);
 
     const CpSolverResponse response_n = Solve(model.Build());
+
+    // Check if the second solution is feasible
+    if (response_n.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for n_min found: " << output_dir << '\n';
+        return;
+    }
 
     int64_t n_min = SolutionIntegerValue(response_n, vars.cost_n);
     int64_t d_max = SolutionIntegerValue(response_n, vars.cost_d);

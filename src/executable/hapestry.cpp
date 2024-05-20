@@ -449,8 +449,14 @@ void merge_variants(
 
         path subdir = output_dir / r.to_unflanked_string('_', flank_length);
 
-        // Optimize
-        optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, subdir);
+        try {
+            // Optimize
+            optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, subdir);
+        }
+        catch (const exception& e) {
+            cerr << e.what() << '\n';
+            cerr << "ERROR caught at " << r.to_string() << '\n';
+        }
     }
 }
 
