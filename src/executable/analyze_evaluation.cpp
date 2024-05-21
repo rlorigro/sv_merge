@@ -134,7 +134,7 @@ public:
         for (i=0; i<N_TOOLS; i++) { sv_length_unsupported.emplace_back(); sv_length_unsupported.at(i).reserve(n_windows); }
 
         recall_numerator.reserve(N_TOOLS); recall_denominator.reserve(N_TOOLS);
-        for (i=0; i<N_TOOLS; i++) { recall_numerator.emplace_back(0); recall_denominator.emplace_back(0); }
+        for (i=0; i<N_TOOLS; i++) { recall_numerator.emplace_back(); recall_denominator.emplace_back(); }
     };
 
 
@@ -217,7 +217,7 @@ public:
                 else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
                 else tmp_buffer_1.push_back(c);
             }
-            if (!tmp_buffer_1.empty()) { on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(input_file); }
+            if (!tmp_buffer_1.empty()) { cerr << "load_window> 3.5 \n"; on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(input_file); }
             file.close();
             on_window_end_haplotypes(i,input_file);
 
@@ -283,7 +283,8 @@ public:
         bool is_ref;
         char c;
         size_t i;
-        size_t denominator, field, node_id, previous_id, direction, length, reference_path_length;
+        size_t denominator, field, length, reference_path_length;
+        int node_id, previous_id, direction;
         string hap_id, reference_path, canonized_path;
         path input_file;
         ifstream file;
@@ -368,7 +369,13 @@ public:
         }
         file.close();
         denominator=canonized_paths.size();
-        if (denominator==0) return;
+        if (denominator==0) {
+            for (i=0; i<N_TOOLS; i++) {
+                recall_numerator.at(i).emplace_back(0);
+                recall_denominator.at(i).emplace_back(0);
+            }
+            return;
+        }
 
         // Incrementing recall numerator and denominator
         tmp_buffer_1.clear();
@@ -398,8 +405,8 @@ public:
                 if (nonref_haps.contains(hap_id) && coverage>=MIN_COVERAGE && identity>=MIN_IDENTITY) covered_paths.emplace(hap2path.at(hap_id));
             }
             file.close();
-            recall_numerator.at(i)+=covered_paths.size();
-            recall_denominator.at(i)+=denominator;
+            recall_numerator.at(i).emplace_back(covered_paths.size());
+            recall_denominator.at(i).emplace_back(denominator);
         }
     }
 
@@ -491,7 +498,7 @@ public:
         print_measures_impl_pair(nonref_node_length_vs_coverage,28,out);
         print_measures_impl_basic(sv_length_supported,29,out);
         print_measures_impl_basic(sv_length_unsupported,30,out);
-        print_measures_impl_normalized(truth_tool,recall_numerator,recall_denominator,31,out);
+        print_measures_impl_normalized(truth_tool,recall_numerator,recall_denominator,windows_to_print,31,out);
     }
 
 
@@ -634,7 +641,7 @@ private:
     /**
      * Output measures: recall.
      */
-     vector<size_t> recall_numerator, recall_denominator;
+     vector<vector<size_t>> recall_numerator, recall_denominator;
 
     /**
      * Output log: row=toolID, column=window.
@@ -778,8 +785,8 @@ private:
             case 2: length=stoi(buffer); break;
             case 3: is_ref=stoi(buffer)==1; break;
             case 4: is_flank=stoi(buffer)==1; break;
-            case 5: coverage=stod(buffer); break;
-            case 6: identity=stod(buffer); break;
+            case 5: coverage=buffer.starts_with("nan")||buffer.ends_with("nan")?0.0:stod(buffer); break;
+            case 6: identity=buffer.starts_with("nan")||buffer.ends_with("nan")?0.0:stod(buffer); break;
             default: throw runtime_error("ERROR: haplotypes CSV field not recognized: "+to_string(field));
         }
     }
@@ -932,10 +939,15 @@ private:
     }
 
 
-    template<class T> void print_measures_impl_normalized(size_t exclude_tool, const vector<T>& numerator, const vector<T>& denominator, size_t column, vector<vector<ofstream>>& out) const {
+    void print_measures_impl_normalized(size_t exclude_tool, const vector<vector<size_t>>& numerator, const vector<vector<size_t>>& denominator, const vector<size_t>& windows_to_print, size_t column, vector<vector<ofstream>>& out) const {
         for (size_t i=0; i<N_TOOLS; i++) {
             if (i==exclude_tool) continue;
-            out.at(i).at(column) << to_string(numerator.at(i)) << "," << to_string(denominator.at(i)) << "," << to_string(((double)(numerator.at(i)))/denominator.at(i)) << '\n';
+            size_t num = 0; size_t denom = 0;
+            for (auto& value: windows_to_print) {
+                num+=numerator.at(i).at(value);
+                denom+=denominator.at(i).at(value);
+            }
+            out.at(i).at(column) << to_string(num) << "," << to_string(denom) << "," << (denom==0?"0":to_string(((double)num)/denom)) << '\n';
             out.at(i).at(column).close();
         }
     }
@@ -1145,6 +1157,8 @@ int main (int argc, char* argv[]) {
     }
 
     // Reporting
-    cerr << "Skipped " << to_string(unsuccessful_directories.size()) << " directories (out of " << to_string(n_directories) << " total directories) where the evaluation did not complete:\n";
-    for (const auto& directory: unsuccessful_directories) cerr << directory << '\n';
+    if (!unsuccessful_directories.empty()) {
+        cerr << "Skipped " << to_string(unsuccessful_directories.size()) << " directories (out of " << to_string(n_directories) << " total directories) where the evaluation did not complete:\n";
+        for (const auto& directory: unsuccessful_directories) cerr << directory << '\n';
+    }
 }
