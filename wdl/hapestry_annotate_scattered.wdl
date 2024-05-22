@@ -146,8 +146,8 @@ task chunk_vcf {
         fi
 
         # unzip the VCF for hapestry
-        bcftools view -Ov -o ${vcf_gz%.gz} ${vcf_gz}
-        vcf=${vcf_gz%.gz}
+        bcftools view -Ov -o ~{vcf_gz%.gz} ~{vcf_gz}
+        vcf=~{vcf_gz%.gz}
 
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
