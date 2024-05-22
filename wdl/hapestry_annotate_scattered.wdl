@@ -146,7 +146,7 @@ task chunk_vcf {
         fi
 
         # create a variable for the non-gz vcf
-        vcf=$(echo ~{vcf_gz} | sed 's/.gz//')
+        vcf=$(basename ~{vcf_gz} .gz)
 
         # unzip the VCF for hapestry
         bcftools view -Ov -o ${vcf} ~{vcf_gz}
