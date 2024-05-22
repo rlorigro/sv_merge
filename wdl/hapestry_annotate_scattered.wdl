@@ -204,8 +204,9 @@ task bcftools_concat{
         set -eou pipefail
 
         # Concatenate the VCFs
-        bcftools concat ~{sep=" " vcf_gz} -Oz -o concatenated.vcf.gz
-        bcftools sort --write-index -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
+        bcftools concat -Oz -o concatenated.vcf.gz ~{sep=" " vcf_gz}
+        bcftools sort -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
+        bcftools index -t concatenated_sorted.vcf.gz
     >>>
 
     runtime {
