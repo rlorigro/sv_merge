@@ -1,6 +1,7 @@
 version 1.0
 import "hapestry_annotate.wdl" as hapestry_annotate
 
+
 struct RuntimeAttributes {
     Int? cpu
     Int? command_mem_gb
@@ -199,7 +200,6 @@ workflow hapestry_annotate_scattered {
             input:
                 vcf_gz = x.left,
                 vcf_gz_tbi = x.right,
-                confident_bed = confident_bed,
                 bam_not_hardclipped = bam_not_hardclipped,
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,

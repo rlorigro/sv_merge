@@ -16,7 +16,7 @@ task annotate {
     input {
         File vcf_gz
         File vcf_gz_tbi
-        File confident_bed
+        File? confident_bed
 
         # Hapestry specific args
         Int? interval_max_length = 50000
@@ -45,8 +45,12 @@ task annotate {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
-        # use bcftools to subset the vcf by the confident bed
-        bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+        # use bcftools to subset the vcf by the confident bed, only if the bed is defined
+        if ~{defined(confident_bed)}; then
+            bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+        else
+            bcftools view -Ov ~{vcf_gz} confident.vcf
+        fi
 
         ~{docker_dir}/sv_merge/build/annotate \
         --output_dir ~{output_dir}/run/ \
@@ -74,6 +78,7 @@ task annotate {
         flank_length: "Length of flanking sequence to include in each window"
         n_threads: "Maximum number of threads to use"
         tandems_bed: "BED file of tandem repeats"
+        confident_bed: "BED file of regions to be included, if not provided, all variants will be annotated"
         reference_fa: "Reference fasta file"
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
