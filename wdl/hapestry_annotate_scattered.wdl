@@ -145,9 +145,11 @@ task chunk_vcf {
             bcftools index -t ~{vcf_gz}
         fi
 
+        # create a variable for the non-gz vcf
+        vcf=$(echo ~{vcf_gz} | sed 's/.gz//')
+
         # unzip the VCF for hapestry
-        bcftools view -Ov -o ~{vcf_gz%.gz} ~{vcf_gz}
-        vcf=~{vcf_gz%.gz}
+        bcftools view -Ov -o ${vcf} ~{vcf_gz}
 
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
