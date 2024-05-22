@@ -152,7 +152,7 @@ task chunk_vcf {
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
-        --vcf ~{vcf} \
+        --vcf ${vcf} \
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length}
