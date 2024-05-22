@@ -189,8 +189,8 @@ task chunk_vcf {
     }
 
     output {
-        Array[File] chunked_vcfs = glob(output_dir + "*.vcf.gz")
-        Array[File] chunked_tbis = glob(output_dir + "*.vcf.gz.tbi")
+        Array[File] chunked_vcfs = glob("output/*.vcf.gz")
+        Array[File] chunked_tbis = glob("output/*.vcf.gz.tbi")
     }
 }
 
