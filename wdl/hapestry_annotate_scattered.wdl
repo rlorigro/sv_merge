@@ -133,7 +133,7 @@ task bcftools_concat{
         set -eou pipefail
 
         # Concatenate the VCFs
-        bcftools concat -Oz -o concatenated.vcf.gz ~{sep=" " vcf_gz}
+        bcftools concat -a -D -Oz -o concatenated.vcf.gz ~{sep=" " vcf_gz}
         bcftools sort -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
         bcftools index -t concatenated_sorted.vcf.gz
     >>>
