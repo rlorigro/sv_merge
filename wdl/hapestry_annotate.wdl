@@ -60,7 +60,7 @@ task annotate {
         if ~{defined(confident_bed)}; then
             bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
         else
-            bcftools view -Ov ~{vcf_gz} confident.vcf
+            bcftools view -Ov ~{vcf_gz} -o confident.vcf
         fi
 
         ~{docker_dir}/sv_merge/build/annotate \
