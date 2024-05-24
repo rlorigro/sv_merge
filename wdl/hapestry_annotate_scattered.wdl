@@ -45,7 +45,7 @@ task chunk_vcf {
         vcf_dir=$(dirname ~{vcf_gz})
 
         # Copy the tbi into the vcf directory
-        cp ~{vcf_gz_tbi} ${vcf_dir}
+        mv ~{vcf_gz_tbi} ${vcf_dir}
 
         if [ -s ~{monitoring_script} ]; then
           bash ~{monitoring_script} > monitoring.log &
