@@ -41,6 +41,17 @@ task annotate {
     command <<<
         set -eou pipefail
 
+        # get the directory of the vcf
+        vcf_dir=$(dirname ~{vcf_gz})
+
+        # get the tbi directory
+        tbi_dir=$(dirname ~{vcf_gz_tbi})
+
+        # if the tbi_dr and the vcf_dir are not the same then move the tbi into the vcf directory
+        if [ "$vcf_dir" != "$tbi_dir" ]; then
+            mv ~{vcf_gz_tbi} ${vcf_dir}
+        fi
+
         if [ -s ~{monitoring_script} ]; then
           bash ~{monitoring_script} > monitoring.log &
         fi
