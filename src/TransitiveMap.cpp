@@ -9,12 +9,14 @@ namespace sv_merge{
 TransMap::TransMap():
         sample_node_name("sample_node"),
         read_node_name("read_node"),
-        path_node_name("path_node")
+        path_node_name("path_node"),
+        variant_node_name("variant_node")
 {
     // Source nodes use lower case types to avoid being confused with the types they point to
     graph.add_node(sample_node_name, 's');
     graph.add_node(read_node_name, 'r');
     graph.add_node(path_node_name, 'p');
+    graph.add_node(variant_node_name, 'v');
 }
 
 
@@ -108,7 +110,7 @@ void TransMap::construct_named_flank_map(unordered_map<string,interval_t>& flank
 
 
 void TransMap::add_read(const string& name){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     graph.add_node(name, 'R');
@@ -117,7 +119,7 @@ void TransMap::add_read(const string& name){
 
 
 void TransMap::add_read(const string& name, const string& sequence){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     graph.add_node(name, 'R');
@@ -128,7 +130,7 @@ void TransMap::add_read(const string& name, const string& sequence){
 
 
 void TransMap::add_read_with_move(string& name, string& sequence){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
 
@@ -140,7 +142,7 @@ void TransMap::add_read_with_move(string& name, string& sequence){
 
 
 void TransMap::add_read_with_move(string& name, string& sequence, bool is_reverse){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
 
@@ -154,7 +156,7 @@ void TransMap::add_read_with_move(string& name, string& sequence, bool is_revers
 
 
 void TransMap::add_sample(const string& name){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     graph.add_node(name, 'S');
@@ -163,11 +165,20 @@ void TransMap::add_sample(const string& name){
 
 
 void TransMap::add_path(const string& name){
-    if (name == read_node_name or name == sample_node_name or name == path_node_name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
     graph.add_node(name, 'P');
     graph.add_edge(path_node_name, name, 0);
+}
+
+
+void TransMap::add_variant(const string& name){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+    graph.add_node(name, 'V');
+    graph.add_edge(variant_node_name, name, 0);
 }
 
 
@@ -338,6 +349,46 @@ void TransMap::for_each_path_of_sample(const string& sample_name, const function
             f(graph.get_node(p).name, p);
         });
     });
+}
+
+
+void TransMap::for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const{
+    graph.for_each_neighbor_of_type(sample_id, 'R', [&](int64_t r){
+        graph.for_each_neighbor_of_type(r, 'P', [&](int64_t p){
+            f(graph.get_node(p).name, p);
+        });
+    });
+}
+
+
+void TransMap::for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id, bool phase)>& f) const{
+    auto id = graph.name_to_id(sample_name);
+
+    array<int64_t, 2> path_ids = {-1,-1};
+
+    // First find an arbitrary assignment of phases, which is sorted by path id
+    graph.for_each_neighbor_of_type(id, 'P', [&](int64_t p){
+        if (path_ids[0] == -1){
+            path_ids[0] = p;
+        }
+        else if (path_ids[1] == -1){
+            path_ids[1] = p;
+        }
+        else{
+            throw runtime_error("ERROR: more than two phased paths found for sample: " + sample_name);
+        }
+    });
+
+    if (path_ids[0] > path_ids[1]){
+        std::swap(path_ids[0], path_ids[1]);
+    }
+
+    // Iterate the variants transitively through the paths
+    for (int64_t path_id: path_ids) {
+        graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t v) {
+            f(graph.get_node(v).name, v, path_id == path_ids[0]);
+        });
+    }
 }
 
 

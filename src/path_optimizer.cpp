@@ -183,7 +183,7 @@ void optimize_d_plus_n(const TransMap& transmap, int64_t d_coeff, int64_t n_coef
 }
 
 
-void parse_read_model_solution(const CpSolverResponse& response_n_d, const PathVariables& vars, const TransMap& transmap, path output_dir){
+void parse_read_model_solution(const CpSolverResponse& response_n_d, const PathVariables& vars, TransMap& transmap, path output_dir){
     // Open a file
     path out_path = output_dir/"solution.csv";
     ofstream file(out_path);
@@ -205,6 +205,10 @@ void parse_read_model_solution(const CpSolverResponse& response_n_d, const PathV
                     bool is_assigned = SolutionIntegerValue(response_n_d, var);
                     if (is_assigned){
                         file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
+                    }
+                    else{
+                        // Delete all the edges that are not assigned (to simplify iteration later)
+                        transmap.remove_edge(read_id, path_id);
                     }
                 });
             });
@@ -275,7 +279,7 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
 
     parse_read_model_solution(response_n_d, vars, transmap, output_dir);
 
-    // Write a log contatining the solutioninfo and responsestats
+    // Write a log containing the solutioninfo and responsestats
     path out_path = output_dir/"log_optimizer.txt";
     ofstream file(out_path);
 

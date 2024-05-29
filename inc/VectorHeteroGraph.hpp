@@ -40,7 +40,9 @@ public:
     explicit HeteroNode(string& name, char type);
 };
 
-
+/// The HeteroGraph class is a general-purpose graph that provides an interface that is convenient for accessing nodes
+/// by their type and name, and iterating over edges and nodes. Nodes can have different types, and adjacencies can be
+/// filtered by type. Node IDs and Names must be unique.
 template<class T> class HeteroGraph {
     unordered_map<int64_t, vector<pair <int64_t,float> > > edges;
     unordered_map<int64_t, T> nodes;
@@ -231,6 +233,10 @@ template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, floa
 
     if (result_b == nodes.end()){
         throw runtime_error("ERROR: cannot find id: " + to_string(id_b));
+    }
+
+    if ((result_a->second.type == 'V' and result_b->second.type != 'P') or (result_a->second.type != 'P' and result_b->second.type == 'V')){
+        throw runtime_error("ERROR: cannot add edge from variant to non-path: " + to_string(id_a) + " " + to_string(id_b));
     }
 
     auto& adjacencies_a = edges[id_a];

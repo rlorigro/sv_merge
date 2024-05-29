@@ -332,6 +332,71 @@ void align_reads_to_paths_thread_fn(
         path output_csv = subdir / "reads_to_paths.csv";
         transmap.write_edge_info_to_csv(output_csv);
 
+        try {
+            // Optimize
+            optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir);
+        }
+        catch (const exception& e) {
+            cerr << e.what() << '\n';
+            cerr << "ERROR caught at " << region.to_string() << '\n';
+
+            // Skip this region (do not attempt to generate VCF)
+            continue;
+        }
+
+        // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
+        // not conflict with existing names
+        for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+            transmap.add_variant("v" + to_string(v));
+        }
+
+        // Write the VCF for this region
+        transmap.for_each_sample([&](const string& name, int64_t sample_id){
+            transmap.for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
+                vector<pair<string,bool>> path;
+
+                // Get path from name
+                GafAlignment::parse_string_as_path(name, path);
+
+                variant_graph.for_each_vcf_record([&](size_t record_id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                    // Generate the name of the variant node
+                    string variant_name = "v" + to_string(record_id);
+
+                    // Update the transmap so the sample <--> variant mapping is usable for inferring genotypes later
+                    transmap.add_edge(sample_id, transmap.get_id(variant_name), 0);
+                });
+            });
+        });
+
+        // Write the VCF for this region
+        path vcf_path = subdir / "solution.vcf";
+
+        vector <pair <string,int64_t> > sorted_samples;
+
+        // Collect all the samples in the VCF
+        transmap.for_each_sample([&](const string& name, int64_t sample_id){
+            sorted_samples.emplace_back(name, sample_id);
+        });
+
+        sort(sorted_samples.begin(), sorted_samples.end(), [&](const auto& a, const auto& b){
+            return a.first < b.first;
+        });
+
+        for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+            auto& record = variant_graph.vcf_records.at(v);
+
+            for (const auto& [sample_name, sample_id]: sorted_samples){
+                // reconstruct the variant name
+                string variant_name = "v" + to_string(v);
+
+                // Get the genotype of the sample for this variant by checking the transmap to see if has 2 edges or 1
+                size_t n_vars = 0;
+                transmap.for_each_variant_of_sample(sample_id, [&](const string& name, int64_t variant_id){
+                    n_vars++;
+                });
+
+        }
+
         i = job_index.fetch_add(1);
     }
 }
@@ -440,22 +505,6 @@ void merge_variants(
         // Wait for threads to finish
         for (auto &n: threads) {
             n.join();
-        }
-    }
-
-    // Finally use all threads to serially solve each transmap with CPSAT
-    for (const auto& r: regions){
-        auto& transmap = region_transmaps.at(r);
-
-        path subdir = output_dir / r.to_unflanked_string('_', flank_length);
-
-        try {
-            // Optimize
-            optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, subdir);
-        }
-        catch (const exception& e) {
-            cerr << e.what() << '\n';
-            cerr << "ERROR caught at " << r.to_string() << '\n';
         }
     }
 }

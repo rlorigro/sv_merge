@@ -36,6 +36,7 @@ class TransMap {
     string sample_node_name;
     string read_node_name;
     string path_node_name;
+    string variant_node_name;
 
 public:
     TransMap();
@@ -51,6 +52,7 @@ public:
     void add_read_with_move(string& name, string& sequence);
     void add_read_with_move(string& name, string& sequence, bool reversal);
     void add_path(const string& name);
+    void add_variant(const string& name);
     void add_edge(const string& a, const string& b);
     void add_edge(int64_t a, int64_t b, float weight);
     void add_edge(const string& a, const string& b, float weight);
@@ -91,8 +93,14 @@ public:
 
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
+
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
+
+    void for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
+
     void for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const;
 
     void for_node_in_bfs(
