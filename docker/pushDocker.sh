@@ -1,5 +1,6 @@
 #!/bin/bash
 #
-TAG=""
+set -euo pipefail
+TAG="annotate"
 docker build --progress=plain -t fcunial/hapestry .
-docker push fcunial/hapestry${TAG}
+docker push fcunial/hapestry:${TAG}
