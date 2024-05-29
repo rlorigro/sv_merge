@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:22.04
 MAINTAINER Fabio Cunial
 ARG work_dir=/hapestry
 WORKDIR ${work_dir}
@@ -44,6 +44,7 @@ RUN apt-get -qqy update --fix-missing \
         libnghttp2-dev \
         git \
         bc \
+        python3-full \
         python3-pip \
         xz-utils \
         tk-dev \
@@ -54,8 +55,8 @@ RUN apt-get -qqy update --fix-missing \
         
 
 # GSUTIL
-ARG gcloud_version=462.0.1
-RUN pip3 uninstall -y crcmod && pip3 install --no-cache-dir -U crcmod
+ARG gcloud_version=477.0.0
+#RUN pip3 uninstall -y crcmod && pip3 install --no-cache-dir -U crcmod
 RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-${gcloud_version}-linux-x86_64.tar.gz \
     && tar -xf google-cloud-cli-${gcloud_version}-linux-x86_64.tar.gz \
     && rm -f google-cloud-cli-${gcloud_version}-linux-x86_64.tar.gz \
@@ -129,15 +130,21 @@ SHELL ["/bin/bash", "-c"]
 
 # HAPESTRY
 RUN apt remove cmake -y \
-    && pip install cmake --upgrade
+    && pip3 install cmake --upgrade
 ARG HAPESTRY_COMMIT=f11ef1b1e252b8f6f428e3665bd715d963f2e906
-RUN git clone https://github.com/rlorigro/sv_merge.git \
-    && cd sv_merge \
-    && git checkout ${HAPESTRY_COMMIT} \
-    && mkdir build \
-    && cd build \
-    && cmake .. -Dno_ortools=1 \
-    && make -j 16
+RUN git clone https://github.com/rlorigro/sv_merge.git
+
+WORKDIR /hapestry/sv_merge
+
+RUN git checkout ${HAPESTRY_COMMIT} \
+    && mkdir build
+
+WORKDIR /hapestry/sv_merge/build
+
+RUN cmake .. -Dno_ortools=1
+RUN make -j 16
+
+WORKDIR /hapestry
 
 # MONITORING SCRIPT
 COPY ./*.sh /hapestry/
