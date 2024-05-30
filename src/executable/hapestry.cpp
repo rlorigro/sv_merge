@@ -225,7 +225,83 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 }
 
 
-void align_reads_to_paths_thread_fn(
+void write_solution_to_vcf(
+        VariantGraph& variant_graph,
+        const TransMap& transmap,
+        const path& output_path
+        ){
+
+    vector <pair <string,int64_t> > sorted_samples;
+
+    // Collect all the samples in the window and sort them
+    transmap.for_each_sample([&](const string& name, int64_t sample_id){
+        sorted_samples.emplace_back(name, sample_id);
+    });
+
+    sort(sorted_samples.begin(), sorted_samples.end(), [&](const auto& a, const auto& b){
+        return a.first < b.first;
+    });
+
+    // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
+    // Generate a vector of genotypes for each sample, where the vector indexes correspond to the VariantGraph indexes
+    unordered_map <string, vector <array<int8_t,2> > > sample_genotypes;
+
+    cerr << output_path << '\n';
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        // Initialize the vectors with arrays of {0,0}
+        sample_genotypes[sample_name] = vector <array<int8_t,2> >(variant_graph.vcf_records.size(), {0,0});
+
+        transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
+            // Reconstruct the variant ID from the name
+            size_t v = stoull(var_name.substr(1));
+
+            // If there is a transitive edge from sample->path->variant, set the genotype to 1 (with phase)
+            sample_genotypes[sample_name][v][phase] = 1;
+        });
+    });
+
+    // Open the VCF output file
+    ofstream vcf_file(output_path);
+
+    if (not (vcf_file.is_open() and vcf_file.good())){
+        throw runtime_error("ERROR: could not write file: " + output_path.string());
+    }
+
+    // Write the VCF header
+    vcf_file << "##fileformat=VCFv4.2" << '\n';
+    vcf_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
+    for (const auto& [sample_name, sample_id]: sorted_samples) {
+        vcf_file << '\t' << sample_name;
+    }
+    vcf_file << '\n';
+
+
+    for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+        auto& record = variant_graph.vcf_records.at(v);
+
+        record.genotypes.clear();
+        record.format = "GT";
+
+        // Iterate all the samples and accumulate GTs for the variant object
+        for (const auto& [sample_name, sample_id]: sorted_samples) {
+            string variant_name = "v" + to_string(v);
+
+            // Get the genotype for this sample
+            auto& genotype = sample_genotypes.at(sample_name).at(v);
+
+            // Update the record genotypes
+            record.genotypes.emplace_back(to_string(int(genotype[0])) + "|" + to_string(int(genotype[1])));
+        }
+
+        // Write the record to the VCF
+        record.print(vcf_file);
+        vcf_file << '\n';
+    }
+}
+
+
+void merge_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
         unordered_map<Region,TransMap>& region_transmaps,
@@ -350,6 +426,8 @@ void align_reads_to_paths_thread_fn(
             transmap.add_variant("v" + to_string(v));
         }
 
+        cerr << "constructing mapping from path to var" << '\n';
+
         // Construct mapping of paths to variants
         transmap.for_each_path([&](const string& path_name, int64_t path_id){
             // Convert the path to a vector
@@ -363,61 +441,10 @@ void align_reads_to_paths_thread_fn(
             });
         });
 
-        vector <pair <string,int64_t> > sorted_samples;
+        // Write the solution to a VCF
+        path output_path = subdir / "solution.vcf";
 
-        // Collect all the samples in the VCF
-        transmap.for_each_sample([&](const string& name, int64_t sample_id){
-            sorted_samples.emplace_back(name, sample_id);
-        });
-
-        sort(sorted_samples.begin(), sorted_samples.end(), [&](const auto& a, const auto& b){
-            return a.first < b.first;
-        });
-
-        // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
-        // Generate a vector of genotypes for each sample, where the vector indexes correspond to the VariantGraph indexes
-        unordered_map <string, vector <array<int8_t,2> > > sample_genotypes;
-
-        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
-            // Initialize the vectors with arrays of {0,0}
-            sample_genotypes[sample_name] = vector <array<int8_t,2> >(variant_graph.vcf_records.size(), {0,0});
-
-            transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
-                // Reconstruct the variant ID from the name
-                size_t v = stoull(var_name.substr(1));
-
-                // If there is a transitive edge from sample->path->variant, set the genotype to 1 (with phase)
-                sample_genotypes[sample_name][v][phase] = 1;
-            });
-        });
-
-        // Write the VCF for this region
-        path vcf_path = subdir / "solution.vcf";
-
-        // Open the VCF output file
-        ofstream vcf_file(vcf_path);
-
-        for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-            auto& record = variant_graph.vcf_records.at(v);
-
-            record.genotypes.clear();
-            record.format = "GT";
-
-            // Iterate all the samples and accumulate GTs for the variant object
-            for (const auto& [sample_name, sample_id]: sorted_samples) {
-                string variant_name = "v" + to_string(v);
-
-                // Get the genotype for this sample
-                auto& genotype = sample_genotypes.at(sample_name).at(v);
-
-                // Update the record genotypes
-                record.genotypes.emplace_back(to_string(int(genotype[0])) + "|" + to_string(int(genotype[1])));
-            }
-
-            // Write the record to the VCF
-            record.print(vcf_file);
-            vcf_file << '\n';
-        }
+        write_solution_to_vcf(variant_graph, transmap, output_path);
 
         i = job_index.fetch_add(1);
     }
@@ -507,7 +534,7 @@ void merge_variants(
         for (size_t n=0; n<n_threads; n++) {
             try {
                 cerr << "launching: " << n << '\n';
-                threads.emplace_back(align_reads_to_paths_thread_fn,
+                threads.emplace_back(merge_thread_fn,
                                      std::ref(region_records),
                                      std::cref(contig_tandems),
                                      std::ref(region_transmaps),
@@ -715,11 +742,49 @@ void hapestry(
     );
 
     auto vcf_prefix = get_vcf_name_prefix(vcf);
+    path out_vcf = output_dir / ("merged.vcf");
+    ofstream out_file(out_vcf);
+
+    if (not (out_file.is_open() and out_file.good())){
+        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
+    }
 
     ifstream input_vcf(vcf);
 
     if (not (input_vcf.is_open() and input_vcf.good())){
         throw runtime_error("ERROR: could not write file: " + vcf.string());
+    }
+
+    // Just copy over the header lines
+    string line;
+    while (getline(input_vcf, line)){
+        if (line.starts_with("##")){
+            out_file << line << '\n';
+        }
+        else{
+            input_vcf.close();
+            break;
+        }
+    }
+
+    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    for (size_t i=0; i<regions.size(); i++){
+        const auto& region = regions[i];
+        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
+
+        ifstream file(sub_vcf);
+        while (getline(file, line)){
+            if (line.starts_with('#')){
+                if (not line.starts_with("##fileformat")){
+                    if (i == 0){
+                        out_file << line << '\n';
+                    }
+                }
+            }
+            else{
+                out_file << line << '\n';
+            }
+        }
     }
 
     cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
