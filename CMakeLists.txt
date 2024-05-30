@@ -100,8 +100,7 @@ set(SOURCES
         src/VcfReader.cpp
         src/VariantGraph.cpp
         src/windows.cpp
-        inc/VcfEvaluator.hpp
-)
+        )
 
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)

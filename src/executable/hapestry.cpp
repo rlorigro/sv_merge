@@ -350,26 +350,18 @@ void align_reads_to_paths_thread_fn(
             transmap.add_variant("v" + to_string(v));
         }
 
-        // Write the VCF for this region
-        transmap.for_each_sample([&](const string& name, int64_t sample_id){
-            transmap.for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
-                vector<pair<string,bool>> path;
+        // Construct mapping of paths to variants
+        transmap.for_each_path([&](const string& path_name, int64_t path_id){
+            // Convert the path to a vector
+            vector <pair <string,bool> > path;
 
-                // Get path from name
-                GafAlignment::parse_string_as_path(name, path);
+            GafAlignment::parse_string_as_path(path_name, path);
 
-                variant_graph.for_each_vcf_record([&](size_t record_id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-                    // Generate the name of the variant node
-                    string variant_name = "v" + to_string(record_id);
-
-                    // Update the transmap so the sample <--> variant mapping is usable for inferring genotypes later
-                    transmap.add_edge(sample_id, transmap.get_id(variant_name), 0);
-                });
+            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                string var_name = "v" + to_string(id);
+                transmap.add_edge(var_name, path_name);
             });
         });
-
-        // Write the VCF for this region
-        path vcf_path = subdir / "solution.vcf";
 
         vector <pair <string,int64_t> > sorted_samples;
 
@@ -382,19 +374,49 @@ void align_reads_to_paths_thread_fn(
             return a.first < b.first;
         });
 
+        // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
+        // Generate a vector of genotypes for each sample, where the vector indexes correspond to the VariantGraph indexes
+        unordered_map <string, vector <array<int8_t,2> > > sample_genotypes;
+
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+            // Initialize the vectors with arrays of {0,0}
+            sample_genotypes[sample_name] = vector <array<int8_t,2> >(variant_graph.vcf_records.size(), {0,0});
+
+            transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
+                // Reconstruct the variant ID from the name
+                size_t v = stoull(var_name.substr(1));
+
+                // If there is a transitive edge from sample->path->variant, set the genotype to 1 (with phase)
+                sample_genotypes[sample_name][v][phase] = 1;
+            });
+        });
+
+        // Write the VCF for this region
+        path vcf_path = subdir / "solution.vcf";
+
+        // Open the VCF output file
+        ofstream vcf_file(vcf_path);
+
         for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
             auto& record = variant_graph.vcf_records.at(v);
 
-            for (const auto& [sample_name, sample_id]: sorted_samples){
-                // reconstruct the variant name
+            record.genotypes.clear();
+            record.format = "GT";
+
+            // Iterate all the samples and accumulate GTs for the variant object
+            for (const auto& [sample_name, sample_id]: sorted_samples) {
                 string variant_name = "v" + to_string(v);
 
-                // Get the genotype of the sample for this variant by checking the transmap to see if has 2 edges or 1
-                size_t n_vars = 0;
-                transmap.for_each_variant_of_sample(sample_id, [&](const string& name, int64_t variant_id){
-                    n_vars++;
-                });
+                // Get the genotype for this sample
+                auto& genotype = sample_genotypes.at(sample_name).at(v);
 
+                // Update the record genotypes
+                record.genotypes.emplace_back(to_string(int(genotype[0])) + "|" + to_string(int(genotype[1])));
+            }
+
+            // Write the record to the VCF
+            record.print(vcf_file);
+            vcf_file << '\n';
         }
 
         i = job_index.fetch_add(1);

@@ -366,7 +366,10 @@ void VcfRecord::print(ostream& stream) const {
     if (qual==-1) stream << '.';
     else stream << qual;
     stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR << info << VcfReader::VCF_SEPARATOR << format;
-    for (int32_t i=0; i<n_samples; i++) stream << VcfReader::VCF_SEPARATOR << genotypes[i];
+
+    for (const auto& item: genotypes) {
+        stream << VcfReader::VCF_SEPARATOR << item;
+    }
 }
 
 

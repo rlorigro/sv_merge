@@ -98,8 +98,8 @@ public:
     void for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
 
-    void for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
-    void for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id, bool phase)>& f) const;
+    void for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id, bool phase)>& f) const;
 
     void for_each_read_to_path_edge(const function<void(int64_t read_id, int64_t path_id, float weight)>& f) const;
 

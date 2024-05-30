@@ -361,13 +361,17 @@ void TransMap::for_each_path_of_sample(int64_t sample_id, const function<void(co
 }
 
 
-void TransMap::for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id, bool phase)>& f) const{
+void TransMap::for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id, bool phase)>& f) const {
     auto id = graph.name_to_id(sample_name);
+    for_each_phased_variant_of_sample(id, f);
+}
 
+
+void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id, bool phase)>& f) const{
     array<int64_t, 2> path_ids = {-1,-1};
 
     // First find an arbitrary assignment of phases, which is sorted by path id
-    graph.for_each_neighbor_of_type(id, 'P', [&](int64_t p){
+    graph.for_each_neighbor_of_type(sample_id, 'P', [&](int64_t p){
         if (path_ids[0] == -1){
             path_ids[0] = p;
         }
@@ -375,7 +379,7 @@ void TransMap::for_each_phased_variant_of_sample(const string& sample_name, cons
             path_ids[1] = p;
         }
         else{
-            throw runtime_error("ERROR: more than two phased paths found for sample: " + sample_name);
+            throw runtime_error("ERROR: more than two phased paths found for sample: " + get_node(sample_id).name);
         }
     });
 
