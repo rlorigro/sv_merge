@@ -146,5 +146,7 @@ RUN make -j 16
 
 WORKDIR /hapestry
 
+RUN git --no-pager --git-dir /hapestry/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1 || echo 0
+
 # MONITORING SCRIPT
 COPY ./*.sh /hapestry/
