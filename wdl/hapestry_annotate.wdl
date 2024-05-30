@@ -39,6 +39,8 @@ task annotate {
     String output_dir = "output/"
 
     command <<<
+        git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
+
         set -eou pipefail
 
         # get the directory of the vcf
