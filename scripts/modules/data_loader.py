@@ -40,7 +40,8 @@ def load_features_from_vcf(
 
     type_vector = [0,0,0,0,0]
 
-    for r,record in enumerate(reader):
+    r = 0
+    for record in reader:
         info = record.INFO
 
         if filter_fn is not None:
@@ -382,6 +383,8 @@ def load_features_from_vcf(
                 print(feature_names)
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
+        r += 1
+
 
 class VcfStratifier:
     def __init__(self, target_class_size):
@@ -448,21 +451,24 @@ class VcfDataset(Dataset):
         self.records = list()
 
         for p,path in enumerate(vcf_paths):
+            if len(path) == 0 or path is None:
+                continue
+
             feature_names = list()
+
             load_features_from_vcf(
                 records=self.records,
                 x=x,
                 y=y,
-                feature_names=feature_names,
                 vcf_path=path,
+                feature_names=feature_names,
                 truth_info_name=truth_info_name,
                 annotation_name=annotation_name,
                 filter_fn=filter_fn,
                 contigs=contigs,
             )
 
-            if p == 0:
-                self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
+            self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
         x = np.array(x)
         y = np.array(y)
