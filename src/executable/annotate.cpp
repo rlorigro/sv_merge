@@ -562,11 +562,11 @@ void compute_graph_evaluation(
 
     cerr << "Reading VCF... " << '\n';
     vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-        // TODO: allow breakends in evaluation
-        if (r.sv_type == VcfReader::TYPE_BREAKEND){
-            cerr << "WARNING: skipping breakend"  << '\n';
-            return;
-        }
+//        // TODO: allow breakends in evaluation
+//        if (r.sv_type == VcfReader::TYPE_BREAKEND){
+//            cerr << "WARNING: skipping breakend"  << '\n';
+//            return;
+//        }
 
         r.get_reference_coordinates(false, record_coord);
 
