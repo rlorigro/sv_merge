@@ -11,6 +11,7 @@ struct RuntimeAttributes {
     Int? max_retries
 }
 
+
 # Define the task
 task annotate {
     input {
@@ -20,6 +21,7 @@ task annotate {
 
         # Hapestry specific args
         Int? interval_max_length = 50000
+        Int? min_sv_length = 20
         Int? flank_length = 200
         Int n_threads
         File tandems_bed
@@ -72,6 +74,7 @@ task annotate {
         --tandems ~{tandems_bed} \
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
+        --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
         --n_threads ~{n_threads} \
         --label ~{annotation_label} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
