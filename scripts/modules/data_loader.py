@@ -1,6 +1,5 @@
 from torch.utils.data.dataset import Dataset
 from collections import defaultdict
-from .IterativeHistogram import IterativeHistogram
 import numpy as np
 import torch
 import sys
@@ -384,62 +383,6 @@ def load_features_from_vcf(
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
         r += 1
-
-
-class VcfStratifier:
-    def __init__(self, target_class_size):
-        self.target_class_size = target_class_size
-        self.type_indexes = list()
-        self.type_distribution = defaultdict(int)
-        self.length_indexes = list()
-        self.log_length_distribution = IterativeHistogram(start=0, stop=4, n_bins=4, unbounded_upper_bin=True)
-
-    def update(self, type_index, ref_length, alt_length):
-        self.type_distribution[type_index] += 1
-        self.type_indexes.append(type_index)
-
-        log_length = np.log10(abs(ref_length - alt_length) + 1)
-        length_index = self.log_length_distribution.update(log_length)
-        self.length_indexes.append(length_index)
-
-    def __str__(self):
-        print("Type distribution:")
-        for k,v in self.type_distribution.items():
-            print("%s: %d" % (type_names[k], v))
-
-        print("Log length distribution:")
-        for i in range(len(self.log_length_distribution.edges)-1):
-            print("[%f, %f): %d" % (self.log_length_distribution.edges[i], self.log_length_distribution.edges[i+1], self.log_length_distribution.histogram[i]))
-
-    def compute_weight_vectors(self):
-        for k,v in self.type_distribution.items():
-            if v < self.target_class_size:
-                print("WARNING: type %s has less than target class size: %d, add more training data" % (type_names[k], v))
-                self.type_distribution[k] = self.target_class_size
-
-        type_weights = {k: self.target_class_size/v for k,v in self.type_distribution.items()}
-
-        for i in range(len(self.log_length_distribution.get_histogram())):
-            if self.log_length_distribution.histogram[i] < self.target_class_size:
-                print("WARNING: log length bin %d has less than target class size: %d, add more training data" % (i, self.log_length_distribution.histogram[i]))
-                self.log_length_distribution.histogram[i] = self.target_class_size
-
-        length_weights = {i: self.target_class_size/v for i,v in enumerate(self.log_length_distribution.get_histogram())}
-
-        return type_weights, length_weights
-
-    def get_weight_vectors(self):
-        type_weights, length_weights = self.compute_weight_vectors()
-
-        type_weight_vector = np.zeros(len(self.type_indexes))
-        for i in range(len(self.type_indexes)):
-            type_weight_vector[i] = type_weights[self.type_indexes[i]]
-
-        length_weight_vector = np.zeros(len(self.length_indexes))
-        for i in range(len(self.length_indexes)):
-            length_weight_vector[i] = length_weights[self.length_indexes[i]]
-
-        return type_weight_vector, length_weight_vector
 
 
 class VcfDataset(Dataset):
