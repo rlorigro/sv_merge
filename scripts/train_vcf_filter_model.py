@@ -348,7 +348,10 @@ def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf
 
 
 def min50bp(record):
-    return record.INFO["SVLEN"][0] >= 50
+    if type(record.INFO["SVLEN"]) == list:
+        return record.INFO["SVLEN"][0] >= 50
+    else:
+        return record.INFO["SVLEN"] >= 50
 
 
 def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir, skip_training=False):
@@ -490,20 +493,20 @@ def main():
         os.makedirs(output_dir)
 
     train_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG00621_multiannotated_8x_asm10_20bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG01928_multiannotated_8x_asm10_20bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG02572_multiannotated_8x_asm10_20bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG03098_multiannotated_8x_asm10_20bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG03492_multiannotated_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00621_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG01928_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG02572_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03098_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03492_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
     ]
 
     test_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG00673_multiannotated_8x_asm10_20bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG00733_multiannotated_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00673_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00733_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
     ]
 
     eval_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/8x/HG03516_multiannotated_8x_asm10_20bp.vcf.gz"
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03516_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
     ]
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
@@ -546,7 +549,7 @@ def main():
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
-    with multiprocessing.Pool(n_processes) as pool:
+    with multiprocessing.Pool(processes=n_processes) as pool:
         results = pool.starmap(thread_fn, args)
 
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
