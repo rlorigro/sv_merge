@@ -429,7 +429,10 @@ def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
 
 def get_length(record: vcfpy.Record):
     if "SVLEN" in record.INFO:
-        return abs(record.INFO["SVLEN"][0])
+        if type(record.INFO["SVLEN"]) == list:
+            return abs(record.INFO["SVLEN"][0])
+        else:
+            return abs(record.INFO["SVLEN"])
     else:
         return abs(len(record.ALT[0]) - len(record.REF))
 
