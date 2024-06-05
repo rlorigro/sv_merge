@@ -35,6 +35,43 @@ StrandedSequence::StrandedSequence():
 {}
 
 
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities, bool is_reverse):
+        name(name),
+        sequence(sequence),
+        qualities(qualities),
+        is_reverse(is_reverse)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities):
+        name(name),
+        sequence(sequence),
+        qualities(qualities),
+        is_reverse(false)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, bool is_reverse):
+        name(name),
+        sequence(sequence),
+        is_reverse(is_reverse)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence):
+        name(name),
+        sequence(sequence),
+        is_reverse(false)
+{}
+
+
+StrandedQSequence::StrandedQSequence():
+        name(),
+        sequence(),
+        is_reverse(false)
+{}
+
+
 char get_complement(char c){
     if (isupper(c)) {
         switch (c){

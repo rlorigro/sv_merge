@@ -348,6 +348,11 @@ void GafAlignment::get_query_sequence(string& result, int32_t start, int32_t sto
 }
 
 
+void GafAlignment::get_qualities(vector<uint8_t>& result){
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
+}
+
+
 void GafAlignment::get_query_name(string& result) const{
     result.clear();
     result = query_name;

@@ -135,13 +135,14 @@ include(ExternalProject)
 
 
 ExternalProject_Add(project_wfa
-#        GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
-#        GIT_TAG cf3eb92dd0aa9bf067d5488a606d8c91173e74eb
-        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.5.tar.gz
+        GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
+        GIT_TAG 1cf38eaf530181bcc48219c58fa1bbdf5089575e
+#        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.5.tar.gz
         TIMEOUT 5
-        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DOPENMP=FALSE -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
         INSTALL_COMMAND make install
 )
+
 
 add_library(wfa2 SHARED IMPORTED)
 set_property(TARGET wfa2
@@ -446,6 +447,7 @@ else()
     ExternalProject_Add(project_bdsg
             GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
             PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
+            PATCH_COMMAND wget https://github.com/rlorigro/sdsl-lite/commit/4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch && git apply -v --unsafe-paths --directory ${CMAKE_SOURCE_DIR}/external/bdsg/src/project_bdsg/bdsg/deps/sdsl-lite 4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch || git apply --unsafe-paths --directory ${CMAKE_SOURCE_DIR}/external/bdsg/src/project_bdsg/bdsg/deps/sdsl-lite 4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch -R --check && echo already applied
             CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF
             BUILD_IN_SOURCE True
             INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
@@ -600,6 +602,7 @@ set(EXECUTABLES
         annotate
         evaluate
         find_windows
+        extract_reads_from_windows
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)

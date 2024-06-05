@@ -41,7 +41,7 @@ using std::ref;
 
 namespace sv_merge{
 
-using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<StrandedQSequence> > >;
 using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
 using sample_region_flanked_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, pair<CigarInterval,CigarInterval> > > > >;
 
@@ -54,7 +54,8 @@ void fetch_reads(
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
         bool append_sample_to_read = false,
-        bool force_forward = false
+        bool force_forward = false,
+        bool get_qualities = false
 );
 
 
@@ -109,5 +110,19 @@ void extract_flanked_subregion_coords_from_sample(
         bool unclip_coords,
         path bam_path
 );
+
+
+void get_read_coords_for_each_subregion_in_bam(
+        Timer& t,
+        vector<Region>& regions,
+        GoogleAuthenticator& authenticator,
+        sample_region_flanked_coord_map_t& sample_to_region_coords,
+        path bam,
+        int64_t n_threads,
+        int32_t flank_length,
+        bool require_spanning,
+        bool get_flank_query_coords
+);
+
 
 }

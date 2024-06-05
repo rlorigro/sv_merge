@@ -1,4 +1,8 @@
 #include <iostream>
+using std::cerr;
+
+#ifdef __linux__
+
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -6,7 +10,6 @@
 
 using std::runtime_error;
 using std::ofstream;
-using std::cerr;
 using std::string;
 using std::random_device;
 using std::uniform_int_distribution;
@@ -86,3 +89,12 @@ int main(){
 
     return 0;
 }
+
+#else
+
+int main(){
+    cerr << "This exe is only supported on Linux" << '\n';
+    return 1;
+}
+
+#endif

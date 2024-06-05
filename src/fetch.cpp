@@ -134,11 +134,12 @@ void extract_subregions_from_sample_contig(
         const span<const Region>& subregions,
         bool require_spanning,
         bool force_forward,
+        bool get_qualities,
         const path& bam_path
 ){
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
-    unordered_map<string,string> query_sequences;
+    unordered_map<string,StrandedQSequence> query_sequences;
 
     // Keep the F (query) oriented sequence of all the reads if they have an alignment that intersects the region
     unordered_map <Region, unordered_map<string,string> > alignments_per_region;
@@ -198,7 +199,7 @@ void extract_subregions_from_sample_contig(
                         result->second.is_reverse = alignment.is_reverse();
 
                         // Try inserting a new empty sequence and keep a reference to the value inserted
-                        auto [iter,success] = query_sequences.try_emplace(name,"");
+                        auto [iter,success] = query_sequences.try_emplace(name,StrandedQSequence());
 
                         // If the value existed already, don't do anything, the sequence has already been extracted
                         if (not success){
@@ -208,7 +209,11 @@ void extract_subregions_from_sample_contig(
                         auto& x = iter->second;
 
                         // Fill the value with the sequence
-                        alignment.get_query_sequence(x);
+                        alignment.get_query_sequence(x.sequence);
+
+                        if (get_qualities) {
+                            alignment.get_qualities(x.qualities);
+                        }
                     }
                 }
 
@@ -260,13 +265,34 @@ void extract_subregions_from_sample_contig(
 //                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
                 if (coords.is_reverse and force_forward) {
-                    auto s = query_sequences[name].substr(i, l);
+                    auto s = query_sequences[name].sequence.substr(i, l);
                     reverse_complement(s);
 
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s);
+                    // Add the sequence and track its reversal
+                    auto& result = sample_to_region_reads.at(sample_name).at(region);
+                    result.emplace_back(name,s);
+                    result.back().is_reverse = true;
+
+                    if (get_qualities){
+                        auto& q = query_sequences[name].qualities;
+
+                        // Use reverse iterator to fetch the range without modifying the vector
+                        vector<uint8_t> reversed_qualities(q.rbegin() + i, q.rbegin() + i + l);
+                        result.back().qualities = reversed_qualities;
+                    }
                 }
                 else{
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l));
+                    auto& result = sample_to_region_reads.at(sample_name).at(region);
+                    result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
+                    result.back().is_reverse = coords.is_reverse;
+
+                    if (get_qualities){
+                        auto& q = query_sequences[name].qualities;
+
+                        // Use reverse iterator to fetch the range without modifying the vector
+                        vector<uint8_t> reversed_qualities(q.rbegin() + i, q.rbegin() + i + l);
+                        result.back().qualities = reversed_qualities;
+                    }
                 }
             }
         }
@@ -291,6 +317,7 @@ void extract_subregions_from_sample(
         const vector<Region>& subregions,
         bool require_spanning,
         bool force_forward,
+        bool get_qualities,
         const path& bam_path
 ){
     if (subregions.empty()){
@@ -317,13 +344,14 @@ void extract_subregions_from_sample(
 
     for (const auto& regions: contig_regions){
         extract_subregions_from_sample_contig(
-            authenticator,
-            sample_to_region_reads,
-            sample_name,
-            regions,
-            require_spanning,
-            force_forward,
-            bam_path
+            authenticator,                    // GoogleAuthenticator& authenticator,
+            sample_to_region_reads,           // sample_region_read_map_t& sample_to_region_reads,
+            sample_name,                         // const string& sample_name,
+            regions,                   // const span<const Region>& subregions,
+            require_spanning,                    // bool require_spanning,
+            force_forward,                       // bool force_forward,
+            get_qualities,                       // bool get_qualities,
+            bam_path                             // const path& bam_path
         );
     }
 }
@@ -691,11 +719,12 @@ void extract_flanked_subregion_coords_from_sample(
 
 void extract_subsequences_from_sample_thread_fn(
         GoogleAuthenticator& authenticator,
-        sample_region_read_map_t & sample_to_region_reads,
+        sample_region_read_map_t& sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
         bool require_spanning,
         bool force_forward,
+        bool get_qualities,
         atomic<size_t>& job_index
 ){
 
@@ -707,13 +736,14 @@ void extract_subsequences_from_sample_thread_fn(
         Timer t;
 
         extract_subregions_from_sample(
-                authenticator,
-                sample_to_region_reads,
-                sample_name,
-                regions,
-                require_spanning,
-                force_forward,
-                bam_path
+                authenticator,                      // GoogleAuthenticator& authenticator,
+                sample_to_region_reads,             // sample_region_read_map_t& sample_to_region_reads,
+                sample_name,                           // const string& sample_name,
+                regions,                     // const vector<Region>& subregions,
+                require_spanning,                      // bool require_spanning,
+                force_forward,                         // bool force_forward,
+                get_qualities,                         // bool get_qualities,
+                bam_path                               // const path& bam_path
         );
 
         cerr << t << "Elapsed for: " << sample_name << '\n';
@@ -767,7 +797,8 @@ void get_reads_for_each_bam_subregion(
         path bam_csv,
         int64_t n_threads,
         bool require_spanning,
-        bool force_forward
+        bool force_forward,
+        bool get_qualities
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -800,13 +831,14 @@ void get_reads_for_each_bam_subregion(
             cerr << "launching: " << n << '\n';
             threads.emplace_back(
                     std::ref(extract_subsequences_from_sample_thread_fn),
-                    std::ref(authenticator),
-                    std::ref(sample_to_region_reads),
-                    std::cref(sample_bams),
-                    std::cref(regions),
-                    std::ref(require_spanning),
-                    std::ref(force_forward),
-                    std::ref(job_index)
+                    std::ref(authenticator),                                     //GoogleAuthenticator& authenticator,
+                    std::ref(sample_to_region_reads),                            //sample_region_read_map_t& sample_to_region_reads,
+                    std::cref(sample_bams),                                       //const vector <pair <string,path> >& sample_bams,
+                    std::cref(regions),                                           //const vector<Region>& regions,
+                    std::ref(require_spanning),                                   //bool require_spanning,
+                    std::ref(force_forward),                                      //bool force_forward,
+                    std::ref(get_qualities),                                      //bool get_qualities,
+                    std::ref(job_index)                                           //atomic<size_t>& job_index
             );
         } catch (const exception& e) {
             throw e;
@@ -885,6 +917,69 @@ void get_read_coords_for_each_bam_subregion(
 }
 
 
+/// Similar to get_read_coords_for_each_bam_subregion, but only taking a single BAM path and uses a default sample name.
+/// Mostly for convenience of avoiding the need for a CSV file
+void get_read_coords_for_each_subregion_in_bam(
+        Timer& t,
+        vector<Region>& regions,
+        GoogleAuthenticator& authenticator,
+        sample_region_flanked_coord_map_t& sample_to_region_coords,
+        path bam,
+        int64_t n_threads,
+        int32_t flank_length,
+        bool require_spanning,
+        bool get_flank_query_coords
+){
+    // Intermediate objects
+    vector <pair <string, path> > sample_bams;
+    TransMap sample_only_transmap;
+    string sample_name = "sample";
+
+    // Load BAM paths as a map with sample->bam
+    sample_only_transmap.add_sample(sample_name);
+    sample_bams.emplace_back(sample_name, bam);
+
+    // Initialize every combo of sample,region with an empty vector
+    for (const auto& region: regions){
+        sample_to_region_coords[sample_name][region] = {};
+    }
+
+    cerr << t << "Processing windows" << '\n';
+
+    // Thread-related variables
+    atomic<size_t> job_index = 0;
+    vector<thread> threads;
+
+    threads.reserve(n_threads);
+
+    // Launch threads
+    for (uint64_t n=0; n<n_threads; n++){
+        try {
+            cerr << "launching: " << n << '\n';
+            threads.emplace_back(
+                    std::ref(extract_subregion_coords_from_sample_thread_fn),
+                    std::ref(authenticator),
+                    std::ref(sample_to_region_coords),
+                    std::cref(sample_bams),
+                    std::cref(regions),
+                    std::ref(require_spanning),
+                    std::ref(get_flank_query_coords),
+                    flank_length,
+                    std::ref(job_index)
+            );
+        } catch (const exception& e) {
+            throw e;
+        }
+    }
+
+    // Wait for threads to finish
+    for (auto& n: threads){
+        n.join();
+    }
+
+}
+
+
 void fetch_reads(
         Timer& t,
         vector<Region>& regions,
@@ -893,7 +988,8 @@ void fetch_reads(
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
         bool append_sample_to_read,
-        bool force_forward
+        bool force_forward,
+        bool get_qualities
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -910,7 +1006,8 @@ void fetch_reads(
             bam_csv,
             n_threads,
             require_spanning,
-            force_forward
+            force_forward,
+            get_qualities
     );
 
     // Construct template transmap with only samples
