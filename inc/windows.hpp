@@ -13,6 +13,7 @@ void construct_windows_from_vcf_and_bed(
         const vector<path>& vcfs,
         int32_t flank_length,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         vector<Region>& regions,
         const path& bed_log_path="",
         bool use_confidence_intervals=false
@@ -23,6 +24,7 @@ void construct_windows_from_vcf_and_bed(
         const vector<path>& vcfs,
         int32_t flank_length,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         vector<Region>& regions,
         bool use_confidence_intervals=false
         );
@@ -32,6 +34,7 @@ void construct_windows_from_vcf_and_bed(
         path vcf,
         int32_t flank_length,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         vector<Region>& regions,
         bool use_confidence_intervals=false
         );
