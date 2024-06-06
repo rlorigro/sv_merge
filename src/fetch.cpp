@@ -135,7 +135,8 @@ void extract_subregions_from_sample_contig(
         bool require_spanning,
         bool force_forward,
         bool get_qualities,
-        const path& bam_path
+        const path& bam_path,
+        const vector<string>& tags_to_fetch = {}
 ){
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
@@ -214,6 +215,14 @@ void extract_subregions_from_sample_contig(
                         if (get_qualities) {
                             alignment.get_qualities(x.qualities);
                         }
+
+                        // Fetch the tags
+                        for (const auto& tag: tags_to_fetch){
+                            string value;
+                            alignment.get_tag_as_string(tag, value);
+                            x.tags += value + " ";
+                        }
+                        x.tags.substr(0, x.tags.size() - 1);
                     }
                 }
 
@@ -264,36 +273,58 @@ void extract_subregions_from_sample_contig(
 
 //                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
-                if (coords.is_reverse and force_forward) {
-                    auto s = query_sequences[name].sequence.substr(i, l);
-                    reverse_complement(s);
+                auto& result = sample_to_region_reads.at(sample_name).at(region);
 
-                    // Add the sequence and track its reversal
-                    auto& result = sample_to_region_reads.at(sample_name).at(region);
-                    result.emplace_back(name,s);
-                    result.back().is_reverse = true;
+                // This section is a bit insane, because BAM conventionally stores all strand-specific data in the
+                // orientation of the reference, not the query. The alignment.get_query_sequence() function will
+                // automatically undo this if the alignment is reverse, putting it back into the
+                // query orientation. Qualities follow the same convention.
 
-                    if (get_qualities){
-                        auto& q = query_sequences[name].qualities;
+                // All data must be copied out of the `query_sequences` because a sequence may be reused for multiple
+                // regions
 
-                        // Use reverse iterator to fetch the range without modifying the vector
-                        vector<uint8_t> reversed_qualities(q.rbegin() + i, q.rbegin() + i + l);
-                        result.back().qualities = reversed_qualities;
+                if (coords.is_reverse) {
+                    if (force_forward) {
+                        auto s = query_sequences[name].sequence.substr(i, l);
+                        reverse_complement(s);
+
+                        // Add the sequence and track its reversal
+                        result.emplace_back(name,s);
+                        result.back().is_reverse = coords.is_reverse;
+
+                        if (get_qualities){
+                            const auto& x = query_sequences[name].qualities.begin();
+                            auto q = std::span{x + i, size_t(l)};
+
+                            // Assign using a reverse iterator, from the reversed subspan
+                            result.back().qualities.assign(q.rbegin(), q.rend());
+                        }
+                    }
+                    else{
+                        result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
+                        result.back().is_reverse = coords.is_reverse;
+
+                        if (get_qualities){
+                            auto& q = query_sequences[name].qualities;
+
+                            // Use iterator to fetch the range without modifying the vector
+                            result.back().qualities.assign(q.begin() + i, q.begin() + i + l);
+                        }
                     }
                 }
                 else{
-                    auto& result = sample_to_region_reads.at(sample_name).at(region);
                     result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
                     result.back().is_reverse = coords.is_reverse;
 
                     if (get_qualities){
                         auto& q = query_sequences[name].qualities;
 
-                        // Use reverse iterator to fetch the range without modifying the vector
-                        vector<uint8_t> reversed_qualities(q.rbegin() + i, q.rbegin() + i + l);
-                        result.back().qualities = reversed_qualities;
+                        // Use iterator to fetch the range without modifying the vector
+                        result.back().qualities.assign(q.begin() + i, q.begin() + i + l);;
                     }
                 }
+
+                result.back().tags = query_sequences[name].tags;
             }
         }
     }
@@ -318,7 +349,8 @@ void extract_subregions_from_sample(
         bool require_spanning,
         bool force_forward,
         bool get_qualities,
-        const path& bam_path
+        const path& bam_path,
+        const vector<string>& tags_to_fetch
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
@@ -351,7 +383,8 @@ void extract_subregions_from_sample(
             require_spanning,                    // bool require_spanning,
             force_forward,                       // bool force_forward,
             get_qualities,                       // bool get_qualities,
-            bam_path                             // const path& bam_path
+            bam_path,                             // const path& bam_path
+            tags_to_fetch                         // const vector<string>& tags_to_fetch = {}
         );
     }
 }
@@ -725,7 +758,8 @@ void extract_subsequences_from_sample_thread_fn(
         bool require_spanning,
         bool force_forward,
         bool get_qualities,
-        atomic<size_t>& job_index
+        atomic<size_t>& job_index,
+        const vector<string>& tags_to_fetch
 ){
 
     size_t i = job_index.fetch_add(1);
@@ -743,7 +777,8 @@ void extract_subsequences_from_sample_thread_fn(
                 require_spanning,                      // bool require_spanning,
                 force_forward,                         // bool force_forward,
                 get_qualities,                         // bool get_qualities,
-                bam_path                               // const path& bam_path
+                bam_path,                              // const path& bam_path
+                tags_to_fetch
         );
 
         cerr << t << "Elapsed for: " << sample_name << '\n';
@@ -825,12 +860,13 @@ void get_reads_for_each_bam_subregion(
 
     threads.reserve(n_threads);
 
+    vector<string> tags_to_fetch = {};
+
     // Launch threads
     for (uint64_t n=0; n<n_threads; n++){
         try {
             cerr << "launching: " << n << '\n';
-            threads.emplace_back(
-                    std::ref(extract_subsequences_from_sample_thread_fn),
+            threads.emplace_back(extract_subsequences_from_sample_thread_fn,
                     std::ref(authenticator),                                     //GoogleAuthenticator& authenticator,
                     std::ref(sample_to_region_reads),                            //sample_region_read_map_t& sample_to_region_reads,
                     std::cref(sample_bams),                                       //const vector <pair <string,path> >& sample_bams,
@@ -838,7 +874,8 @@ void get_reads_for_each_bam_subregion(
                     std::ref(require_spanning),                                   //bool require_spanning,
                     std::ref(force_forward),                                      //bool force_forward,
                     std::ref(get_qualities),                                      //bool get_qualities,
-                    std::ref(job_index)                                           //atomic<size_t>& job_index
+                    std::ref(job_index),                                           //atomic<size_t>& job_index
+                    std::cref(tags_to_fetch)
             );
         } catch (const exception& e) {
             throw e;

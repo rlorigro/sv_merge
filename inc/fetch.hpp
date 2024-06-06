@@ -125,4 +125,17 @@ void get_read_coords_for_each_subregion_in_bam(
 );
 
 
+void extract_subsequences_from_sample_thread_fn(
+        GoogleAuthenticator& authenticator,
+        sample_region_read_map_t& sample_to_region_reads,
+        const vector <pair <string,path> >& sample_bams,
+        const vector<Region>& regions,
+        bool require_spanning,
+        bool force_forward,
+        bool get_qualities,
+        atomic<size_t>& job_index,
+        const vector<string>& tags_to_fetch = {}
+);
+
+
 }

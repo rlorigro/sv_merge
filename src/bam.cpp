@@ -195,7 +195,28 @@ void HtsAlignment::get_qualities(vector<uint8_t>& result){
     uint8_t* q = bam_get_qual(hts_alignment);
 
     // Inefficient copy of data
-    result = vector<uint8_t>(q, q + hts_alignment->core.l_qseq);
+    if (is_reverse()){
+        // TODO: any way to initialize this directly using reverse iterators, instead of two steps?
+        result = vector<uint8_t>(q, q + hts_alignment->core.l_qseq);
+        std::reverse(result.begin(), result.end());
+    }
+    else{
+        result = vector<uint8_t>(q, q + hts_alignment->core.l_qseq);
+    }
+}
+
+
+void HtsAlignment::get_tag_as_string(const string& tag_name, string& result) const{
+    kstring_t s = {0,0, nullptr};
+    int error_code = bam_aux_get_str(hts_alignment, tag_name.c_str(), &s);
+
+    if (error_code != 1){
+        string query_name;
+        get_query_name(query_name);
+        throw runtime_error("ERROR: could not fetch tag " + tag_name + " from alignment " + query_name + ", error code: " + to_string(error_code));
+    }
+
+    result.assign(s.s, s.l);
 }
 
 

@@ -37,6 +37,7 @@ public:
     string sequence;
     vector<uint8_t> qualities;
     bool is_reverse;
+    string tags;
 
     StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities, bool is_reverse);
     StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities);
