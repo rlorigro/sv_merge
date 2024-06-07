@@ -37,7 +37,7 @@ pyplot.switch_backend('Agg')
 print("USING pytorch VERSION: ", torch.__version__)
 
 
-def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs):
+def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs, max_batches_per_epoch):
     train_losses = list()
     test_losses = list()
     test_aucs = list()
@@ -57,11 +57,16 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
 
     batch_index = 0
     for e in range(epochs):
-        for x, y in train_loader:
+        for i, (x, y) in enumerate(train_loader):
+            if i >= max_batches_per_epoch:
+                break
+
             loss = train_batch(model=model, x=x, y=y, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn)
 
             n_positive = sum(y.data.numpy())
             n_negative = len(y) - n_positive
+
+            print(i,n_positive,n_negative)
 
             n_total_positive += n_positive
             n_total_negative += n_negative
@@ -175,7 +180,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
     learning_rate_max = 1
     learning_rate_base = 1e-5
-    weight_decay = 1e-5
+    weight_decay = 4e-6
     dropout_rate = 0.01
 
     goal_batch_size = 4096
@@ -186,11 +191,18 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Batch size is the number of training examples used to calculate each iteration's gradient
     batch_size_train = min(goal_batch_size, len(dataset_train))
 
+    max_batches_per_epoch = sys.maxsize
+
     if downsample:
-        minority_class_size = min(sum(dataset_train.y_data), len(dataset_train.y_data) - sum(dataset_train.y_data))
+        minority_class_size = int(min(sum(dataset_train.y_data == 0), sum(dataset_train.y_data == 1)))
         batch_size_train = int(min(goal_batch_size, minority_class_size*2))
 
-    print("Using batch size: ", batch_size_train)
+        # Force the data loader to stop iterating once the minority class is expected to be fully iterated.
+        # This is mostly just an inconvenience with how PyTorch structures its DataLoader with WeightedRandomSampler
+        # TODO: for future use remove the *2 factor which assumes two (binary) labels
+        max_batches_per_epoch = max(1, ((minority_class_size*2)/batch_size_train) - 1)
+
+    print("Using batch size: ", batch_size_train, "minority_class_size: ", minority_class_size, "max_batches_per_epoch: ", max_batches_per_epoch)
 
     # write the hyperparameters to a file
     with open(config_path, "w") as f:
@@ -211,7 +223,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
 
     if downsample:
         weight_tensor = compute_downsampling_weight_tensor(dataset_train)
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weight_tensor, len(weight_tensor))
+        sampler = torch.utils.data.sampler.WeightedRandomSampler(weight_tensor, len(weight_tensor), replacement=True)
         data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, sampler=sampler)
     else:
         data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, shuffle=True)
@@ -232,7 +244,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     loss_fn = nn.BCEWithLogitsLoss()
 
     # Train and get the resulting loss per iteration
-    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs)
+    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
 
     # Test and get the resulting predicted y values
     shallow_model.eval() # switch to eval mode to disable dropout
@@ -241,33 +253,31 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
 
 
 def compute_downsampling_weight_tensor(dataset):
+    target_epoch_size = 50_000
+
     y_data = dataset.y_data
 
     n_total = len(y_data)
     n_true = sum(y_data)
     n_false = n_total - sum(y_data)
-    tf_weights = torch.clone(y_data).detach()
+    weight_tensor = torch.clone(y_data).detach()
+    weight = None
 
     # compute a weight such that the majority class will be downsampled by that weight to match the minority weight,
     # and then construct a tensor of weights such that each element of the minority class has weight 1 and each element
     # of the majority class has weight equal to the downsample weight
     if n_true < n_false:
         weight = n_true / n_false
-        tf_weights[y_data == 0] = weight
-        tf_weights[y_data == 1] = 1
+        weight_tensor[y_data == 0] = weight
+        weight_tensor[y_data == 1] = 1
     else:
         weight = n_false / n_true
-        tf_weights[y_data == 1] = weight
-        tf_weights[y_data == 0] = 1
+        weight_tensor[y_data == 1] = weight
+        weight_tensor[y_data == 0] = 1
 
-    # Now compute an additional weight vector which uses the number of neighbors in each window to prevent
-    # regional/local oversampling
-    window_weights = torch.zeros(n_total)
-    for r,record in enumerate(dataset.records):
-        n_neighbors = int(record.INFO["HAPESTRY_READS_NEIGHBORS"])
-        window_weights[r] = min(2.0, float(n_neighbors))/float(n_neighbors)
+    expected_epoch_size = float(torch.sum(weight_tensor))
 
-    weight_tensor = tf_weights * window_weights
+    print("n_true: %d\tn_false: %d\texpected_epoch_size: %d\tmajority class weight: %d" % (n_true, n_false, expected_epoch_size, weight))
 
     return weight_tensor
 
@@ -354,7 +364,7 @@ def min50bp(record):
         return record.INFO["SVLEN"] >= 50
 
 
-def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir, skip_training=False):
+def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir):
     print("Thread started with ", truth_info_name, annotation_name)
 
     label = truth_info_name + " truth labels and " + annotation_name + " features"
@@ -372,16 +382,7 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print('Input shape: ', dataset_train[0][0].shape)
     print('Output shape: ', dataset_train[0][1].shape)
 
-    if not skip_training:
-        train_losses, test_losses, test_aucs, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
-    else:
-        # construct dummy data
-        y_true = dataset_test.y_data.numpy()
-        y_predict = numpy.random.rand(n_test)
-        train_losses = numpy.random.rand(100)
-        test_losses = numpy.random.rand(100)
-        test_aucs = numpy.random.rand(100)
-        model = ShallowLinear(input_size=dataset_train[0][0].shape[0])
+    train_losses, test_losses, test_aucs, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
 
     # Format the date and time
     model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
@@ -517,8 +518,10 @@ def main():
     eval_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX"}
 
     # Which truth info and annotation names to use (these names are hardcoded in the dataloader to define its behavior)
-    truth_info_names = ["Hapestry", "TruvariBench_TP"]
-    annotation_names = ["Hapestry", "Sniffles"]
+    truth_info_names = ["Hapestry"]
+    # truth_info_names = ["Hapestry", "TruvariBench_TP"]
+    annotation_names = ["Hapestry"]
+    # annotation_names = ["Hapestry", "Sniffles"]
 
     # Whether to subset the VCFs to >= 50bp
     filter_fn = min50bp
@@ -548,12 +551,14 @@ def main():
     # Set up args for multithreading (each combo of truth/label will get its own thread)
     for truth_info_name in truth_info_names:
         for annotation_name in annotation_names:
-            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir, False))
+            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir))
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
-    with multiprocessing.Pool(processes=n_processes) as pool:
-        results = pool.starmap(thread_fn, args)
+    # with multiprocessing.Pool(processes=n_processes) as pool:
+    #     results = pool.starmap(thread_fn, args)
+
+    results = [thread_fn(truth_info_names[0], annotation_names[0], train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir)]
 
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
