@@ -132,23 +132,23 @@ void extract(
     }
     cerr << t << "Writing reads to fastq" << '\n';
 
-    path fastq_path = output_dir / "reads.fastq";
-
-    ofstream fastq_file(fastq_path);
-
-    if ((not fastq_file.is_open()) or (not fastq_file.good())){
-        throw runtime_error("ERROR: could not write to file: " + fastq_path.string());
-    }
-
     for (const auto& sample_reads: sample_to_region_reads){
-        for (const auto& region_reads: sample_reads.second){
-            for (const auto& read: region_reads.second){
+        for (const auto& [region, reads]: sample_reads.second){
+            path fastq_path = output_dir / (region.to_string('_') + ".fastq");
+
+            ofstream fastq_file(fastq_path);
+
+            if ((not fastq_file.is_open()) or (not fastq_file.good())){
+                throw runtime_error("ERROR: could not write to file: " + fastq_path.string());
+            }
+
+            for (const auto& read: reads){
                 fastq_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
                 fastq_file << read.sequence << '\n';
                 fastq_file << "+" << '\n';
                 for (const auto& q: read.qualities){
                     if (q+33 < 33 or q+33 > 126){
-                        throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + read.name + " in region: " + region_reads.first.to_string() + " at position: " + std::to_string(q));
+                        throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + read.name + " in region: " + region.to_string() + " at position: " + std::to_string(q));
                     }
 
                     fastq_file << char(q+33);
