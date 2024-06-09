@@ -251,6 +251,7 @@ void compute_graph_evaluation_thread_fn(
     path vcf;
     vcf_reader.get_file_path(vcf);
     string vcf_name_prefix = get_vcf_name_prefix(vcf);
+    string buffer;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -317,6 +318,8 @@ void compute_graph_evaluation_thread_fn(
         vector<float> max_observed_identities(variant_graph.vcf_records.size());
 
         // First annotate all the variants as tandem or not
+        int32_t bnd_pos;
+        string bnd_chromosome;
         for (size_t v=0; v<variant_supports.size(); v++){
             auto& record = variant_graph.vcf_records[v];
             coord_t ref_coord;
@@ -328,6 +331,14 @@ void compute_graph_evaluation_thread_fn(
                 is_tandem = true;
                 return false;
             });
+            if (!is_tandem && record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()==2) {
+                record.get_breakend_chromosome(bnd_chromosome);
+                bnd_pos=record.get_breakend_pos();
+                contig_interval_trees.at(bnd_chromosome).overlap_find_all({bnd_pos,bnd_pos}, [&](auto iter) {
+                    is_tandem = true;
+                    return false;
+                });
+            }
 
             variant_supports[v].is_tandem = is_tandem;
         }
@@ -357,33 +368,58 @@ void compute_graph_evaluation_thread_fn(
             // Create a unique name and add the path to variant graph
             auto name = alignment.get_query_name() + "_" + to_string(c);
 
+            int32_t path_length = 0;
+            vector<int32_t> lengths;
+            vector<handle_t> handles;
+            vector<nid_t> handle_ids;
+            Region node_region;
+            for (const auto& [n,is_reverse]: path){
+                const auto h = variant_graph.graph.get_handle(stoll(n), is_reverse);
+                const auto length = int32_t(variant_graph.graph.get_length(h));
+                lengths.emplace_back(length);
+                handles.emplace_back(h);
+                handle_ids.emplace_back(variant_graph.graph.get_id(h));
+                path_length += length;
+            }
+            bool is_breakend;
+            uint8_t is_single;
+            coord_t ref_coord;
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
                 auto record = _record;
-
-                if (record.sv_type == VcfReader::TYPE_BREAKEND){
-                    throw runtime_error("ERROR: tandem-aware annotation not implemented for BNDs");
-                }
+                is_breakend=record.sv_type==VcfReader::TYPE_BREAKEND;
+                is_single=record.is_breakend_single();
+                if (is_breakend && is_single==0) return;  // Single breakends with no inserted sequence cannot be supported by an alignment
 
                 unordered_set<edge_t> vcf_edges(edges_of_the_record.begin(), edges_of_the_record.end());
-
-                int32_t path_length = 0;
-                vector<int32_t> lengths;
-                vector<handle_t> handles;
-                for (const auto& [n,is_reverse]: path){
-                    auto h = variant_graph.graph.get_handle(stoll(n), is_reverse);
-                    auto length = int32_t(variant_graph.graph.get_length(h));
-
-                    lengths.emplace_back(length);
-                    handles.emplace_back(h);
-                    path_length += length;
-                }
-
-                coord_t ref_coord;
                 record.get_reference_coordinates(false, ref_coord);
 
                 // Ref coordinates of target region are computed using VariantGraph's tandem-aware flanking
-                int32_t target_min = variant_graph.get_flank_boundary_left(region.name, ref_coord.first, variant_flank_length);
-                int32_t target_max = variant_graph.get_flank_boundary_right(region.name, ref_coord.second, variant_flank_length);
+                uint8_t orientation;
+                int32_t target_min, target_max, trans_pos;
+                string target_chr;
+                nid_t target_handle_id;
+                if (is_breakend) {
+                    orientation=record.get_breakend_orientation_cis();
+                    if (orientation==0) return;
+                    target_min=orientation==1?variant_graph.get_flank_boundary_left(region.name,ref_coord.first,variant_flank_length):variant_graph.get_flank_boundary_right(region.name,ref_coord.second,variant_flank_length);
+                    if (is_single==1) {
+                        record.get_breakend_inserted_sequence(buffer);
+                        target_max=min(variant_flank_length,buffer.length())-1;
+                        variant_graph.get_region_of_node(edges_of_the_record.at(0).first,node_region);
+                        target_handle_id=variant_graph.graph.get_id(node_region.name.empty()?edges_of_the_record.at(0).first:edges_of_the_record.at(0).second);
+                    }
+                    else {
+                        orientation=record.get_breakend_orientation_trans();
+                        if (orientation==0) return;
+                        record.get_breakend_chromosome(target_chr);
+                        trans_pos=record.get_breakend_pos();
+                        target_max=orientation==1?variant_graph.get_flank_boundary_left(target_chr,trans_pos,variant_flank_length):variant_graph.get_flank_boundary_right(target_chr,trans_pos,variant_flank_length);
+                    }
+                }
+                else {
+                    target_min=variant_graph.get_flank_boundary_left(region.name, ref_coord.first, variant_flank_length);
+                    target_max=variant_graph.get_flank_boundary_right(region.name,ref_coord.second,variant_flank_length);
+                }
 
                 // Coordinates of path sequence to evaluate
                 int32_t path_min = path_length + 1;
@@ -391,7 +427,6 @@ void compute_graph_evaluation_thread_fn(
 
                 // Temp variable which is incremented during traversal
                 int32_t path_coord = 0;
-                Region node_region;
 
                 // Observed path coordinates that match target_min/max (there could be more than one, if path is cyclic)
                 vector<int32_t> path_target_mins;
@@ -400,15 +435,32 @@ void compute_graph_evaluation_thread_fn(
                 for (size_t p=0; p < path.size(); p++){
                     auto h1 = handles[p];
                     auto length = lengths[p];
+                    auto handle_id = handle_ids[p];
 
-                    variant_graph.get_region_of_node(h1, node_region);
-
-                    // If the node contains one of the target flanks, record its location
-                    if (point_is_contained(target_min, node_region, true)){
-                        path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
+                    // If the node contains one of the target flanks, record the location of the target flank on the
+                    // path.
+                    if (is_breakend) {
+                        if (is_single==1) {
+                            if (handle_id==target_handle_id) path_target_maxes.emplace_back(path_coord+target_max);
+                        }
+                        else {
+                            variant_graph.get_region_of_node(h1, node_region);
+                            if (node_region.name==record.chrom && point_is_contained(target_min, node_region, true)){
+                                path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
+                            }
+                            else if (node_region.name==target_chr && point_is_contained(target_max, node_region, true)){
+                                path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
+                            }
+                        }
                     }
-                    if (point_is_contained(target_max, node_region, true)){
-                        path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
+                    else {
+                        variant_graph.get_region_of_node(h1, node_region);
+                        if (point_is_contained(target_min, node_region, true)){
+                            path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
+                        }
+                        if (point_is_contained(target_max, node_region, true)){
+                            path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
+                        }
                     }
 
                     if (p < path.size() - 1) {
@@ -433,13 +485,12 @@ void compute_graph_evaluation_thread_fn(
                     }
                 }
 
-                // Find the smallest path interval that intersects the target region
+                // Find a smallest path interval that intersects the target region
                 coord_t target_interval = {0,path_length};
-
                 for (auto a: path_target_mins){
                     for (auto b: path_target_maxes){
                         if (point_is_contained(path_min, {a, b}, true) and point_is_contained(path_max, {a, b}, true)){
-                            auto x = b-a;
+                            auto x = max(a,b) - min(a,b);
                             auto y = target_interval.second - target_interval.first;
                             if (x < y){
                                 target_interval = {min(a,b), max(a,b)};

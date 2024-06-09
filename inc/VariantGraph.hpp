@@ -20,12 +20,14 @@ using bdsg::path_handle_t;
 #include <unordered_set>
 #include <ostream>
 #include <filesystem>
+#include <algorithm>
 
 using std::filesystem::path;
 using std::string;
 using std::unordered_map;
 using std::unordered_set;
 using std::ofstream;
+using std::reverse;
 
 namespace sv_merge {
 
@@ -337,6 +339,38 @@ public:
      * `x>=pos`; returns `INT32_MAX` if no such interval exists.
      */
     int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
+
+    /**
+     * Appends to `intervals` every tandem interval `[x..y)` that intersects `node_id`. Positions are expressed relative
+     * to the the first character of `node_id` when laid out in the specified orientation. The order of the intervals is
+     * the same as in `tandem_track`.
+     *
+     * @param node_id assumed to be a reference node;
+     * @param offset the procedure adds this offset to every position in output.
+     */
+    void get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<pair<int32_t, int32_t>>& out);
+
+    /**
+     * Same as above, but for a sequence of node handles.
+     *
+     * Remark: if a non-reference node is adjacent to a tandem interval, it is assumed to be entirely a tandem.
+     */
+    void get_tandem_intervals(const vector<pair<string,bool>>& path, vector<pair<int32_t, int32_t>>& out);
+
+    /**
+     * A VCF record that is covered by `path` corresponds to a (not necessarily consecutive) sequence of non-reference
+     * edges in `path`. If `path` uses the VCF record multiple times, the same sequence of edges occurs multiple times
+     * in `path` (possibly in different orientations). Every such occurrence corresponds to an interval in the string
+     * that corresponds to `path`. The procedure pads every such interval to the left and to the right by `flank_length`
+     * positions as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
+     *
+     * @param edges sequence of edges that represents a VCF record;
+     * @param out the procedure sets this array to the sorted list of padded intervals.
+     */
+    void vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<pair<int32_t, int32_t>>& out);
+
+
+
 
 private:
     /**
