@@ -341,30 +341,14 @@ public:
     int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
 
     /**
-     * Appends to `intervals` every tandem interval `[x..y)` that intersects `node_id`. Positions are expressed relative
-     * to the the first character of `node_id` when laid out in the specified orientation. The order of the intervals is
-     * the same as in `tandem_track`.
-     *
-     * @param node_id assumed to be a reference node;
-     * @param offset the procedure adds this offset to every position in output.
-     */
-    void get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<pair<int32_t, int32_t>>& out);
-
-    /**
-     * Same as above, but for a sequence of node handles.
-     *
-     * Remark: if a non-reference node is adjacent to a tandem interval, it is assumed to be entirely a tandem.
-     */
-    void get_tandem_intervals(const vector<pair<string,bool>>& path, vector<pair<int32_t, int32_t>>& out);
-
-    /**
      * A VCF record that is covered by `path` corresponds to a (not necessarily consecutive) sequence of non-reference
      * edges in `path`. If `path` uses the VCF record multiple times, the same sequence of edges occurs multiple times
      * in `path` (possibly in different orientations). Every such occurrence corresponds to an interval in the string
      * that corresponds to `path`. The procedure pads every such interval to the left and to the right by `flank_length`
-     * positions as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
+     * positions, as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
      *
-     * @param edges sequence of edges that represents a VCF record;
+     * @param edges_of_the_record sequence of edges that represents the VCF record; assumed to be canonized and all
+     * distinct;
      * @param out the procedure sets this array to the sorted list of padded intervals.
      */
     void vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<pair<int32_t, int32_t>>& out);
@@ -433,10 +417,14 @@ private:
      * Reused temporary space
      */
     vector<bool> printed, initialized;
+    vector<bool> is_reverse_buffer;
+    vector<int32_t> node_lengths_buffer;
+    vector<nid_t> node_ids_buffer;
     vector<vector<string>> path_names;
     vector<vector<size_t>> flags;
     interval_t tmp_interval;
     vector<edge_t> tmp_edges;
+    vector<interval_t> intervals_buffer;
 
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
@@ -517,6 +505,31 @@ private:
     static void print_bnds(vector<pair<string,string>>& bnds) ;
 
     static void increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<size_t>>& caller_count, uint8_t column);
+
+    int32_t get_flank_boundary_right_impl(int32_t pos, int32_t sequence_length, const vector<interval_t>& intervals, int32_t flank_length);
+
+    int32_t get_flank_boundary_left_impl(int32_t pos, const vector<interval_t>& intervals, int32_t flank_length);
+
+    /**
+     * Appends to `out` every interval `[x..y)` that results from the intersection of `tandem_track` and `node_id`.
+     * Positions are expressed relative to the the first character of `node_id` when laid out in the specified
+     * orientation. The order of the intervals is the same as in `tandem_track`.
+     *
+     * @param node_id assumed to be a reference node;
+     * @param offset the procedure adds this offset to every position in output.
+     */
+    void get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<interval_t>& out);
+
+    /**
+     * Given a path, the set of tandem intervals of each reference node in the path (considered in its orientation)
+     * induces a list of maximal non-adjacent tandem intervals `[x..y)` on the sequence of characters spelled out by the
+     * path, where positions are expressed relative to the the first character of the path. The procedure sets `out` to
+     * such a sorted list.
+     *
+     * Remark: if a non-reference node in the path is adjacent to a tandem interval, it is assumed to consist entirely
+     * of tandems. This is arbitrary and may be wrong.
+     */
+    void get_tandem_intervals(const vector<nid_t>& node_ids, const vector<bool>& is_reverse, const vector<int32_t>& node_lengths, vector<interval_t>& out);
 };
 
 }

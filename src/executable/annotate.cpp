@@ -210,7 +210,7 @@ void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse
             // q = 7, p(correct) = 0.9921875
             auto q = -log2(1-i);
             // Compute q and make the bottom bin open ended
-            q = max(0.0f,q-2.0f);
+            q = max(0.0,q-2.0f);
 
             // Bin the q value into one of the distribution indexes, with the top bin open ended
             index = min(int64_t(result.size()-1), int64_t(floor(q)));
@@ -310,9 +310,9 @@ void compute_graph_evaluation_thread_fn(
             continue;
         }
 
+        const int32_t variant_flank_length = 50;
         size_t l_coverage = 0;
         size_t r_coverage = 0;
-        int32_t variant_flank_length = 50;
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
         vector<float> max_observed_identities(variant_graph.vcf_records.size());
@@ -348,213 +348,53 @@ void compute_graph_evaluation_thread_fn(
         unordered_map<string,size_t> counter;
         for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
             auto& path = alignment.get_path();
-            if (path.size() < 2){
-                return;
-            }
+            if (path.size()<2) return;
+            const bool path_is_reverse = path.front().second;
+            const auto l = variant_graph.is_dangling_node(stoll(path.front().first));
+            const auto r = variant_graph.is_dangling_node(stoll(path.back().first));
+            const bool is_spanning = l and r;
+            if (l) l_coverage++;
+            if (r) r_coverage++;
 
-            bool path_is_reverse = path.front().second;
-
-            nid_t id_front = stoll(path.front().first);
-            nid_t id_back = stoll(path.back().first);
-
-            // Accumulate total flank coverage (to be averaged later)
-            auto l = variant_graph.is_dangling_node(id_front);
-            auto r = variant_graph.is_dangling_node(id_back);
-            bool is_spanning = l and r;
-
-            // Fetch (or construct) the count for this read name (default = 0)
-            auto& c = counter[alignment.get_query_name()];
-
-            // Create a unique name and add the path to variant graph
-            auto name = alignment.get_query_name() + "_" + to_string(c);
-
-            int32_t path_length = 0;
-            vector<int32_t> lengths;
-            vector<handle_t> handles;
-            vector<nid_t> handle_ids;
-            Region node_region;
-            for (const auto& [n,is_reverse]: path){
-                const auto h = variant_graph.graph.get_handle(stoll(n), is_reverse);
-                const auto length = int32_t(variant_graph.graph.get_length(h));
-                lengths.emplace_back(length);
-                handles.emplace_back(h);
-                handle_ids.emplace_back(variant_graph.graph.get_id(h));
-                path_length += length;
-            }
-            bool is_breakend;
-            uint8_t is_single;
-            coord_t ref_coord;
+            int32_t max_length;
+            float max_identity;
+            vector<interval_t> ref_intervals, singleton_interval, no_interval;
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
                 auto record = _record;
-                is_breakend=record.sv_type==VcfReader::TYPE_BREAKEND;
-                is_single=record.is_breakend_single();
-                if (is_breakend && is_single==0) return;  // Single breakends with no inserted sequence cannot be supported by an alignment
+                variant_graph.vcf_record_to_path_intervals(path,edges_of_the_record,variant_flank_length,ref_intervals);
+                max_identity=0; max_length=0;
+                for (const auto interval: ref_intervals) {
+                    AlignmentSummary summary;
+                    singleton_interval.clear(); singleton_interval.push_back(interval);
+                    for_cigar_interval_in_alignment(false, alignment, singleton_interval, no_interval, [&](const CigarInterval& i, const interval_t& interval){
+                        int32_t cigar_length = i.length;
+                        if (i.code==1) cigar_length=abs(i.query_stop-i.query_start);  // I operation
+                        if (cigar_length>0) summary.update(i,true);
+                    },{});
 
-                unordered_set<edge_t> vcf_edges(edges_of_the_record.begin(), edges_of_the_record.end());
-                record.get_reference_coordinates(false, ref_coord);
+                    // If we are in a DEL, arbitrarily augment the identity with as many matches as the length of the DEL
+                    if (record.sv_type==VcfReader::TYPE_DELETION) {
+                        CigarInterval placeholder;
+                        coord_t variant_coord;
+                        record.get_reference_coordinates(false, variant_coord);
+                        placeholder.length = variant_coord.second - variant_coord.first;
+                        placeholder.code = 7;   // '=' operation
+                        summary.update(placeholder,true);
+                    }
 
-                // Ref coordinates of target region are computed using VariantGraph's tandem-aware flanking
-                uint8_t orientation;
-                int32_t target_min, target_max, trans_pos;
-                string target_chr;
-                nid_t target_handle_id;
-                if (is_breakend) {
-                    orientation=record.get_breakend_orientation_cis();
-                    if (orientation==0) return;
-                    target_min=orientation==1?variant_graph.get_flank_boundary_left(region.name,ref_coord.first,variant_flank_length):variant_graph.get_flank_boundary_right(region.name,ref_coord.second,variant_flank_length);
-                    if (is_single==1) {
-                        record.get_breakend_inserted_sequence(buffer);
-                        target_max=min(variant_flank_length,buffer.length())-1;
-                        variant_graph.get_region_of_node(edges_of_the_record.at(0).first,node_region);
-                        target_handle_id=variant_graph.graph.get_id(node_region.name.empty()?edges_of_the_record.at(0).first:edges_of_the_record.at(0).second);
-                    }
-                    else {
-                        orientation=record.get_breakend_orientation_trans();
-                        if (orientation==0) return;
-                        record.get_breakend_chromosome(target_chr);
-                        trans_pos=record.get_breakend_pos();
-                        target_max=orientation==1?variant_graph.get_flank_boundary_left(target_chr,trans_pos,variant_flank_length):variant_graph.get_flank_boundary_right(target_chr,trans_pos,variant_flank_length);
-                    }
-                }
-                else {
-                    target_min=variant_graph.get_flank_boundary_left(region.name, ref_coord.first, variant_flank_length);
-                    target_max=variant_graph.get_flank_boundary_right(region.name,ref_coord.second,variant_flank_length);
+                    max_identity=max(max_identity,summary.compute_identity());
+                    max_length=max(max_length,interval.second-interval.first);
                 }
 
-                // Coordinates of path sequence to evaluate
-                int32_t path_min = path_length + 1;
-                int32_t path_max = 0;
+                // Update the max observed identity for this VCF record
+                max_observed_identities[id]=max(max_observed_identities[id],max_identity);
 
-                // Temp variable which is incremented during traversal
-                int32_t path_coord = 0;
+                // Update the region length for this VCF record, using arbitrarily the max length over all intervals.
+                if (variant_supports[id].length_of_evaluated_region==0 || is_spanning) variant_supports[id].length_of_evaluated_region=max(variant_supports[id].length_of_evaluated_region,max_length);
 
-                // Observed path coordinates that match target_min/max (there could be more than one, if path is cyclic)
-                vector<int32_t> path_target_mins;
-                vector<int32_t> path_target_maxes;
-
-                for (size_t p=0; p < path.size(); p++){
-                    auto h1 = handles[p];
-                    auto length = lengths[p];
-                    auto handle_id = handle_ids[p];
-
-                    // If the node contains one of the target flanks, record the location of the target flank on the
-                    // path.
-                    if (is_breakend) {
-                        if (is_single==1) {
-                            if (handle_id==target_handle_id) path_target_maxes.emplace_back(path_coord+target_max);
-                        }
-                        else {
-                            variant_graph.get_region_of_node(h1, node_region);
-                            if (node_region.name==record.chrom && point_is_contained(target_min, node_region, true)){
-                                path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
-                            }
-                            else if (node_region.name==target_chr && point_is_contained(target_max, node_region, true)){
-                                path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
-                            }
-                        }
-                    }
-                    else {
-                        variant_graph.get_region_of_node(h1, node_region);
-                        if (point_is_contained(target_min, node_region, true)){
-                            path_target_mins.emplace_back(path_coord + abs(node_region.start - target_min));
-                        }
-                        if (point_is_contained(target_max, node_region, true)){
-                            path_target_maxes.emplace_back(path_coord + abs(node_region.start - target_max));
-                        }
-                    }
-
-                    if (p < path.size() - 1) {
-                        auto h2 = handles[p+1];
-
-                        // Get forward and reverse edges
-                        edge_t e(h1,h2);
-                        edge_t e2(variant_graph.graph.flip(h2), variant_graph.graph.flip(h1));
-
-                        // Update the path ref coord so it is now up to the edge junction
-                        path_coord += length;
-
-                        // If the edge is one of the relevant VCF edges then track min and max
-                        if (vcf_edges.find(e) != vcf_edges.end() or vcf_edges.find(e2) != vcf_edges.end()) {
-                            if (path_coord < path_min) {
-                                path_min = path_coord;
-                            }
-                            if (path_coord > path_max) {
-                                path_max = path_coord;
-                            }
-                        }
-                    }
-                }
-
-                // Find a smallest path interval that intersects the target region
-                coord_t target_interval = {0,path_length};
-                for (auto a: path_target_mins){
-                    for (auto b: path_target_maxes){
-                        if (point_is_contained(path_min, {a, b}, true) and point_is_contained(path_max, {a, b}, true)){
-                            auto x = max(a,b) - min(a,b);
-                            auto y = target_interval.second - target_interval.first;
-                            if (x < y){
-                                target_interval = {min(a,b), max(a,b)};
-                            }
-                        }
-                    }
-                }
-
-                // Make sure we aren't exceeding 0 or path_length
-                target_interval.first = max(0, target_interval.first);
-                target_interval.second = min(path_length, target_interval.second);
-
-                vector<interval_t> ref_intervals = {target_interval};
-                vector<interval_t> query_intervals = {};
-
-                AlignmentSummary summary;
-                for_cigar_interval_in_alignment(false, alignment, ref_intervals, query_intervals, [&](const CigarInterval& i, const interval_t& interval){
-                    int32_t cigar_length = i.length;
-
-                    if (i.code == 1) {  // I
-                        cigar_length = abs(i.query_stop - i.query_start);
-                    }
-
-                    if ((cigar_length > 0)){
-                        summary.update(i,true);
-                    }
-                },{});
-
-                // If we are in a DEL, arbitrarily augment the identity with as many matches as the length of the DEL
-                if (record.sv_type == VcfReader::TYPE_DELETION) {
-                    CigarInterval placeholder;
-                    coord_t variant_coord;
-                    record.get_reference_coordinates(false, variant_coord);
-
-                    placeholder.length = variant_coord.second - variant_coord.first;
-                    placeholder.code = 7;   // '=' operation
-                    summary.update(placeholder,true);
-                }
-
-                // Update the histogram for this variant
-                auto identity = summary.compute_identity();
-                variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(identity);
-
-                // Update the max observed identity for this variant
-                if (identity > max_observed_identities[id]){
-                    max_observed_identities[id] = identity;
-                }
-
-                // If there is no previous length, then add one, otherwise only override if this is a spanning read
-                if (variant_supports[id].length_of_evaluated_region == 0 or (l and r)){
-                    variant_supports[id].length_of_evaluated_region = target_interval.second - target_interval.first;
-                }
-
+                // Update the histogram for this VCF record, using arbitrarily the max identity over all intervals.
+                variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(max_identity);
             });
-
-            // Increment coverage if this alignment covers the left flanking node
-            if (l) {
-                l_coverage++;
-            }
-            if (r) {
-                r_coverage++;
-            }
-
-            c++;
         });
 
         auto total_coverage = float(l_coverage + r_coverage) / 2.0;

@@ -89,8 +89,13 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
     if (pos==CHROMOSOME_LENGTH-1) return INT32_MAX;
     if (!tandem_track.contains(chromosome_id)) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
+    return get_flank_boundary_right_impl(pos,CHROMOSOME_LENGTH,intervals,flank_length);
+}
+
+
+int32_t VariantGraph::get_flank_boundary_right_impl(int32_t pos, int32_t sequence_length, const vector<interval_t>& intervals, int32_t flank_length) {
     const size_t N_INTERVALS = intervals.size();
-    if (N_INTERVALS==0) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
+    if (N_INTERVALS==0) return min(pos+flank_length-1,sequence_length-1);
     tmp_interval.first=pos; tmp_interval.second=pos+flank_length;
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
     size_t p = iter-intervals.begin();
@@ -103,7 +108,7 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
         tmp_interval.second=tmp_interval.first+flank_length;
         p++;
     }
-    return tmp_interval.first>=CHROMOSOME_LENGTH?INT32_MAX:min(tmp_interval.second-1,CHROMOSOME_LENGTH-1);
+    return tmp_interval.first>=sequence_length?INT32_MAX:min(tmp_interval.second-1,sequence_length-1);
 }
 
 
@@ -111,6 +116,11 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
     if (pos==0) return INT32_MAX;
     if (!tandem_track.contains(chromosome_id)) return pos>=flank_length?pos-flank_length:0;
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
+    return get_flank_boundary_left_impl(pos,intervals,flank_length);
+}
+
+
+int32_t VariantGraph::get_flank_boundary_left_impl(int32_t pos, const vector<interval_t>& intervals, int32_t flank_length) {
     const size_t N_INTERVALS = intervals.size();
     if (N_INTERVALS==0) return pos>=flank_length?pos-flank_length:0;
     tmp_interval.first=pos>=flank_length?pos-flank_length:0; tmp_interval.second=pos;
@@ -133,7 +143,7 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
 }
 
 
-void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<pair<int32_t, int32_t>>& out) {
+void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<interval_t>& out) {
     size_t i, from;
 
     const auto OUT_FIRST = out.end();
@@ -176,34 +186,34 @@ void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool
 }
 
 
-void VariantGraph::get_tandem_intervals(const vector<pair<string,bool>>& path, vector<pair<int32_t, int32_t>>& out) {
-    const size_t LENGTH = path.size();
+void VariantGraph::get_tandem_intervals(const vector<nid_t>& node_ids, const vector<bool>& is_reverse, const vector<int32_t>& node_lengths, vector<interval_t>& out) {
+    const size_t LENGTH = node_ids.size();
     size_t i, j;
-    size_t offset, length, length_prime;
+    int32_t offset, length, length_prime;
     nid_t node_id;
 
-    // Collecting per-node tandem intervals, including entire non-ref-nodes.
+    // Collecting per-node tandem intervals, including entire non-ref nodes.
     out.clear(); offset=0; i=0;
     while (i<LENGTH) {
-        node_id=stoi(path.at(i).first);
-        length=graph.get_length(graph.get_handle(node_id,path.at(i).second));
+        node_id=node_ids.at(i);
+        length=node_lengths.at(i);
         if (is_reference_node(node_id)) {
-            get_tandem_intervals(node_id,(int32_t)length,path.at(i).second,(int32_t)offset,out);
+            get_tandem_intervals(node_id,length,is_reverse.at(i),offset,out);
             offset+=length;
         }
         else {
             if (!out.empty() && out.at(out.size()-1).second==offset) {
-                out.at(out.size()-1).second=(int32_t)(offset+length);
+                out.at(out.size()-1).second=offset+length;
                 offset+=length;
             }
             else if (i<LENGTH-1) {
                 auto iter = out.end();
                 i++;
-                node_id=stoi(path.at(i).first);
-                length_prime=graph.get_length(graph.get_handle(node_id,path.at(i).second));
+                node_id=node_ids.at(i);
+                length_prime=node_lengths.at(i);
                 if (!is_reference_node(node_id)) throw runtime_error("ERROR: the path contains a non-ref node adjacent to another non-ref node?!");
-                get_tandem_intervals(node_id,(int32_t)length_prime,path.at(i).second,(int32_t)(offset+length),out);
-                if (out.end()!=iter && out.at(iter-out.begin()).first==offset+length) out.at(iter-out.begin()).first=(int32_t)offset;
+                get_tandem_intervals(node_id,length_prime,is_reverse.at(i),offset+length,out);
+                if (out.end()!=iter && out.at(iter-out.begin()).first==offset+length) out.at(iter-out.begin()).first=offset;
                 offset+=length+length_prime;
             }
         }
@@ -218,7 +228,71 @@ void VariantGraph::get_tandem_intervals(const vector<pair<string,bool>>& path, v
     out.erase(out.begin()+(j+1),out.end());
 }
 
+/**
+ * Remark: this is implemented naively in `O(|path|^2)` time.
+ *
+ * Remark: the procedure uses global buffers `node_ids_buffer, is_reverse_buffer, node_lengths_buffer,
+ * intervals_buffer`.
+ */
+void VariantGraph::vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<interval_t>& out) {
+    const size_t PATH_LENGTH = path.size();
+    if (PATH_LENGTH<2) { out.clear(); return; }
+    const size_t N_EDGES = edges_of_the_record.size();
+    bool found, rev;
+    int32_t i, j, p, x, y;
+    int32_t length, path_length_bps;
+    nid_t id;
+    handle_t handle1, handle2;
 
+    node_ids_buffer.clear(); is_reverse_buffer.clear(); node_lengths_buffer.clear(); tmp_edges.clear();
+    id=stoll(path.at(0).first);
+    rev=path.at(0).second;
+    node_ids_buffer.emplace_back(id);
+    is_reverse_buffer.emplace_back(rev);
+    handle1=graph.get_handle(id,rev);
+    length=int32_t(graph.get_length(handle1));
+    node_lengths_buffer.emplace_back(length);
+    path_length_bps=length;
+    for (i=1; i<PATH_LENGTH; i++) {
+        id=stoll(path.at(i).first);
+        rev=path.at(i).second;
+        node_ids_buffer.emplace_back(id);
+        is_reverse_buffer.emplace_back(rev);
+        handle2=graph.get_handle(id,rev);
+        length=int32_t(graph.get_length(handle2));
+        node_lengths_buffer.emplace_back(length);
+        path_length_bps+=length;
+        tmp_edges.emplace_back(graph.edge_handle(handle1,handle2));  // Canonized
+        handle1=handle2;
+    }
+    get_tandem_intervals(node_ids_buffer,is_reverse_buffer,node_lengths_buffer,intervals_buffer);
+    out.clear(); x=0;
+    for (i=0; i<tmp_edges.size(); i++) {
+        x+=node_lengths_buffer.at(i);
+        found=false;
+        if (tmp_edges.at(i)==edges_of_the_record.at(0)) {
+            // Forward match
+            j=i; p=1; y=x;
+            while (j<tmp_edges.size()-1 && p<N_EDGES) {
+                j++;
+                y+=node_lengths_buffer.at(j);
+                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p++;
+            }
+            if (p==N_EDGES) found=true;
+        }
+        if (!found && tmp_edges.at(i)==edges_of_the_record.at(N_EDGES-1)) {
+            // Reverse match
+            j=i; p=N_EDGES-2; y=x;
+            while (j<tmp_edges.size()-1 && p>=0) {
+                j++;
+                y+=node_lengths_buffer.at(j);
+                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p--;
+            }
+            if (p==-1) found=true;
+        }
+        if (found) out.emplace_back(get_flank_boundary_left_impl(x,intervals_buffer,flank_length),get_flank_boundary_right_impl(y,path_length_bps,intervals_buffer,flank_length));
+    }
+}
 
 
 void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers) {
