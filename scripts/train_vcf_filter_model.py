@@ -555,10 +555,10 @@ def main():
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
-    # with multiprocessing.Pool(processes=n_processes) as pool:
-    #     results = pool.starmap(thread_fn, args)
+    with multiprocessing.Pool(processes=n_processes) as pool:
+        results = pool.starmap(thread_fn, args)
 
-    results = [thread_fn(truth_info_names[0], annotation_names[0], train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir)]
+    # results = [thread_fn(truth_info_names[0], annotation_names[0], train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir)]
 
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
