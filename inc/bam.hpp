@@ -61,7 +61,7 @@ public:
     void get_query_sequence(string& result) override;
     void get_qualities(vector<uint8_t>& result) override;
     void get_query_name(string& result) const override;
-    void get_tag_as_string(const string& name, string& result) const override;
+    void get_tag_as_string(const string& name, string& result, bool allow_missing=false) const override;
     [[nodiscard]] int32_t get_query_length() const override;
     [[nodiscard]] int32_t get_ref_start() const override;
     [[nodiscard]] int32_t get_ref_stop() const override;

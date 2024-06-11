@@ -134,7 +134,8 @@ void extract_subsequences_from_sample_thread_fn(
         bool force_forward,
         bool get_qualities,
         atomic<size_t>& job_index,
-        const vector<string>& tags_to_fetch = {}
+        const vector<string>& tags_to_fetch = {},
+        bool allow_unused_tags = false
 );
 
 

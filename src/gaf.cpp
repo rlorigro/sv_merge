@@ -353,7 +353,7 @@ void GafAlignment::get_qualities(vector<uint8_t>& result){
 }
 
 
-void GafAlignment::get_tag_as_string(const string& name, string& result) const {
+void GafAlignment::get_tag_as_string(const string& name, string& result, bool allow_missing) const {
     throw runtime_error("ERROR: get_tag_as_string not implemented for GAF alignment");
 }
 

@@ -65,7 +65,7 @@ void extract(
 
     // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
-        r.start -= flank_length;
+        r.start = max(1,r.start-flank_length);
         r.stop += flank_length;
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
@@ -119,7 +119,8 @@ void extract(
                     force_forward,
                     get_qualities,
                     std::ref(job_index),
-                    std::cref(tags_to_fetch)
+                    std::cref(tags_to_fetch),
+                    true
             );
         } catch (const exception& e) {
             throw e;

@@ -136,7 +136,8 @@ void extract_subregions_from_sample_contig(
         bool force_forward,
         bool get_qualities,
         const path& bam_path,
-        const vector<string>& tags_to_fetch = {}
+        const vector<string>& tags_to_fetch = {},
+        bool allow_unused_tags = false
 ){
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
@@ -219,7 +220,7 @@ void extract_subregions_from_sample_contig(
                         // Fetch the tags
                         for (const auto& tag: tags_to_fetch){
                             string value;
-                            alignment.get_tag_as_string(tag, value);
+                            alignment.get_tag_as_string(tag, value, allow_unused_tags);
                             x.tags += value + " ";
                         }
                         x.tags.substr(0, x.tags.size() - 1);
@@ -350,7 +351,8 @@ void extract_subregions_from_sample(
         bool force_forward,
         bool get_qualities,
         const path& bam_path,
-        const vector<string>& tags_to_fetch
+        const vector<string>& tags_to_fetch,
+        bool allow_unused_tags = false
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
@@ -384,7 +386,8 @@ void extract_subregions_from_sample(
             force_forward,                       // bool force_forward,
             get_qualities,                       // bool get_qualities,
             bam_path,                             // const path& bam_path
-            tags_to_fetch                         // const vector<string>& tags_to_fetch = {}
+            tags_to_fetch,                         // const vector<string>& tags_to_fetch = {}
+            allow_unused_tags
         );
     }
 }
@@ -759,7 +762,8 @@ void extract_subsequences_from_sample_thread_fn(
         bool force_forward,
         bool get_qualities,
         atomic<size_t>& job_index,
-        const vector<string>& tags_to_fetch
+        const vector<string>& tags_to_fetch,
+        bool allow_unused_tags
 ){
 
     size_t i = job_index.fetch_add(1);
@@ -778,7 +782,8 @@ void extract_subsequences_from_sample_thread_fn(
                 force_forward,                         // bool force_forward,
                 get_qualities,                         // bool get_qualities,
                 bam_path,                              // const path& bam_path
-                tags_to_fetch
+                tags_to_fetch,
+                allow_unused_tags
         );
 
         cerr << t << "Elapsed for: " << sample_name << '\n';
@@ -875,7 +880,8 @@ void get_reads_for_each_bam_subregion(
                     std::ref(force_forward),                                      //bool force_forward,
                     std::ref(get_qualities),                                      //bool get_qualities,
                     std::ref(job_index),                                           //atomic<size_t>& job_index
-                    std::cref(tags_to_fetch)
+                    std::cref(tags_to_fetch),
+                    false
             );
         } catch (const exception& e) {
             throw e;
