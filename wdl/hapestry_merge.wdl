@@ -76,8 +76,7 @@ task merge {
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
-        --n_threads ~{n_threads} \
-        --label ~{annotation_label} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
+        --n_threads ~{n_threads} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
 
         # tarball only the csv files in the output subdirectories
         find ~{output_dir}/run/ -name "*.csv" -exec tar -czf ~{output_dir}/hapestry.tar.gz {} +
