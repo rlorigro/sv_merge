@@ -120,6 +120,7 @@ workflow hapestry_merge {
         # Hapestry specific args
         Int? interval_max_length = 50000
         Int? flank_length = 200
+        Int? min_sv_length = 20
         Int n_threads
         File tandems_bed
         File reference_fa
@@ -152,6 +153,7 @@ workflow hapestry_merge {
             bam_not_hardclipped = bam_not_hardclipped,
             interval_max_length = interval_max_length,
             flank_length = flank_length,
+            min_sv_length = min_sv_length,
             n_threads = n_threads,
             tandems_bed = tandems_bed,
             reference_fa = reference_fa,
