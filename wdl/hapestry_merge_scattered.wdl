@@ -182,7 +182,8 @@ workflow hapestry_merge_scattered {
                 force_unique_reads = force_unique_reads,
                 docker = docker,
                 monitoring_script = monitoring_script,
-                runtime_attributes = merge_runtime_attributes
+                runtime_attributes = merge_runtime_attributes,
+                confident_bed = confident_bed
         }
     }
 
