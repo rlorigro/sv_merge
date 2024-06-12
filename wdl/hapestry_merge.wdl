@@ -20,9 +20,9 @@ task merge {
         File? confident_bed
 
         # Hapestry specific args
-        Int? interval_max_length = 50000
-        Int? min_sv_length = 20
-        Int? flank_length = 200
+        Int interval_max_length = 50000
+        Int min_sv_length = 20
+        Int flank_length = 200
         Int n_threads
         File tandems_bed
         File reference_fa
@@ -78,7 +78,7 @@ task merge {
         --n_threads ~{n_threads} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
 
         # tarball only the csv files in the output subdirectories
-        find ~{output_dir}/run/ -name "*.csv" -exec tar -czf ~{output_dir}/hapestry.tar.gz {} +
+        find ~{output_dir}/run/ -name "*.csv" -exec tar -cvzf ~{output_dir}/hapestry.tar.gz {} +
 
     >>>
 
