@@ -118,9 +118,9 @@ workflow hapestry_merge {
         File confident_bed
 
         # Hapestry specific args
-        Int? interval_max_length = 50000
-        Int? flank_length = 200
-        Int? min_sv_length = 20
+        Int interval_max_length = 50000
+        Int flank_length = 200
+        Int min_sv_length = 20
         Int n_threads
         File tandems_bed
         File reference_fa
