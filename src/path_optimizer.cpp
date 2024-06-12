@@ -231,6 +231,7 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
     // Check if the first solution is feasible
     if (response_d.status() != CpSolverStatus::OPTIMAL){
         cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
+        transmap = {};
         return;
     }
 
@@ -245,6 +246,7 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
     // Check if the second solution is feasible
     if (response_n.status() != CpSolverStatus::OPTIMAL){
         cerr << "WARNING: no solution for n_min found: " << output_dir << '\n';
+        transmap = {};
         return;
     }
 
@@ -277,8 +279,6 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
 
 //    const CpSolverResponse response_n_d = Solve(model.Build());
 
-    parse_read_model_solution(response_n_d, vars, transmap, output_dir);
-
     // Write a log containing the solutioninfo and responsestats
     path out_path = output_dir/"log_optimizer.txt";
     ofstream file(out_path);
@@ -290,6 +290,15 @@ void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n
 
     file << "n_path_to_read_vars: " << vars.path_to_read.size() << '\n';
     file << CpSolverResponseStats(response_n_d) << '\n';
+
+    // Check if the final solution is feasible
+    if (response_n_d.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    parse_read_model_solution(response_n_d, vars, transmap, output_dir);
 }
 
 

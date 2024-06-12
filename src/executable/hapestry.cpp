@@ -343,7 +343,7 @@ void merge_thread_fn(
         create_directories(subdir);
 
         path gfa_path = subdir / "graph.gfa";
-        path fasta_filename = subdir / "haplotypes.fasta";
+        path fasta_filename = subdir / "sequences.fasta";
 
         VariantGraph variant_graph(ref_sequences, contig_tandems);
 
@@ -688,10 +688,10 @@ void hapestry(
 
     cerr << t << "Writing sequences to disk" << '\n';
 
-    path fasta_filename = "haplotypes.fasta";
+    path fasta_filename = "sequences.fasta";
     path staging_dir = output_dir;
 
-    // Dump truth haplotypes into each region directory
+    // Dump sequences into each region directory
     {
         // Thread-related variables
         atomic<size_t> job_index = 0;
