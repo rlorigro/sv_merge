@@ -24,6 +24,7 @@ task chunk_vcf {
         # Hapestry specific args
         Int interval_max_length = 50000
         Int flank_length = 200
+        Int min_sv_length = 20
         Int n_chunks = 32
         File tandems_bed
 
@@ -80,6 +81,7 @@ task chunk_vcf {
         --vcf ${vcf} \
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
+        --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length}
 
         tree ~{output_dir}
@@ -182,6 +184,8 @@ workflow hapestry_annotate_scattered {
     parameter_meta {
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
+        min_sv_length: "Minimum SV length to consider"
+        n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
         n_threads: "Maximum number of threads to use"
         tandems_bed: "BED file of tandem repeats"
         reference_fa: "Reference fasta file"
@@ -198,6 +202,7 @@ workflow hapestry_annotate_scattered {
             confident_bed = confident_bed,
             interval_max_length = interval_max_length,
             flank_length = flank_length,
+            min_sv_length = min_sv_length,
             tandems_bed = tandems_bed,
             n_chunks = n_chunks,
             docker = docker,
