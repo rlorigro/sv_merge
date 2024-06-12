@@ -386,7 +386,7 @@ def load_features_from_vcf(
 
 
 class VcfDataset(Dataset):
-    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, filter_fn=None, contigs=None):
+    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None):
         x = list()
         y = list()
 
@@ -429,9 +429,73 @@ class VcfDataset(Dataset):
 
         self.filter_fn = filter_fn
 
+        self.minority_size = self.compute_minority_size()
+
+        self.ordinals = list(range(self.length))
+
+        self.batch_size = batch_size
+        self.subset_ordinals = list()
+        self.initialize_iterator()
+
+    def set_batch_size(self, batch_size):
+        self.batch_size = batch_size
+
+    def compute_minority_size(self):
+        unique, counts = np.unique(self.y_data.numpy(), return_counts=True)
+
+        return min(counts)
+
+    def get_n_batches_per_epoch(self):
+        return len(self.subset_ordinals) // self.batch_size
+
     def __getitem__(self, index):
         return self.x_data[index], self.y_data[index]
 
     def __len__(self):
         return self.length
 
+    def initialize_iterator(self):
+        # Shuffle and iterate over the data, accumulating approximately balanced batches without replacement
+        np.random.shuffle(self.ordinals)
+
+        self.subset_ordinals = list()
+        accumulated_class_counts = defaultdict(int)
+
+        for i in self.ordinals:
+            c = self.y_data[i].item()
+
+            if accumulated_class_counts[c] < self.minority_size:
+                self.subset_ordinals.append(i)
+                accumulated_class_counts[c] += 1
+
+        np.random.shuffle(self.subset_ordinals)
+
+    def iter_balanced_batches(self, max_batches_per_epoch=sys.maxsize):
+        n = 0
+        i = 0
+        while i + self.batch_size < len(self.subset_ordinals):
+            if n >= max_batches_per_epoch:
+                break
+
+            batch_indexes = self.subset_ordinals[i:i+self.batch_size]
+
+            yield self.x_data[batch_indexes], self.y_data[batch_indexes]
+
+            i += self.batch_size
+            n += 1
+
+        self.initialize_iterator()
+
+    def iter_batches(self, max_batches_per_epoch=sys.maxsize):
+        n = 0
+        i = 0
+        m = 0
+        while m < self.length - 1:
+            if n >= max_batches_per_epoch:
+                break
+
+            m = min(i+self.batch_size, self.length)
+            yield self.x_data[i:m], self.y_data[i:m]
+
+            i += self.batch_size
+            n += 1

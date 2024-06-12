@@ -57,7 +57,7 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
 
     batch_index = 0
     for e in range(epochs):
-        for i, (x, y) in enumerate(train_loader):
+        for i, (x, y) in enumerate(train_loader.iter_balanced_batches(max_batches_per_epoch=max_batches_per_epoch)):
             if i >= max_batches_per_epoch:
                 break
 
@@ -137,7 +137,7 @@ def test(model, loader, loss_fn, use_sigmoid=False):
     losses = list()
 
     batch_index = 0
-    for x, y in loader:
+    for x, y in loader.iter_batches():
         y_predict = model.forward(x, use_sigmoid=use_sigmoid)
 
         y_vectors.append(y.data.numpy())
@@ -193,17 +193,6 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
 
     max_batches_per_epoch = sys.maxsize
 
-    if downsample:
-        minority_class_size = int(min(sum(dataset_train.y_data == 0), sum(dataset_train.y_data == 1)))
-        batch_size_train = int(min(goal_batch_size, minority_class_size*2))
-
-        # Force the data loader to stop iterating once the minority class is expected to be fully iterated.
-        # This is mostly just an inconvenience with how PyTorch structures its DataLoader with WeightedRandomSampler
-        # TODO: for future use remove the *2 factor which assumes two (binary) labels
-        max_batches_per_epoch = max(1, ((minority_class_size*2)/batch_size_train) - 1)
-
-    print("Using batch size: ", batch_size_train, "minority_class_size: ", minority_class_size, "max_batches_per_epoch: ", max_batches_per_epoch)
-
     # write the hyperparameters to a file
     with open(config_path, "w") as f:
         f.write("learning_rate_base: {}\n".format(learning_rate_base))
@@ -219,17 +208,6 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
         else:
             f.write("filter_fn: None\n")
 
-    data_loader_train = None
-
-    if downsample:
-        weight_tensor = compute_downsampling_weight_tensor(dataset_train)
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weight_tensor, len(weight_tensor), replacement=True)
-        data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, sampler=sampler)
-    else:
-        data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, shuffle=True)
-
-    data_loader_test = DataLoader(dataset=dataset_test, batch_size=len(dataset_test), shuffle=False)
-
     input_size = len(dataset_train[0][0])
     print("using input size: ", input_size)
     shallow_model = ShallowLinear(input_size=input_size, dropout_rate=dropout_rate)
@@ -238,46 +216,35 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     optimizer = optim.SGD(shallow_model.parameters(), lr=learning_rate_base, weight_decay=weight_decay)
 
     # Initialize CLR scheduler
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=len([x for x in data_loader_train]), epochs=n_epochs)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=dataset_train.get_n_batches_per_epoch(), epochs=n_epochs)
 
     # Define the loss function
     loss_fn = nn.BCEWithLogitsLoss()
 
     # Train and get the resulting loss per iteration
-    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
+    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=dataset_train, test_loader=dataset_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
 
     # Test and get the resulting predicted y values
-    shallow_model.eval() # switch to eval mode to disable dropout
+    shallow_model.eval()    # switch to eval mode to disable dropout
 
     return train_losses, test_losses, test_aucs, shallow_model
 
 
 def compute_downsampling_weight_tensor(dataset):
-    target_epoch_size = 50_000
-
     y_data = dataset.y_data
 
     n_total = len(y_data)
     n_true = sum(y_data)
     n_false = n_total - sum(y_data)
     weight_tensor = torch.clone(y_data).detach()
-    weight = None
+    # weight = None
 
-    # compute a weight such that the majority class will be downsampled by that weight to match the minority weight,
-    # and then construct a tensor of weights such that each element of the minority class has weight 1 and each element
-    # of the majority class has weight equal to the downsample weight
-    if n_true < n_false:
-        weight = n_true / n_false
-        weight_tensor[y_data == 0] = weight
-        weight_tensor[y_data == 1] = 1
-    else:
-        weight = n_false / n_true
-        weight_tensor[y_data == 1] = weight
-        weight_tensor[y_data == 0] = 1
+    weight_tensor[weight_tensor == 1] = 1/n_true
+    weight_tensor[weight_tensor == 0] = 1/n_false
 
     expected_epoch_size = float(torch.sum(weight_tensor))
 
-    print("n_true: %d\tn_false: %d\texpected_epoch_size: %d\tmajority class weight: %d" % (n_true, n_false, expected_epoch_size, weight))
+    print("n_true: %d\tn_false: %d\texpected_epoch_size: %d" % (n_true, n_false, expected_epoch_size))
 
     return weight_tensor
 
@@ -392,13 +359,11 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print("Final loss:", sum(train_losses[-100:])/100)
     plot_loss(train_losses=train_losses, test_losses=test_losses, test_aucs=test_aucs, label=label, output_dir=output_dir)
 
-    data_loader_eval = DataLoader(dataset=dataset_eval, batch_size=len(dataset_eval), shuffle=False)
-
     x = dataset_eval.x_data.numpy()
 
     # Finally evaluate on a 3rd dataset which is not used to select training termination conditions
     # Need to use_sigmoid this time to get meaningful 0-1 values
-    y_predict, y_true, mean_loss = test(model=model, loader=data_loader_eval, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
+    y_predict, y_true, mean_loss = test(model=model, loader=dataset_eval, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
 
     return dataset_eval.records, x, dataset_eval.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
 
