@@ -66,8 +66,6 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
             n_positive = sum(y.data.numpy())
             n_negative = len(y) - n_positive
 
-            print(i,n_positive,n_negative)
-
             n_total_positive += n_positive
             n_total_negative += n_negative
 
