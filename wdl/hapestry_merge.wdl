@@ -29,7 +29,6 @@ task merge {
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
-        String? annotation_label = "HAPESTRY_REF"
 
         String docker = "fcunial/hapestry:merge"
         File? monitoring_script
@@ -93,7 +92,6 @@ task merge {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
-        annotation_label: "Name to give the INFO field in the VCF for annotations, usually upper case"
     }
 
     runtime {
@@ -128,7 +126,6 @@ workflow hapestry_merge {
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
-        String? annotation_label = "HAPESTRY_REF"
 
         String docker
         File? monitoring_script
@@ -145,7 +142,6 @@ workflow hapestry_merge {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
-        annotation_label: "Name to give the INFO field in the VCF for annotations, usually upper case"
     }
 
     call merge {
@@ -161,7 +157,6 @@ workflow hapestry_merge {
             reference_fa = reference_fa,
             haps_vs_ref_csv = haps_vs_ref_csv,
             force_unique_reads = force_unique_reads,
-            annotation_label = annotation_label,
             docker = docker,
             monitoring_script = monitoring_script,
             runtime_attributes = merge_runtime_attributes
