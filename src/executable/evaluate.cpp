@@ -590,7 +590,8 @@ void evaluate(
             true,
             true,
             force_unique_reads,
-            false
+            false,
+            flank_length
     );
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';

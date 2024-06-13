@@ -750,7 +750,9 @@ void annotate(
                 region_transmaps,
                 false,
                 force_unique_reads,
-                false
+                false,
+                false,
+                flank_length
         );
     }
     else{
@@ -767,7 +769,8 @@ void annotate(
                 false,
                 false,
                 force_unique_reads,
-                false
+                false,
+                flank_length
         );
     }
 

@@ -665,7 +665,9 @@ void hapestry(
                 region_transmaps,
                 true,
                 force_unique_reads,
-                true
+                true,
+                false,
+                flank_length
         );
     }
     else{
@@ -682,7 +684,8 @@ void hapestry(
                 false,
                 false,
                 force_unique_reads,
-                true
+                true,
+                flank_length
         );
     }
 
