@@ -444,7 +444,16 @@ void merge_thread_fn(
         // Write the solution to a VCF
         path output_path = subdir / "solution.vcf";
 
-        write_solution_to_vcf(variant_graph, transmap, output_path);
+        try {
+            write_solution_to_vcf(variant_graph, transmap, output_path);
+        }
+        catch (const exception& e) {
+            cerr << e.what() << '\n';
+            cerr << "ERROR caught at " << region.to_string() << '\n';
+
+            // Skip this region (do not attempt to generate VCF)
+            continue;
+        }
 
         i = job_index.fetch_add(1);
     }

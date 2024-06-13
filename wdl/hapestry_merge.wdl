@@ -78,7 +78,8 @@ task merge {
         --n_threads ~{n_threads} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
 
         # tarball only the csv files in the output subdirectories
-        find ~{output_dir}/run/ -name "*.csv" -exec tar -cvzf ~{output_dir}/hapestry.tar.gz {} +
+        find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
+        find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa"  -o -name "*.gaf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
 
     >>>
 
@@ -105,7 +106,8 @@ task merge {
     }
 
     output {
-        File csv_tarball = output_dir + "/hapestry.tar.gz"
+        File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
+        File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
 }
@@ -165,7 +167,8 @@ workflow hapestry_merge {
     }
 
     output {
-        File csv_tarball = merge.csv_tarball
+        File non_sequence_data_tarball = merge.non_sequence_data_tarball
+        File sequence_data_tarball = merge.sequence_data_tarball
         File? monitoring_log = merge.monitoring_log
     }
 }

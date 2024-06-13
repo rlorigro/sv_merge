@@ -90,7 +90,7 @@ task chunk_vcf {
         for file in ~{output_dir}/run/*; do
             [ -e "$file" ] || continue
             echo "processing ${file}"
-            bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            bcftools view -T ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
@@ -196,6 +196,7 @@ workflow hapestry_merge_scattered {
 
 
     output {
-        Array[File] csv_tarballs = scattered_merge.csv_tarball
+        Array[File] non_sequence_data_tarball = scattered_merge.non_sequence_data_tarball
+        Array[File] sequence_data_tarball = scattered_merge.sequence_data_tarball
     }
 }
