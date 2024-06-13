@@ -120,7 +120,8 @@ void extract(
                     get_qualities,
                     std::ref(job_index),
                     std::cref(tags_to_fetch),
-                    true
+                    true,
+                    0
             );
         } catch (const exception& e) {
             throw e;
