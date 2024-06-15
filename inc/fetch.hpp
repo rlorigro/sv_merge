@@ -12,8 +12,8 @@
 #include "bed.hpp"
 #include "bam.hpp"
 
-#include "bindings/cpp/WFAligner.hpp"
-using namespace wfa;
+// #include "bindings/cpp/WFAligner.hpp"
+// using namespace wfa;
 
 #include <unordered_map>
 #include <exception>
