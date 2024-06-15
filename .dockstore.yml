@@ -20,6 +20,16 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/hapestry_annotate_scattered.wdl
   testParameterFiles:
+- name: hapestry_merge
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge.wdl
+  testParameterFiles:
+- name: hapestry_merge_scattered
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge_scattered.wdl
+  testParameterFiles:
 - name: multi_annotate
   subclass: wdl
   publish: True

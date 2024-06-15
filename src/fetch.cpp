@@ -124,7 +124,11 @@ void update_coord(
  * @param sample_name any unique name that identifies the sample from which the reads are derived
  * @param subregions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
  * @param require_spanning any read that is returned must, among all its alignments, cover the left and right bounds
+ * @param get_qualities if true, also fetch q string from BAM
  * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ * @param tags_to_fetch tags to fetch from the BAM
+ * @param allow_unused_tags if true, do not throw error if tag is missing
+ * @param max_clip_fetch if non-zero, attempt to fetch this many clipped bases beyond the end of non-spanning sequences
  * @param bam_path
  */
 void extract_subregions_from_sample_contig(
@@ -134,11 +138,15 @@ void extract_subregions_from_sample_contig(
         const span<const Region>& subregions,
         bool require_spanning,
         bool force_forward,
-        const path& bam_path
+        bool get_qualities,
+        const path& bam_path,
+        const vector<string>& tags_to_fetch = {},
+        bool allow_unused_tags = false,
+        int32_t max_clip_fetch = 0
 ){
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
-    unordered_map<string,string> query_sequences;
+    unordered_map<string,StrandedQSequence> query_sequences;
 
     // Keep the F (query) oriented sequence of all the reads if they have an alignment that intersects the region
     unordered_map <Region, unordered_map<string,string> > alignments_per_region;
@@ -198,7 +206,7 @@ void extract_subregions_from_sample_contig(
                         result->second.is_reverse = alignment.is_reverse();
 
                         // Try inserting a new empty sequence and keep a reference to the value inserted
-                        auto [iter,success] = query_sequences.try_emplace(name,"");
+                        auto [iter,success] = query_sequences.try_emplace(name,StrandedQSequence());
 
                         // If the value existed already, don't do anything, the sequence has already been extracted
                         if (not success){
@@ -208,7 +216,19 @@ void extract_subregions_from_sample_contig(
                         auto& x = iter->second;
 
                         // Fill the value with the sequence
-                        alignment.get_query_sequence(x);
+                        alignment.get_query_sequence(x.sequence);
+
+                        if (get_qualities) {
+                            alignment.get_qualities(x.qualities);
+                        }
+
+                        // Fetch the tags
+                        for (const auto& tag: tags_to_fetch){
+                            string value;
+                            alignment.get_tag_as_string(tag, value, allow_unused_tags);
+                            x.tags += value + " ";
+                        }
+                        x.tags.substr(0, x.tags.size() - 1);
                     }
                 }
 
@@ -242,33 +262,99 @@ void extract_subregions_from_sample_contig(
     });
 
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
-    for (const auto& [region, query_coords]: query_coords_per_region){
-        for (const auto& [name, coords]: query_coords){
-            bool pass = false;
+    for (auto& [region, query_coords]: query_coords_per_region){
+        for (auto& [name, coords]: query_coords){
+            bool spanning = (coords.ref_start == region.start and coords.ref_stop == region.stop);
 
-            if (require_spanning){
-                pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
-            }
-            else {
-                pass = (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop);
+            if (not spanning){
+                // If the alignment does not span the region, skip it (when require_spanning is true)
+                if (require_spanning){
+                    continue;
+                }
+
+                // Very limited sanity check to ensure that the query coords are not the placeholder
+                if (not (coords.query_start != placeholder.query_start and coords.query_stop != placeholder.query_stop)){
+                    continue;
+                }
+
+                auto l = int32_t(query_sequences[name].sequence.size());
+
+                // Depending on the orientation and whether the sequence has any remaining bases, extend out to
+                // capture some of the (possibly) softclipped sequence (for Fabio)
+                if (coords.is_reverse){
+                    if (coords.ref_start != region.start){
+                        coords.query_start = max(0, coords.query_start - max_clip_fetch);
+                    }
+                    if (coords.ref_stop != region.stop){
+                        coords.query_stop = min(int32_t(l), coords.query_stop + max_clip_fetch);
+                    }
+                }
+                else{
+                    if (coords.ref_start != region.start){
+                        coords.query_start = max(0, coords.query_start - max_clip_fetch);
+                    }
+                    if (coords.ref_stop != region.stop){
+                        coords.query_stop = min(int32_t(l), coords.query_stop + max_clip_fetch);
+                    }
+                }
             }
 
-            if (pass) {
-                auto i = coords.query_start;
-                auto l = coords.query_stop - coords.query_start;
+            auto i = coords.query_start;
+            auto l = coords.query_stop - coords.query_start;
 
 //                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
-                if (coords.is_reverse and force_forward) {
-                    auto s = query_sequences[name].substr(i, l);
+            auto& result = sample_to_region_reads.at(sample_name).at(region);
+
+            // This section is a bit insane, because BAM conventionally stores all strand-specific data in the
+            // orientation of the reference, not the query. The alignment.get_query_sequence() function will
+            // automatically undo this if the alignment is reverse, putting it back into the
+            // query orientation. Qualities follow the same convention.
+
+            // All data must be copied out of the `query_sequences` because a sequence may be reused for multiple
+            // regions
+            if (coords.is_reverse) {
+                if (force_forward) {
+                    auto s = query_sequences[name].sequence.substr(i, l);
                     reverse_complement(s);
 
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,s);
+                    // Add the sequence and track its reversal
+                    result.emplace_back(name,s);
+                    result.back().is_reverse = coords.is_reverse;
+
+                    if (get_qualities){
+                        const auto& x = query_sequences[name].qualities.begin();
+                        auto q = std::span{x + i, size_t(l)};
+
+                        // Assign using a reverse iterator, from the reversed subspan
+                        result.back().qualities.assign(q.rbegin(), q.rend());
+                    }
                 }
                 else{
-                    sample_to_region_reads.at(sample_name).at(region).emplace_back(name,query_sequences[name].substr(i, l));
+                    result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
+                    result.back().is_reverse = coords.is_reverse;
+
+                    if (get_qualities){
+                        auto& q = query_sequences[name].qualities;
+
+                        // Use iterator to fetch the range without modifying the vector
+                        result.back().qualities.assign(q.begin() + i, q.begin() + i + l);
+                    }
                 }
             }
+            else{
+                result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
+                result.back().is_reverse = coords.is_reverse;
+
+                if (get_qualities){
+                    auto& q = query_sequences[name].qualities;
+
+                    // Use iterator to fetch the range without modifying the vector
+                    result.back().qualities.assign(q.begin() + i, q.begin() + i + l);;
+                }
+            }
+
+            result.back().tags = query_sequences[name].tags;
         }
     }
 }
@@ -291,7 +377,11 @@ void extract_subregions_from_sample(
         const vector<Region>& subregions,
         bool require_spanning,
         bool force_forward,
-        const path& bam_path
+        bool get_qualities,
+        const path& bam_path,
+        const vector<string>& tags_to_fetch,
+        bool allow_unused_tags = false,
+        int32_t max_clip_fetch = 0
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
@@ -317,13 +407,17 @@ void extract_subregions_from_sample(
 
     for (const auto& regions: contig_regions){
         extract_subregions_from_sample_contig(
-            authenticator,
-            sample_to_region_reads,
-            sample_name,
-            regions,
-            require_spanning,
-            force_forward,
-            bam_path
+            authenticator,                    // GoogleAuthenticator& authenticator,
+            sample_to_region_reads,           // sample_region_read_map_t& sample_to_region_reads,
+            sample_name,                         // const string& sample_name,
+            regions,                   // const span<const Region>& subregions,
+            require_spanning,                    // bool require_spanning,
+            force_forward,                       // bool force_forward,
+            get_qualities,                       // bool get_qualities,
+            bam_path,                             // const path& bam_path
+            tags_to_fetch,                         // const vector<string>& tags_to_fetch = {}
+            allow_unused_tags,
+            max_clip_fetch
         );
     }
 }
@@ -691,12 +785,16 @@ void extract_flanked_subregion_coords_from_sample(
 
 void extract_subsequences_from_sample_thread_fn(
         GoogleAuthenticator& authenticator,
-        sample_region_read_map_t & sample_to_region_reads,
+        sample_region_read_map_t& sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
         bool require_spanning,
         bool force_forward,
-        atomic<size_t>& job_index
+        bool get_qualities,
+        atomic<size_t>& job_index,
+        const vector<string>& tags_to_fetch,
+        bool allow_unused_tags,
+        int32_t max_clip_fetch
 ){
 
     size_t i = job_index.fetch_add(1);
@@ -707,13 +805,17 @@ void extract_subsequences_from_sample_thread_fn(
         Timer t;
 
         extract_subregions_from_sample(
-                authenticator,
-                sample_to_region_reads,
-                sample_name,
-                regions,
-                require_spanning,
-                force_forward,
-                bam_path
+                authenticator,                      // GoogleAuthenticator& authenticator,
+                sample_to_region_reads,             // sample_region_read_map_t& sample_to_region_reads,
+                sample_name,                           // const string& sample_name,
+                regions,                     // const vector<Region>& subregions,
+                require_spanning,                      // bool require_spanning,
+                force_forward,                         // bool force_forward,
+                get_qualities,                         // bool get_qualities,
+                bam_path,                              // const path& bam_path
+                tags_to_fetch,
+                allow_unused_tags,
+                max_clip_fetch
         );
 
         cerr << t << "Elapsed for: " << sample_name << '\n';
@@ -767,7 +869,9 @@ void get_reads_for_each_bam_subregion(
         path bam_csv,
         int64_t n_threads,
         bool require_spanning,
-        bool force_forward
+        bool force_forward,
+        bool get_qualities,
+        int32_t max_clip_fetch
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -794,19 +898,24 @@ void get_reads_for_each_bam_subregion(
 
     threads.reserve(n_threads);
 
+    vector<string> tags_to_fetch = {};
+
     // Launch threads
     for (uint64_t n=0; n<n_threads; n++){
         try {
             cerr << "launching: " << n << '\n';
-            threads.emplace_back(
-                    std::ref(extract_subsequences_from_sample_thread_fn),
-                    std::ref(authenticator),
-                    std::ref(sample_to_region_reads),
-                    std::cref(sample_bams),
-                    std::cref(regions),
-                    std::ref(require_spanning),
-                    std::ref(force_forward),
-                    std::ref(job_index)
+            threads.emplace_back(extract_subsequences_from_sample_thread_fn,
+                    std::ref(authenticator),                                     // GoogleAuthenticator& authenticator,
+                    std::ref(sample_to_region_reads),                            // sample_region_read_map_t& sample_to_region_reads,
+                    std::cref(sample_bams),                                      // const vector <pair <string,path> >& sample_bams,
+                    std::cref(regions),                                          // const vector<Region>& regions,
+                    std::ref(require_spanning),                                  // bool require_spanning,
+                    std::ref(force_forward),                                     // bool force_forward,
+                    std::ref(get_qualities),                                     // bool get_qualities,
+                    std::ref(job_index),                                         // atomic<size_t>& job_index,
+                    std::cref(tags_to_fetch),                                     // const vector<string>& tags_to_fetch,
+                    false,                                                          // bool allow_unused_tags,
+                    max_clip_fetch                                                   // int32_t max_clip_fetch
             );
         } catch (const exception& e) {
             throw e;
@@ -893,7 +1002,9 @@ void fetch_reads(
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
         bool append_sample_to_read,
-        bool force_forward
+        bool force_forward,
+        bool get_qualities,
+        int32_t max_clip_fetch
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -910,7 +1021,9 @@ void fetch_reads(
             bam_csv,
             n_threads,
             require_spanning,
-            force_forward
+            force_forward,
+            get_qualities,
+            max_clip_fetch
     );
 
     // Construct template transmap with only samples
@@ -1058,7 +1171,8 @@ void fetch_reads_from_clipped_bam(
         bool get_flank_query_coords,
         bool first_only,
         bool append_sample_to_read,
-        bool force_forward
+        bool force_forward,
+        int32_t max_clip_fetch
 ){
     GoogleAuthenticator authenticator;
     TransMap template_transmap;
@@ -1159,6 +1273,13 @@ void fetch_reads_from_clipped_bam(
                 }
 
                 const auto& seq = sample_queries.at(sample_name).at(name);
+
+                // Attempt to fetch additional sequence if it is available (i.e. alignment ends on clip operation)
+                if (outer_coord.ref_start != region.start){
+                    i = max(i - max_clip_fetch, 0);
+                } else if (outer_coord.ref_stop != region.stop){
+                    l = min(l + max_clip_fetch, int32_t(seq.size()) - i);
+                }
 
                 if (seq.empty() or (i > seq.size() - 1) or (i + l > seq.size())){
                     throw runtime_error("ERROR: fetch_reads_from_clipped_bam coord slice attempted on empty or undersized sequence: \n" +

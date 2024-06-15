@@ -333,29 +333,44 @@ void TransMap::for_each_sample_of_read(const string& read_name, const function<v
 
 
 void TransMap::for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const{
+    unordered_set<int64_t> visited;
+
     auto id = graph.name_to_id(path_name);
     graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
         graph.for_each_neighbor_of_type(r, 'S', [&](int64_t s){
-            f(graph.get_node(s).name, s);
+            if (not visited.count(s)){
+                f(graph.get_node(s).name, s);
+                visited.emplace(s);
+            }
         });
     });
 }
 
 
 void TransMap::for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const{
+    unordered_set<int64_t> visited;
+
     auto id = graph.name_to_id(sample_name);
     graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
         graph.for_each_neighbor_of_type(r, 'P', [&](int64_t p){
-            f(graph.get_node(p).name, p);
+            if (not visited.count(p)){
+                f(graph.get_node(p).name, p);
+                visited.emplace(p);
+            }
         });
     });
 }
 
 
 void TransMap::for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const{
+    unordered_set<int64_t> visited;
+
     graph.for_each_neighbor_of_type(sample_id, 'R', [&](int64_t r){
         graph.for_each_neighbor_of_type(r, 'P', [&](int64_t p){
-            f(graph.get_node(p).name, p);
+            if (not visited.count(p)){
+                f(graph.get_node(p).name, p);
+                visited.emplace(p);
+            }
         });
     });
 }
@@ -371,7 +386,7 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
     array<int64_t, 2> path_ids = {-1,-1};
 
     // First find an arbitrary assignment of phases, which is sorted by path id
-    graph.for_each_neighbor_of_type(sample_id, 'P', [&](int64_t p){
+    for_each_path_of_sample(sample_id, [&](const string& path_name, int64_t p){
         if (path_ids[0] == -1){
             path_ids[0] = p;
         }
@@ -379,7 +394,7 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
             path_ids[1] = p;
         }
         else{
-            throw runtime_error("ERROR: more than two phased paths found for sample: " + get_node(sample_id).name);
+            throw runtime_error("ERROR: more than two paths found for sample: " + get_node(sample_id).name);
         }
     });
 
@@ -389,6 +404,10 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
 
     // Iterate the variants transitively through the paths
     for (int64_t path_id: path_ids) {
+        if (path_id == -1){
+            continue;
+        }
+
         graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t v) {
             f(graph.get_node(v).name, v, path_id == path_ids[0]);
         });
@@ -420,8 +439,6 @@ void TransMap::for_node_in_bfs(
 
 void TransMap::write_edge_info_to_csv(path output_path) const{
     ofstream out(output_path);
-
-    out << "sample,read,path,cost" << '\n';
 
     for_each_sample([&](const string& sample_name, int64_t sample_id){
         for_each_read_of_sample(sample_id, [&](int64_t read_id){

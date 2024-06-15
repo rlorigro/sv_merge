@@ -37,7 +37,7 @@ pyplot.switch_backend('Agg')
 print("USING pytorch VERSION: ", torch.__version__)
 
 
-def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs):
+def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs, max_batches_per_epoch):
     train_losses = list()
     test_losses = list()
     test_aucs = list()
@@ -57,7 +57,10 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
 
     batch_index = 0
     for e in range(epochs):
-        for x, y in train_loader:
+        for i, (x, y) in enumerate(train_loader.iter_balanced_batches(max_batches_per_epoch=max_batches_per_epoch)):
+            if i >= max_batches_per_epoch:
+                break
+
             loss = train_batch(model=model, x=x, y=y, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn)
 
             n_positive = sum(y.data.numpy())
@@ -132,7 +135,7 @@ def test(model, loader, loss_fn, use_sigmoid=False):
     losses = list()
 
     batch_index = 0
-    for x, y in loader:
+    for x, y in loader.iter_batches():
         y_predict = model.forward(x, use_sigmoid=use_sigmoid)
 
         y_vectors.append(y.data.numpy())
@@ -175,7 +178,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the hyperparameters
     learning_rate_max = 1
     learning_rate_base = 1e-5
-    weight_decay = 1e-5
+    weight_decay = 4e-6
     dropout_rate = 0.01
 
     goal_batch_size = 4096
@@ -186,11 +189,7 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Batch size is the number of training examples used to calculate each iteration's gradient
     batch_size_train = min(goal_batch_size, len(dataset_train))
 
-    if downsample:
-        minority_class_size = min(sum(dataset_train.y_data), len(dataset_train.y_data) - sum(dataset_train.y_data))
-        batch_size_train = int(min(goal_batch_size, minority_class_size*2))
-
-    print("Using batch size: ", batch_size_train)
+    max_batches_per_epoch = sys.maxsize
 
     # write the hyperparameters to a file
     with open(config_path, "w") as f:
@@ -207,17 +206,6 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
         else:
             f.write("filter_fn: None\n")
 
-    data_loader_train = None
-
-    if downsample:
-        weight_tensor = compute_downsampling_weight_tensor(dataset_train.y_data)
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(weight_tensor, len(weight_tensor))
-        data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, sampler=sampler)
-    else:
-        data_loader_train = DataLoader(dataset=dataset_train, batch_size=batch_size_train, shuffle=True)
-
-    data_loader_test = DataLoader(dataset=dataset_test, batch_size=len(dataset_test), shuffle=False)
-
     input_size = len(dataset_train[0][0])
     print("using input size: ", input_size)
     shallow_model = ShallowLinear(input_size=input_size, dropout_rate=dropout_rate)
@@ -226,44 +214,43 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     optimizer = optim.SGD(shallow_model.parameters(), lr=learning_rate_base, weight_decay=weight_decay)
 
     # Initialize CLR scheduler
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=len([x for x in data_loader_train]), epochs=n_epochs)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=learning_rate_max, steps_per_epoch=dataset_train.get_n_batches_per_epoch(), epochs=n_epochs)
 
     # Define the loss function
     loss_fn = nn.BCEWithLogitsLoss()
 
     # Train and get the resulting loss per iteration
-    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=data_loader_train, test_loader=data_loader_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs)
+    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=dataset_train, test_loader=dataset_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
 
     # Test and get the resulting predicted y values
-    shallow_model.eval() # switch to eval mode to disable dropout
+    shallow_model.eval()    # switch to eval mode to disable dropout
 
-    # Need to use_sigmoid this time to get meaningful 0-1 values
-    y_predict, y_test, mean_loss = test(model=shallow_model, loader=data_loader_test, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
-
-    return train_losses, test_losses, test_aucs, y_predict.squeeze(), y_test, shallow_model
+    return train_losses, test_losses, test_aucs, shallow_model
 
 
-def compute_downsampling_weight_tensor(y_data):
+def compute_downsampling_weight_tensor(dataset):
+    y_data = dataset.y_data
+
     n_total = len(y_data)
     n_true = sum(y_data)
     n_false = n_total - sum(y_data)
     weight_tensor = torch.clone(y_data).detach()
+    # weight = None
 
-    # compute a weight such that the majority class will be downsampled by that weight to match the minority weight,
-    # and then construct a tensor of weights such that each element of the minority class has weight 1 and each element
-    # of the majority class has weight equal to the downsample weight
-    if n_true < n_false:
-        weight = n_true / n_false
-        weight_tensor[y_data == 0] = weight
-        weight_tensor[y_data == 1] = 1
-    else:
-        weight = n_false / n_true
-        weight_tensor[y_data == 1] = weight
-        weight_tensor[y_data == 0] = 1
+    weight_tensor[weight_tensor == 1] = 1/n_true
+    weight_tensor[weight_tensor == 0] = 1/n_false
+
+    expected_epoch_size = float(torch.sum(weight_tensor))
+
+    print("n_true: %d\tn_false: %d\texpected_epoch_size: %d" % (n_true, n_false, expected_epoch_size))
 
     return weight_tensor
 
 
+'''
+Downsamples the test data to have an equal number of true and false labels. Is a hard downsample, used in testing,
+whereas the training data is downsampled using weighted random sampling.
+'''
 def downsample_test_data(y_true, y_predict, seed=37):
     random.seed(seed)
 
@@ -295,16 +282,18 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style=
             axes.plot(fpr, tpr, label=label, color=color, linestyle=style, alpha=alpha)
         else:
             axes.plot(fpr, tpr, color=color, linestyle=style, alpha=alpha)
+
     else:
         if label is not None:
             axes.plot(fpr, tpr, label=label, linestyle=style, alpha=alpha)
         else:
             axes.plot(fpr, tpr, linestyle=style, alpha=alpha)
 
+        color = axes.get_lines()[-1].get_color()
+
     axes.set_xlabel("False positive rate")
     axes.set_ylabel("True positive rate")
 
-    # add major and minor gridlines at 5 and 10% intervals
     axes.grid(which='major', color='black', linestyle='-', linewidth=0.5)
     axes.grid(which='minor', color='black', linestyle=':', linewidth=0.5)
 
@@ -320,7 +309,7 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style=
                 # add marker
                 axes.plot(x, y, marker='o', color=color, markeredgewidth=0)
 
-    return axes
+    return axes, fpr, tpr, thresholds
 
 
 def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf_path):
@@ -334,16 +323,20 @@ def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf
 
 
 def min50bp(record):
-    return record.INFO["SVLEN"][0] >= 50
+    if type(record.INFO["SVLEN"]) == list:
+        return record.INFO["SVLEN"][0] >= 50
+    else:
+        return record.INFO["SVLEN"] >= 50
 
 
-def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir, skip_training=False):
+def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir):
     print("Thread started with ", truth_info_name, annotation_name)
 
     label = truth_info_name + " truth labels and " + annotation_name + " features"
 
     dataset_train = VcfDataset(vcf_paths=train_vcfs, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=train_contigs, filter_fn=filter_fn)
     dataset_test = VcfDataset(vcf_paths=test_vcfs, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=test_contigs, filter_fn=filter_fn)
+    dataset_eval = VcfDataset(vcf_paths=eval_vcfs, truth_info_name=truth_info_name, annotation_name=annotation_name, contigs=eval_contigs, filter_fn=filter_fn)
 
     n_train = len(dataset_train)
     n_test = len(dataset_test)
@@ -354,16 +347,7 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print('Input shape: ', dataset_train[0][0].shape)
     print('Output shape: ', dataset_train[0][1].shape)
 
-    if not skip_training:
-        train_losses, test_losses, test_aucs, y_predict, y_true, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
-    else:
-        # construct dummy data
-        y_true = dataset_test.y_data.numpy()
-        y_predict = numpy.random.rand(n_test)
-        train_losses = numpy.random.rand(100)
-        test_losses = numpy.random.rand(100)
-        test_aucs = numpy.random.rand(100)
-        model = ShallowLinear(input_size=dataset_train[0][0].shape[0])
+    train_losses, test_losses, test_aucs, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
 
     # Format the date and time
     model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
@@ -373,9 +357,13 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print("Final loss:", sum(train_losses[-100:])/100)
     plot_loss(train_losses=train_losses, test_losses=test_losses, test_aucs=test_aucs, label=label, output_dir=output_dir)
 
-    x = dataset_test.x_data.numpy()
+    x = dataset_eval.x_data.numpy()
 
-    return dataset_test.records, x, dataset_test.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
+    # Finally evaluate on a 3rd dataset which is not used to select training termination conditions
+    # Need to use_sigmoid this time to get meaningful 0-1 values
+    y_predict, y_true, mean_loss = test(model=model, loader=dataset_eval, loss_fn=torch.nn.BCELoss(), use_sigmoid=True)
+
+    return dataset_eval.records, x, dataset_eval.feature_indexes, y_true, y_predict, truth_info_name, annotation_name
 
 
 def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name):
@@ -393,19 +381,22 @@ def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
             non_tandem[1].append(y_predict[r])
 
     label = truth_info_name + " truth labels and " + annotation_name + " features TANDEM"
-    axes = plot_roc_curve(y_true=tandem[0], y_predict=tandem[1], label=label, axes=axes, style=':')
+    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=tandem[0], y_predict=tandem[1], label=label, axes=axes, style=':')
 
     color = axes.get_lines()[-1].get_color()
 
     label = truth_info_name + " truth labels and " + annotation_name + " features NON-TANDEM"
-    axes = plot_roc_curve(y_true=non_tandem[0], y_predict=non_tandem[1], label=label, color=color, axes=axes)
+    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=non_tandem[0], y_predict=non_tandem[1], label=label, color=color, axes=axes)
 
     return axes
 
 
 def get_length(record: vcfpy.Record):
     if "SVLEN" in record.INFO:
-        return abs(record.INFO["SVLEN"][0])
+        if type(record.INFO["SVLEN"]) == list:
+            return abs(record.INFO["SVLEN"][0])
+        else:
+            return abs(record.INFO["SVLEN"])
     else:
         return abs(len(record.ALT[0]) - len(record.REF))
 
@@ -430,9 +421,35 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
 
         f = float(i)/float(len(length_stratified_results))
         color = colormap(f)
-        axes = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+        axes, fpr, tpr, thresholds = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
 
     return axes
+
+
+def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs):
+    with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
+        for path in train_vcfs:
+            f.write(path + "\n")
+
+    with open(os.path.join(output_dir, "test_vcfs.txt"), "w") as f:
+        for path in test_vcfs:
+            f.write(path + "\n")
+
+    with open(os.path.join(output_dir, "train_contigs.txt"), "w") as f:
+        for contig in train_contigs:
+            f.write(contig + "\n")
+
+    with open(os.path.join(output_dir, "test_contigs.txt"), "w") as f:
+        for contig in test_contigs:
+            f.write(contig + "\n")
+
+    with open(os.path.join(output_dir, "eval_vcfs.txt"), "w") as f:
+        for path in eval_vcfs:
+            f.write(path + "\n")
+
+    with open(os.path.join(output_dir, "eval_contigs.txt"), "w") as f:
+        for contig in eval_contigs:
+            f.write(contig + "\n")
 
 
 def main():
@@ -443,41 +460,45 @@ def main():
         os.makedirs(output_dir)
 
     train_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG002_multiannotated_32x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG005_multiannotated_32x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00438_multiannotated_32x_asm10_10bp.vcf.gz",
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00621_multiannotated_32x_asm10_10bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00621_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG01928_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG02572_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03098_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03492_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
     ]
 
     test_vcfs = [
-        "/home/ryan/data/test_hapestry/vcf/filter_paper/dipcall_asm10_10bp/32x/HG00673_multiannotated_32x_asm10_10bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00673_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00733_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
     ]
 
-    with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
-        for path in train_vcfs:
-            f.write(path + "\n")
-
-    with open(os.path.join(output_dir, "test_vcfs.txt"), "w") as f:
-        for path in test_vcfs:
-            f.write(path + "\n")
+    eval_vcfs = [
+        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03516_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+    ]
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
     test_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
+    eval_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX"}
 
-    with open(os.path.join(output_dir, "train_contigs.txt"), "w") as f:
-        for contig in train_contigs:
-            f.write(contig + "\n")
+    # Which truth info and annotation names to use (these names are hardcoded in the dataloader to define its behavior)
+    truth_info_names = ["Hapestry"]
+    # truth_info_names = ["Hapestry", "TruvariBench_TP"]
+    annotation_names = ["Hapestry"]
+    # annotation_names = ["Hapestry", "Sniffles"]
 
-    with open(os.path.join(output_dir, "test_contigs.txt"), "w") as f:
-        for contig in test_contigs:
-            f.write(contig + "\n")
+    # Whether to subset the VCFs to >= 50bp
+    filter_fn = min50bp
+    # filter_fn = None
 
-    # filter_fn = min50bp
-    filter_fn = None
+    # Write a bunch of config files for record keeping
+    write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs)
 
+    # Initialize some things for plotting
     fig = pyplot.figure()
     fig.set_size_inches(10,8)
     axes = pyplot.axes()
+
+    roc_data = dict()
 
     tandem_fig = pyplot.figure()
     tandem_fig.set_size_inches(10,8)
@@ -486,24 +507,28 @@ def main():
     length_figs = dict()
     length_axes = dict()
 
+    n_processes = len(truth_info_names) * len(annotation_names)
+
     args = list()
 
-    # for truth_info_name in ["Hapestry", "TruvariBench_TP"]:
-    for truth_info_name in ["TruvariBench_TP"]:
-        for annotation_name in ["Hapestry", "Sniffles"]:
-        # for annotation_name in ["Sniffles"]:
-            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, filter_fn, output_dir, False))
+    # Set up args for multithreading (each combo of truth/label will get its own thread)
+    for truth_info_name in truth_info_names:
+        for annotation_name in annotation_names:
+            args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir))
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
-    with multiprocessing.Pool(4) as pool:
+    with multiprocessing.Pool(processes=n_processes) as pool:
         results = pool.starmap(thread_fn, args)
+
+    # results = [thread_fn(truth_info_names[0], annotation_names[0], train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir)]
 
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
         length_axis = length_axes[truth_info_name + "_" + annotation_name]
 
-        if annotation_name.lower() != "hapestry" and truth_info_name.lower() == "truvaribench_tp":
+        # Plot the individual feature ROCs (without modeling)
+        if annotation_name != "Hapestry" and truth_info_name == "TruvariBench_TP":
             cmap = pyplot.get_cmap('tab20')
 
             for name,index in feature_indexes.items():
@@ -513,13 +538,13 @@ def main():
 
                     color = cmap(float(index-12)/(len(feature_indexes)-12))
 
-                    axes = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
+                    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
         tandem_axes = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
         length_axis = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
 
         # write the filtered VCF (BEFORE DOWNSAMPLING)
-        write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=test_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
+        write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=eval_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
 
         y_true, y_predict = downsample_test_data(y_true, y_predict)
 
@@ -529,7 +554,9 @@ def main():
         print('y_predict y')
         print(y_predict[0], y_true[0])
 
-        axes = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
+        axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
+
+        roc_data[label] = (fpr, tpr, thresholds)
 
     # Generate a legend for axes and force bottom right location
     axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
@@ -544,6 +571,12 @@ def main():
         length_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
         length_axis.legend(loc="lower right", fontsize='small')
         length_figs[label].savefig(os.path.join(output_dir,label+"_length.png"), dpi=200)
+
+    for label,(fpr,tpr,thresholds) in roc_data.items():
+        with open(os.path.join(output_dir, label.replace(" ", "_") + "_roc.csv"), "w") as f:
+            f.write("threshold,fpr,tpr\n")
+            for fpr_val,tpr_val,threshold in zip(fpr,tpr,thresholds):
+                f.write(f"{threshold},{fpr_val},{tpr_val}\n")
 
     # pyplot.show()
     # pyplot.close()

@@ -41,7 +41,7 @@ using std::ref;
 
 namespace sv_merge{
 
-using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<Sequence> > >;
+using sample_region_read_map_t = unordered_map <string, unordered_map <Region, vector<StrandedQSequence> > >;
 using sample_region_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, CigarInterval> > > >;
 using sample_region_flanked_coord_map_t = unordered_map <string, unordered_map <Region, vector<pair<string, pair<CigarInterval,CigarInterval> > > > >;
 
@@ -54,7 +54,9 @@ void fetch_reads(
         unordered_map<Region,TransMap>& region_transmaps,
         bool require_spanning,
         bool append_sample_to_read = false,
-        bool force_forward = false
+        bool force_forward = false,
+        bool get_qualities = false,
+        int32_t max_clip_fetch = 0
 );
 
 
@@ -72,6 +74,7 @@ void fetch_reads(
  * @param first_only only consider the first read observed for each window in the BAM (for omitting misassemblies in asm-to-ref BAMs)
  * @param append_sample_to_read if true, attempt to force unique read names by using their sample name as a suffix
  * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ * @param max_clip_fetch if non-zero, attempt to fetch this many clipped bases beyond the end of non-spanning sequences
  */
 void fetch_reads_from_clipped_bam(
         Timer& t,
@@ -85,7 +88,8 @@ void fetch_reads_from_clipped_bam(
         bool get_flank_query_coords = false,
         bool first_only = false,
         bool append_sample_to_read = false,
-        bool force_forward = false
+        bool force_forward = false,
+        int32_t max_clip_fetch = 0
 );
 
 
@@ -109,5 +113,21 @@ void extract_flanked_subregion_coords_from_sample(
         bool unclip_coords,
         path bam_path
 );
+
+
+void extract_subsequences_from_sample_thread_fn(
+        GoogleAuthenticator& authenticator,
+        sample_region_read_map_t& sample_to_region_reads,
+        const vector <pair <string,path> >& sample_bams,
+        const vector<Region>& regions,
+        bool require_spanning,
+        bool force_forward,
+        bool get_qualities,
+        atomic<size_t>& job_index,
+        const vector<string>& tags_to_fetch = {},
+        bool allow_unused_tags = false,
+        int32_t max_clip_fetch = 0
+);
+
 
 }

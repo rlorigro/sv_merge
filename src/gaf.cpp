@@ -348,6 +348,16 @@ void GafAlignment::get_query_sequence(string& result, int32_t start, int32_t sto
 }
 
 
+void GafAlignment::get_qualities(vector<uint8_t>& result){
+    throw runtime_error("ERROR: get_qualities not implemented for GAF alignment");
+}
+
+
+void GafAlignment::get_tag_as_string(const string& name, string& result, bool allow_missing) const {
+    throw runtime_error("ERROR: get_tag_as_string not implemented for GAF alignment");
+}
+
+
 void GafAlignment::get_query_name(string& result) const{
     result.clear();
     result = query_name;

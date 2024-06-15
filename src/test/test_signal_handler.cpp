@@ -1,15 +1,18 @@
 #include <iostream>
+using std::cerr;
+
+#ifdef __linux__
+
 #include <stdexcept>
 #include <csignal>
 #include <atomic>
 
 using std::runtime_error;
-using std::cerr;
+
 using std::signal;
 using std::atomic;
 using std::cerr;
 using std::cout;
-
 
 extern "C" void signal_handler(int signal) {
     // UNSAFE USAGE OF STD NAMESPACE!!! See https://man7.org/linux/man-pages/man7/signal-safety.7.html
@@ -55,3 +58,12 @@ int main(){
 
     return 0;
 }
+
+#else
+
+int main(){
+    cerr << "This exe is only supported on Linux" << '\n';
+    return 1;
+}
+
+#endif

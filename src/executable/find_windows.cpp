@@ -34,6 +34,7 @@ void find_windows(
         path tandem_bed,
         path vcf,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         int32_t flank_length,
         size_t n_chunks
         ){
@@ -62,7 +63,7 @@ void find_windows(
         contig_tandems[r.name].emplace_back(interval);
     });
 
-    construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, regions);
+    construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, min_sv_length, regions);
 
     size_t r = 0;
     path output_path;
@@ -107,8 +108,9 @@ int main (int argc, char* argv[]){
     path bam_csv;
     path vcf;
     path ref;
-    int32_t interval_max_length;
-    int32_t flank_length;
+    int32_t interval_max_length = 50000;
+    int32_t min_sv_length = 20;
+    int32_t flank_length = 200;
     size_t n_chunks = 1;
 
     CLI::App app{"App description"};
@@ -142,6 +144,12 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
+            "--min_sv_length",
+            min_sv_length,
+            "Skip all variants less than this length (bp)")
+            ->required();
+
+    app.add_option(
             "--flank_length",
             flank_length,
             "How much flanking sequence to use when fetching and aligning reads")
@@ -154,6 +162,7 @@ int main (int argc, char* argv[]){
         tandem_bed,
         vcf,
         interval_max_length,
+        min_sv_length,
         flank_length,
         n_chunks
     );

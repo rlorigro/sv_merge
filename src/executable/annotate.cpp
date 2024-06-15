@@ -479,6 +479,7 @@ void compute_graph_evaluation(
         size_t n_threads,
         int32_t flank_length,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         const path& output_dir
         ){
 
@@ -488,7 +489,7 @@ void compute_graph_evaluation(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 1;
+    vcf_reader.min_sv_length = min_sv_length;
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
@@ -579,6 +580,7 @@ void annotate(
         const string& label,
         int32_t flank_length,
         int32_t interval_max_length,
+        int32_t min_sv_length,
         int32_t n_threads,
         bool debug,
         bool force_unique_reads,
@@ -625,7 +627,7 @@ void annotate(
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
         path bed_log_path = output_dir / "windows_omitted.bed";
-        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, regions, bed_log_path, false);
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, min_sv_length, regions, bed_log_path, false);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
@@ -673,7 +675,9 @@ void annotate(
                 region_transmaps,
                 false,
                 force_unique_reads,
-                false
+                false,
+                false,
+                flank_length
         );
     }
     else{
@@ -690,7 +694,8 @@ void annotate(
                 false,
                 false,
                 force_unique_reads,
-                false
+                false,
+                flank_length
         );
     }
 
@@ -754,6 +759,7 @@ void annotate(
             n_threads,
             flank_length,
             interval_max_length,
+            min_sv_length,
             staging_dir
     );
 
@@ -818,6 +824,7 @@ int main (int argc, char* argv[]){
     path vcf;
     int32_t flank_length = 150;
     int32_t interval_max_length = 15000;
+    int32_t min_sv_length = 20;
     int32_t n_threads = 1;
     bool debug = false;
     bool force_unique_reads = false;
@@ -880,6 +887,12 @@ int main (int argc, char* argv[]){
             "How long a window can be in bp before it is skipped")
             ->required();
 
+    app.add_option(
+            "--min_sv_length",
+            min_sv_length,
+            "Skip all variants less than this length (bp)")
+            ->required();
+
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
@@ -903,6 +916,7 @@ int main (int argc, char* argv[]){
         label,
         flank_length,
         interval_max_length,
+        min_sv_length,
         n_threads,
         debug,
         force_unique_reads,

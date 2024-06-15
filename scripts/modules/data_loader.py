@@ -1,6 +1,5 @@
 from torch.utils.data.dataset import Dataset
 from collections import defaultdict
-from .IterativeHistogram import IterativeHistogram
 import numpy as np
 import torch
 import sys
@@ -40,7 +39,8 @@ def load_features_from_vcf(
 
     type_vector = [0,0,0,0,0]
 
-    for r,record in enumerate(reader):
+    r = 0
+    for record in reader:
         info = record.INFO
 
         if filter_fn is not None:
@@ -382,65 +382,11 @@ def load_features_from_vcf(
                 print(feature_names)
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
-
-class VcfStratifier:
-    def __init__(self, target_class_size):
-        self.target_class_size = target_class_size
-        self.type_indexes = list()
-        self.type_distribution = defaultdict(int)
-        self.length_indexes = list()
-        self.log_length_distribution = IterativeHistogram(start=0, stop=4, n_bins=4, unbounded_upper_bin=True)
-
-    def update(self, type_index, ref_length, alt_length):
-        self.type_distribution[type_index] += 1
-        self.type_indexes.append(type_index)
-
-        log_length = np.log10(abs(ref_length - alt_length) + 1)
-        length_index = self.log_length_distribution.update(log_length)
-        self.length_indexes.append(length_index)
-
-    def __str__(self):
-        print("Type distribution:")
-        for k,v in self.type_distribution.items():
-            print("%s: %d" % (type_names[k], v))
-
-        print("Log length distribution:")
-        for i in range(len(self.log_length_distribution.edges)-1):
-            print("[%f, %f): %d" % (self.log_length_distribution.edges[i], self.log_length_distribution.edges[i+1], self.log_length_distribution.histogram[i]))
-
-    def compute_weight_vectors(self):
-        for k,v in self.type_distribution.items():
-            if v < self.target_class_size:
-                print("WARNING: type %s has less than target class size: %d, add more training data" % (type_names[k], v))
-                self.type_distribution[k] = self.target_class_size
-
-        type_weights = {k: self.target_class_size/v for k,v in self.type_distribution.items()}
-
-        for i in range(len(self.log_length_distribution.get_histogram())):
-            if self.log_length_distribution.histogram[i] < self.target_class_size:
-                print("WARNING: log length bin %d has less than target class size: %d, add more training data" % (i, self.log_length_distribution.histogram[i]))
-                self.log_length_distribution.histogram[i] = self.target_class_size
-
-        length_weights = {i: self.target_class_size/v for i,v in enumerate(self.log_length_distribution.get_histogram())}
-
-        return type_weights, length_weights
-
-    def get_weight_vectors(self):
-        type_weights, length_weights = self.compute_weight_vectors()
-
-        type_weight_vector = np.zeros(len(self.type_indexes))
-        for i in range(len(self.type_indexes)):
-            type_weight_vector[i] = type_weights[self.type_indexes[i]]
-
-        length_weight_vector = np.zeros(len(self.length_indexes))
-        for i in range(len(self.length_indexes)):
-            length_weight_vector[i] = length_weights[self.length_indexes[i]]
-
-        return type_weight_vector, length_weight_vector
+        r += 1
 
 
 class VcfDataset(Dataset):
-    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, filter_fn=None, contigs=None):
+    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None):
         x = list()
         y = list()
 
@@ -448,21 +394,24 @@ class VcfDataset(Dataset):
         self.records = list()
 
         for p,path in enumerate(vcf_paths):
+            if len(path) == 0 or path is None:
+                continue
+
             feature_names = list()
+
             load_features_from_vcf(
                 records=self.records,
                 x=x,
                 y=y,
-                feature_names=feature_names,
                 vcf_path=path,
+                feature_names=feature_names,
                 truth_info_name=truth_info_name,
                 annotation_name=annotation_name,
                 filter_fn=filter_fn,
                 contigs=contigs,
             )
 
-            if p == 0:
-                self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
+            self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
         x = np.array(x)
         y = np.array(y)
@@ -480,9 +429,73 @@ class VcfDataset(Dataset):
 
         self.filter_fn = filter_fn
 
+        self.minority_size = self.compute_minority_size()
+
+        self.ordinals = list(range(self.length))
+
+        self.batch_size = batch_size
+        self.subset_ordinals = list()
+        self.initialize_iterator()
+
+    def set_batch_size(self, batch_size):
+        self.batch_size = batch_size
+
+    def compute_minority_size(self):
+        unique, counts = np.unique(self.y_data.numpy(), return_counts=True)
+
+        return min(counts)
+
+    def get_n_batches_per_epoch(self):
+        return len(self.subset_ordinals) // self.batch_size
+
     def __getitem__(self, index):
         return self.x_data[index], self.y_data[index]
 
     def __len__(self):
         return self.length
 
+    def initialize_iterator(self):
+        # Shuffle and iterate over the data, accumulating approximately balanced batches without replacement
+        np.random.shuffle(self.ordinals)
+
+        self.subset_ordinals = list()
+        accumulated_class_counts = defaultdict(int)
+
+        for i in self.ordinals:
+            c = self.y_data[i].item()
+
+            if accumulated_class_counts[c] < self.minority_size:
+                self.subset_ordinals.append(i)
+                accumulated_class_counts[c] += 1
+
+        np.random.shuffle(self.subset_ordinals)
+
+    def iter_balanced_batches(self, max_batches_per_epoch=sys.maxsize):
+        n = 0
+        i = 0
+        while i + self.batch_size < len(self.subset_ordinals):
+            if n >= max_batches_per_epoch:
+                break
+
+            batch_indexes = self.subset_ordinals[i:i+self.batch_size]
+
+            yield self.x_data[batch_indexes], self.y_data[batch_indexes]
+
+            i += self.batch_size
+            n += 1
+
+        self.initialize_iterator()
+
+    def iter_batches(self, max_batches_per_epoch=sys.maxsize):
+        n = 0
+        i = 0
+        m = 0
+        while m < self.length - 1:
+            if n >= max_batches_per_epoch:
+                break
+
+            m = min(i+self.batch_size, self.length)
+            yield self.x_data[i:m], self.y_data[i:m]
+
+            i += self.batch_size
+            n += 1

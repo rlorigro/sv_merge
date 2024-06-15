@@ -1,8 +1,10 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 using std::string;
+using std::vector;
 
 
 namespace sv_merge {
@@ -26,6 +28,22 @@ public:
     StrandedSequence(const string& name, const string& sequence, bool is_reverse);
     StrandedSequence(const string& name, const string& sequence);
     StrandedSequence();
+};
+
+
+class StrandedQSequence{
+public:
+    string name;
+    string sequence;
+    vector<uint8_t> qualities;
+    bool is_reverse;
+    string tags;
+
+    StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities, bool is_reverse);
+    StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities);
+    StrandedQSequence(const string& name, const string& sequence, bool is_reverse);
+    StrandedQSequence(const string& name, const string& sequence);
+    StrandedQSequence();
 };
 
 
