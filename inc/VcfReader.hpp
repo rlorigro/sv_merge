@@ -319,6 +319,8 @@ public:
     static const char BREAKEND_SEPARATOR;
     static const char UNPHASED_CHAR;
     static const char PHASED_CHAR;
+    static const string CHR_STR_LOWER;
+    static const string CHR_STR_UPPER;
 
     /**
      * Info field constants

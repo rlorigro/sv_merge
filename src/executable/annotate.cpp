@@ -255,25 +255,35 @@ void compute_graph_evaluation_thread_fn(
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
+cerr << "ANNOTATE> 0  region=" << region.name << ":" << region.start << ".." << region.stop << "\n";
 
         path subdir = output_dir / region.to_unflanked_string('_', flank_length);
+cerr << "ANNOTATE> 0.1  region_records contains the region? " << region_records.contains(region) << "\n";
 
         auto records = region_records.at(region);
+cerr << "ANNOTATE> 0.2\n";
 
         create_directories(subdir);
+cerr << "ANNOTATE> 0.3\n";
 
         path gfa_path = subdir / "graph.gfa";
         path fasta_filename = subdir / "haplotypes.fasta";
+cerr << "ANNOTATE> 0.4\n";
 
         VariantGraph variant_graph(ref_sequences, contig_tandems);
+cerr << "ANNOTATE> 0.5\n";
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)){
+cerr << "ANNOTATE> 0.6\n";
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
+cerr << "ANNOTATE> 0.7\n";
         }
         else{
             // VariantGraph assumes that the flank length needs to be added to the region
+cerr << "ANNOTATE> 0.8\n";
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
+cerr << "ANNOTATE> 0.9\n";
         }
 
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
@@ -316,7 +326,7 @@ void compute_graph_evaluation_thread_fn(
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
         vector<float> max_observed_identities(variant_graph.vcf_records.size());
-
+cerr << "ANNOTATE> 1 \n";
         // First annotate all the variants as tandem or not
         int32_t bnd_pos;
         string bnd_chromosome;
@@ -324,28 +334,25 @@ void compute_graph_evaluation_thread_fn(
             auto& record = variant_graph.vcf_records[v];
             coord_t ref_coord;
             record.get_reference_coordinates(false, ref_coord);
-
             bool is_tandem = false;
-
             contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
-                is_tandem = true;
+                is_tandem=true;
                 return false;
             });
             if (!is_tandem && record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()==2) {
                 record.get_breakend_chromosome(bnd_chromosome);
                 bnd_pos=record.get_breakend_pos();
                 contig_interval_trees.at(bnd_chromosome).overlap_find_all({bnd_pos,bnd_pos}, [&](auto iter) {
-                    is_tandem = true;
+                    is_tandem=true;
                     return false;
                 });
             }
-
             variant_supports[v].is_tandem = is_tandem;
         }
+cerr << "ANNOTATE> 2 \n";
 
-        // Iterate the alignments and accumulate their stats w.r.t. variants
-        // For tandem-contained variants, stats pertain to entire tandem
-        unordered_map<string,size_t> counter;
+        // Iterate the alignments and accumulate their stats w.r.t. variants.
+        // For tandem-contained variants, stats pertain to entire tandem.
         for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
             auto& path = alignment.get_path();
             if (path.size()<2) return;
@@ -361,9 +368,15 @@ void compute_graph_evaluation_thread_fn(
             vector<interval_t> ref_intervals, singleton_interval, no_interval;
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
                 auto record = _record;
+cerr << "ANNOTATE> 2.5  record: ";
+record.print(cerr);
+cerr << "\n";
                 variant_graph.vcf_record_to_path_intervals(path,edges_of_the_record,variant_flank_length,ref_intervals);
+cerr << "ANNOTATE> 2.6 \n";
                 max_identity=0; max_length=0;
-                for (const auto interval: ref_intervals) {
+                for (const auto& interval: ref_intervals) {
+cerr << "ANNOTATE> 2.7  " << interval.first << ".." << interval.second << "\n";
+if (interval.second-interval.first>500000) cerr << "WARNING: TOO LONG INTERVAL!!!! " << (interval.second-interval.first) << "\n";
                     AlignmentSummary summary;
                     singleton_interval.clear(); singleton_interval.push_back(interval);
                     for_cigar_interval_in_alignment(false, alignment, singleton_interval, no_interval, [&](const CigarInterval& i, const interval_t& interval){
@@ -381,6 +394,7 @@ void compute_graph_evaluation_thread_fn(
                         placeholder.code = 7;   // '=' operation
                         summary.update(placeholder,true);
                     }
+cerr << "ANNOTATE> 2.8 \n";
 
                     max_identity=max(max_identity,summary.compute_identity());
                     max_length=max(max_length,interval.second-interval.first);
@@ -389,41 +403,68 @@ void compute_graph_evaluation_thread_fn(
                 // Update the max observed identity for this VCF record
                 max_observed_identities[id]=max(max_observed_identities[id],max_identity);
 
-                // Update the region length for this VCF record, using arbitrarily the max length over all intervals.
-                if (variant_supports[id].length_of_evaluated_region==0 || is_spanning) variant_supports[id].length_of_evaluated_region=max(variant_supports[id].length_of_evaluated_region,max_length);
+                // FC> Max or min or avg?
+                // Update the region length for this VCF record to the max length over all intervals (arbitrary).
+cerr << "variant_supports[" << id << "].length_of_evaluated_region before: " << variant_supports[id].length_of_evaluated_region << "\n";
+                if (variant_supports[id].length_of_evaluated_region==0 || is_spanning) {
+                    variant_supports[id].length_of_evaluated_region=max(variant_supports[id].length_of_evaluated_region,max_length);
+cerr << "variant_supports[" << id << "].length_of_evaluated_region after: " << variant_supports[id].length_of_evaluated_region << "\n";
+                }
 
-                // Update the histogram for this VCF record, using arbitrarily the max identity over all intervals.
+                // FC> Max or min or avg?
+                // Update the histogram for this VCF record to the max identity over all intervals (arbitrary).
                 variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(max_identity);
+cerr << "ANNOTATE> 2.9 \n";
             });
         });
-
-        auto total_coverage = float(l_coverage + r_coverage) / 2.0;
+cerr << "ANNOTATE> 3 \n";
+        const double total_coverage = float(l_coverage+r_coverage)/2.0;
 
         path output_path = subdir / "annotated.vcf";
         ofstream out_file(output_path);
-        if (not out_file.is_open() or not out_file.good()){
-            throw runtime_error("ERROR: file could not be written: " + output_path.string());
-        }
-
-        out_file << "##INFO=<ID=" + label + ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
-        out_file << "##INFO=<ID=" + label + "_MAX" + ",Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
-        out_file << "##INFO=<ID=" + label + "_NEIGHBORS" + ",Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">" << '\n';
+        if (not out_file.is_open() or not out_file.good()) throw runtime_error("ERROR: file could not be written: " + output_path.string());
+        out_file << "##INFO=<ID=" << label << ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+        out_file << "##INFO=<ID=" << label << "_MAX,Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+        out_file << "##INFO=<ID=" << label << "_NEIGHBORS,Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
         vcf_reader.print_minimal_header(out_file);
         string s;
-
+cerr << "ANNOTATE> 4 \n";
         for (size_t v=0; v<variant_supports.size(); v++){
-            auto& record = variant_graph.vcf_records[v];
-
+            VcfRecord& record = variant_graph.vcf_records[v];
             variant_supports.at(v).get_support_string(s);
-            record.info += ";" + label + "=" + to_string(total_coverage) + "," + s + "," + to_string(int(variant_supports.at(v).is_tandem)) + "," + to_string(variant_supports.at(v).length_of_evaluated_region);
-            record.info += ";" + label + "_MAX" + "=" + to_string(max_observed_identities.at(v));
-            record.info += ";" + label + "_NEIGHBORS" + "=" + to_string(variant_supports.size());
+            record.info.append(";");
+            record.info.append(label);
+            record.info.append("=");
+            record.info.append(to_string(total_coverage));
+            record.info.append(",");
+            record.info.append(s);
+            record.info.append(",");
+            record.info.append(to_string(int(variant_supports.at(v).is_tandem)));
+            record.info.append(",");
+            record.info.append(to_string(variant_supports.at(v).length_of_evaluated_region));
+
+if (variant_supports.at(v).length_of_evaluated_region>500000) {
+    cerr << "length_of_evaluated_region=" << variant_supports.at(v).length_of_evaluated_region << "\n";
+    std::exit(1);
+}
+            record.info.append(";");
+            record.info.append(label);
+            record.info.append("_MAX");
+            record.info.append("=");
+            record.info.append(to_string(max_observed_identities.at(v)));
+            record.info.append(";");
+            record.info.append(label);
+            record.info.append("_NEIGHBORS");
+            record.info.append("=");
+            record.info.append(to_string(variant_supports.size()));
             record.print(out_file);
             out_file << '\n';
         }
+cerr << "ANNOTATE> 5 \n";
 
         i = job_index.fetch_add(1);
     }
+cerr << "ANNOTATE> 6 \n";
 }
 
 
@@ -453,14 +494,7 @@ void compute_graph_evaluation(
 
     cerr << "Reading VCF... " << '\n';
     vcf_reader.for_record_in_vcf([&](VcfRecord& r){
-//        // TODO: allow breakends in evaluation
-//        if (r.sv_type == VcfReader::TYPE_BREAKEND){
-//            cerr << "WARNING: skipping breakend"  << '\n';
-//            return;
-//        }
-
         r.get_reference_coordinates(false, record_coord);
-
         auto result = contig_interval_trees.find(r.chrom);
 
         // First make sure there are actually some windows in this contig (might fail with small satellite contigs)

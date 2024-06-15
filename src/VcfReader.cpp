@@ -28,6 +28,8 @@ const char VcfReader::GT_SEPARATOR = ':';
 const char VcfReader::BREAKEND_SEPARATOR = ':';
 const char VcfReader::UNPHASED_CHAR = '/';
 const char VcfReader::PHASED_CHAR = '|';
+const string VcfReader::CHR_STR_LOWER = "chr";
+const string VcfReader::CHR_STR_UPPER = "CHR";
 
 const char VcfReader::INFO_ASSIGNMENT = '=';
 const char VcfReader::INFO_SEPARATOR = ';';
@@ -525,7 +527,9 @@ bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_
 
 
 uint8_t VcfRecord::is_breakend_single() const {
-    if (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(alt.length()-1)==VcfReader::VCF_MISSING_CHAR) {
+    const char first = alt.at(0);
+    const char last = alt.at(alt.length()-1);
+    if (first==VcfReader::VCF_MISSING_CHAR || last==VcfReader::VCF_MISSING_CHAR) {
         const uint32_t length = alt.length();
         if (length==2) return 0;
         else if (length>2) return 1;
@@ -535,12 +539,18 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
+cerr << "is_breakend_virtual> 1 \n";
     if (is_symbolic) return false;
+cerr << "is_breakend_virtual> 2 \n";
     if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
+cerr << "is_breakend_virtual> 3 \n";
     const int32_t p = get_breakend_pos();
+cerr << "is_breakend_virtual> 4 \n";
     if (p==INT32_MAX) return false;
+cerr << "is_breakend_virtual> 5 \n";
     string chr_trans;
     get_breakend_chromosome(chr_trans);
+cerr << "is_breakend_virtual> 6 \n";
     return (p==0 || p==chromosomes.at(chr_trans).length()+1);
 }
 
@@ -558,6 +568,7 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
         else if (c==VcfReader::BREAKEND_SEPARATOR) break;
         else if (p!=UINT16_MAX) out.push_back(c);
     }
+    if (out.starts_with(VcfReader::CHR_STR_UPPER)) out.replace(0,VcfReader::CHR_STR_LOWER.length(),VcfReader::CHR_STR_LOWER);
 }
 
 
