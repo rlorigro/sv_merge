@@ -539,18 +539,19 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
-cerr << "is_breakend_virtual> 1 \n";
+bool verbose = false;
+if (verbose) cerr << "is_breakend_virtual> 1 \n";
     if (is_symbolic) return false;
-cerr << "is_breakend_virtual> 2 \n";
+if (verbose) cerr << "is_breakend_virtual> 2 \n";
     if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
-cerr << "is_breakend_virtual> 3 \n";
+if (verbose) cerr << "is_breakend_virtual> 3 \n";
     const int32_t p = get_breakend_pos();
-cerr << "is_breakend_virtual> 4 \n";
+if (verbose) cerr << "is_breakend_virtual> 4 \n";
     if (p==INT32_MAX) return false;
-cerr << "is_breakend_virtual> 5 \n";
+if (verbose) cerr << "is_breakend_virtual> 5 \n";
     string chr_trans;
     get_breakend_chromosome(chr_trans);
-cerr << "is_breakend_virtual> 6 \n";
+if (verbose) cerr << "is_breakend_virtual> 6 \n";
     return (p==0 || p==chromosomes.at(chr_trans).length()+1);
 }
 

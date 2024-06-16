@@ -94,27 +94,28 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
 
 
 int32_t VariantGraph::get_flank_boundary_right_impl(int32_t pos, int32_t sequence_length, const vector<interval_t>& intervals, int32_t flank_length) {
-cerr << "get_flank_boundary_right_impl> 1 \n";
+bool verbose = false;
+if (verbose) cerr << "get_flank_boundary_right_impl> 1 \n";
     const size_t N_INTERVALS = intervals.size();
-cerr << "get_flank_boundary_right_impl> 2  N_INTERVALS=" << N_INTERVALS << " \n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 2  N_INTERVALS=" << N_INTERVALS << " \n";
     if (N_INTERVALS==0) return min(pos+flank_length-1,sequence_length-1);
     tmp_interval.first=pos; tmp_interval.second=pos+flank_length;
-cerr << "get_flank_boundary_right_impl> 3  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 3  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
     size_t p = iter-intervals.begin();
-cerr << "get_flank_boundary_right_impl> 4  p=" << p << "\n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 4  p=" << p << "\n";
     if (p>0 && intersect(tmp_interval,intervals.at(p-1))) {
         tmp_interval.first=intervals.at(p-1).second;
         tmp_interval.second=tmp_interval.first+flank_length;
-cerr << "get_flank_boundary_right_impl> 5  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 5  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
     }
     while (p<N_INTERVALS && intersect(tmp_interval,intervals.at(p))) {
         tmp_interval.first=intervals.at(p).second;
         tmp_interval.second=tmp_interval.first+flank_length;
-cerr << "get_flank_boundary_right_impl> 6  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 6  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
         p++;
     }
-cerr << "get_flank_boundary_right_impl> 7  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
+if (verbose) cerr << "get_flank_boundary_right_impl> 7  tmp_interval.first=" << tmp_interval.first << " tmp_interval.second=" << tmp_interval.second << "\n";
     return tmp_interval.first>=sequence_length?INT32_MAX:min(tmp_interval.second-1,sequence_length-1);
 }
 
@@ -128,44 +129,46 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
 
 
 int32_t VariantGraph::get_flank_boundary_left_impl(int32_t pos, const vector<interval_t>& intervals, int32_t flank_length) {
-cerr << "get_flank_boundary_left_impl> 1 \n";
+bool verbose = false;
+if (verbose) cerr << "get_flank_boundary_left_impl> 1 \n";
     const size_t N_INTERVALS = intervals.size();
-cerr << "get_flank_boundary_left_impl> 1.1 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 1.1 \n";
     if (N_INTERVALS==0) return pos>=flank_length?pos-flank_length:0;
-cerr << "get_flank_boundary_left_impl> 1.2 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 1.2 \n";
     tmp_interval.first=pos>=flank_length?pos-flank_length:0; tmp_interval.second=pos;
-cerr << "get_flank_boundary_left_impl> 1.3  N_INTERVALS=" << N_INTERVALS << "\n";
-cerr << "intervals.at(0)=" << intervals.at(0).first << "," << intervals.at(0).second << "\n";
-cerr << "intervals.begin()=" << intervals.begin()->first << "," << intervals.begin()->second << "\n";
-cerr << "intervals.end()=" << intervals.end()->first << "," << intervals.end()->second << "\n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 1.3  N_INTERVALS=" << N_INTERVALS << "\n";
+if (verbose) cerr << "intervals.at(0)=" << intervals.at(0).first << "," << intervals.at(0).second << "\n";
+if (verbose) cerr << "intervals.begin()=" << intervals.begin()->first << "," << intervals.begin()->second << "\n";
+if (verbose) cerr << "intervals.end()=" << intervals.end()->first << "," << intervals.end()->second << "\n";
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
-cerr << "get_flank_boundary_left_impl> 1.4 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 1.4 \n";
     size_t p = iter-intervals.begin();
-cerr << "get_flank_boundary_left_impl> 2  p=" << p << "\n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 2  p=" << p << "\n";
     if (p<N_INTERVALS && intersect(tmp_interval,intervals.at(p))) {
-cerr << "get_flank_boundary_left_impl> 3 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 3 \n";
         tmp_interval.second=intervals.at(p).first;
         tmp_interval.first=tmp_interval.second>=flank_length?tmp_interval.second-flank_length:0;
     }
     if (p>0) {
-cerr << "get_flank_boundary_left_impl> 4 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 4 \n";
         p--;
         while (intersect(tmp_interval,intervals.at(p))) {
-cerr << "get_flank_boundary_left_impl> 5  p=" << p << "\n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 5  p=" << p << "\n";
             tmp_interval.second=intervals.at(p).first;
             tmp_interval.first=tmp_interval.second>=flank_length?tmp_interval.second-flank_length:0;
             if (p==0) break;
             else p--;
         }
-cerr << "get_flank_boundary_left_impl> 6 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 6 \n";
     }
-cerr << "get_flank_boundary_left_impl> 7 \n";
+if (verbose) cerr << "get_flank_boundary_left_impl> 7 \n";
     return tmp_interval.second==0?INT32_MAX:tmp_interval.first;
 }
 
 
 void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<interval_t>& out) {
     size_t i, from;
+bool verbose = false;
 
     const auto OUT_FIRST = out.size();
     const pair<string,int32_t> COORDINATE = node_to_chromosome.find(node_id)->second;
@@ -188,30 +191,30 @@ void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool
     while (i<N_INTERVALS) {
         if (INTERVALS.at(i).first>=tmp_interval.second) break;
         out.emplace_back(max(tmp_interval.first,INTERVALS.at(i).first),min(tmp_interval.second,INTERVALS.at(i).second));
-cerr << "get_tandem_intervals of node> 1  emplaced back " << max(tmp_interval.first,INTERVALS.at(i).first) << ", " << min(tmp_interval.second,INTERVALS.at(i).second) << "\n";
+if (verbose) cerr << "get_tandem_intervals of node> 1  emplaced back " << max(tmp_interval.first,INTERVALS.at(i).first) << ", " << min(tmp_interval.second,INTERVALS.at(i).second) << "\n";
         i++;
     }
     if (!is_reverse) {
-cerr << "get_tandem_intervals of node> 2.0  \n";
+if (verbose) cerr << "get_tandem_intervals of node> 2.0  \n";
         for (i=OUT_FIRST; i<out.size(); i++) {
-cerr << "get_tandem_intervals of node> 2.1 \n";
+if (verbose) cerr << "get_tandem_intervals of node> 2.1 \n";
             out.at(i).first=out.at(i).first-tmp_interval.first+offset;
             out.at(i).second=out.at(i).second-tmp_interval.first+offset;
-cerr << "get_tandem_intervals of node> 2.2  reset interval to " << out.at(i).first << ", " << out.at(i).second << "\n";
+if (verbose) cerr << "get_tandem_intervals of node> 2.2  reset interval to " << out.at(i).first << ", " << out.at(i).second << "\n";
         }
     }
     else {
-cerr << "get_tandem_intervals of node> 3.0 \n";
+if (verbose) cerr << "get_tandem_intervals of node> 3.0 \n";
         std::reverse(out.begin()+OUT_FIRST,out.end());
         for (i=OUT_FIRST; i<out.size(); i++) {
-cerr << "get_tandem_intervals of node> 3.1 \n";
+if (verbose) cerr << "get_tandem_intervals of node> 3.1 \n";
             std::swap(out.at(i).first,out.at(i).second);
             out.at(i).first=(tmp_interval.second-1)-(out.at(i).first-1)+offset;
             out.at(i).second=(tmp_interval.second-1)-(out.at(i).second-1)+offset;
-cerr << "get_tandem_intervals of node> 3.2  reset interval to " << out.at(i).first << ", " << out.at(i).second << "\n";
+if (verbose) cerr << "get_tandem_intervals of node> 3.2  reset interval to " << out.at(i).first << ", " << out.at(i).second << "\n";
         }
     }
-cerr << "get_tandem_intervals of node> 4 \n";
+if (verbose) cerr << "get_tandem_intervals of node> 4 \n";
 }
 
 
@@ -220,31 +223,32 @@ void VariantGraph::get_tandem_intervals(const vector<nid_t>& node_ids, const vec
     size_t i, j;
     int32_t offset, length, length_prime;
     nid_t node_id;
+bool verbose = false;
 
     // Collecting per-node tandem intervals, including entire non-ref nodes.
     out.clear(); offset=0; i=0;
     while (i<LENGTH) {
-cerr << "get_tandem_intervals> 1  i=" << i << " LENGTH=" << LENGTH << "\n";
+if (verbose) cerr << "get_tandem_intervals> 1  i=" << i << " LENGTH=" << LENGTH << "\n";
         node_id=node_ids.at(i);
         length=node_lengths.at(i);
         if (is_reference_node(node_id)) {
-cerr << "get_tandem_intervals> 2 \n";
+if (verbose) cerr << "get_tandem_intervals> 2 \n";
             get_tandem_intervals(node_id,length,is_reverse.at(i),offset,out);
             offset+=length;
             i++;
-cerr << "get_tandem_intervals> 3  i=" << i<< "\n";
+if (verbose) cerr << "get_tandem_intervals> 3  i=" << i<< "\n";
         }
         else {
-cerr << "get_tandem_intervals> 4 \n";
+if (verbose) cerr << "get_tandem_intervals> 4 \n";
             if (!out.empty() && out.at(out.size()-1).second==offset) {
-cerr << "get_tandem_intervals> 5 \n";
+if (verbose) cerr << "get_tandem_intervals> 5 \n";
                 out.at(out.size()-1).second=offset+length;
                 offset+=length;
                 i++;
-cerr << "get_tandem_intervals> 6 \n";
+if (verbose) cerr << "get_tandem_intervals> 6 \n";
             }
             else if (i<LENGTH-1) {
-cerr << "get_tandem_intervals> 7 \n";
+if (verbose) cerr << "get_tandem_intervals> 7 \n";
                 j=out.size();
                 i++;
                 node_id=node_ids.at(i);
@@ -254,7 +258,7 @@ cerr << "get_tandem_intervals> 7 \n";
                 if (out.size()>j && out.at(j).first==offset+length) out.at(j).first=offset;
                 offset+=length+length_prime;
                 i++;
-cerr << "get_tandem_intervals> 8  i=" << i << "\n";
+if (verbose) cerr << "get_tandem_intervals> 8  i=" << i << "\n";
             }
             else {
                 offset+=length;
@@ -288,8 +292,9 @@ void VariantGraph::vcf_record_to_path_intervals(const vector<pair<string,bool>>&
     int32_t length, path_length_bps;
     nid_t id;
     handle_t handle1, handle2;
+bool verbose = false;
 
-cerr << "vcf_record_to_path_intervals> 1 \n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 1 \n";
     node_ids_buffer.clear(); is_reverse_buffer.clear(); node_lengths_buffer.clear(); tmp_edges.clear();
     id=stoll(path.at(0).first);
     rev=path.at(0).second;
@@ -311,13 +316,13 @@ cerr << "vcf_record_to_path_intervals> 1 \n";
         tmp_edges.emplace_back(graph.edge_handle(handle1,handle2));  // Canonized
         handle1=handle2;
     }
-cerr << "vcf_record_to_path_intervals> 2 \n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 2 \n";
     get_tandem_intervals(node_ids_buffer,is_reverse_buffer,node_lengths_buffer,intervals_buffer);
-cerr << "vcf_record_to_path_intervals> 3  tandem intervals: \n";
-for (i=0; i<intervals_buffer.size(); i++) cerr << intervals_buffer.at(i).first << ".." << intervals_buffer.at(i).second << "\n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 3  tandem intervals: \n";
+if (verbose) for (i=0; i<intervals_buffer.size(); i++) cerr << intervals_buffer.at(i).first << ".." << intervals_buffer.at(i).second << "\n";
     out.clear(); x=0;
     for (i=0; i<PATH_LENGTH-1; i++) {
-cerr << "vcf_record_to_path_intervals> 4 \n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 4 \n";
         x+=node_lengths_buffer.at(i);
         found=false;
         if (tmp_edges.at(i)==edges_of_the_record.at(0)) {
@@ -330,7 +335,7 @@ cerr << "vcf_record_to_path_intervals> 4 \n";
             }
             if (p==N_EDGES) found=true;
         }
-cerr << "vcf_record_to_path_intervals> 5 \n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 5 \n";
         if (!found && tmp_edges.at(i)==edges_of_the_record.at(N_EDGES-1)) {
             // Reverse match
             j=i; p=N_EDGES-2; y=x;
@@ -342,19 +347,19 @@ cerr << "vcf_record_to_path_intervals> 5 \n";
             if (p==-1) found=true;
         }
         if (found) {
-cerr << "vcf_record_to_path_intervals> 6  x=" << x << " y=" << y << " interval length=" << (y-x) << "  intervals_buffer.size()=" << intervals_buffer.size() << "\n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 6  x=" << x << " y=" << y << " interval length=" << (y-x) << "  intervals_buffer.size()=" << intervals_buffer.size() << "\n";
 int32_t left = get_flank_boundary_left_impl(x,intervals_buffer,flank_length);
 if (left==INT32_MAX) left=0;
-cerr << "vcf_record_to_path_intervals> 7  left=";
-cerr << left << "\n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 7  left=";
+if (verbose) cerr << left << "\n";
 int32_t right = get_flank_boundary_right_impl(y,path_length_bps,intervals_buffer,flank_length);
 if (right==INT32_MAX) right=path_length_bps-1;
-cerr << "vcf_record_to_path_intervals> 8  right=";
-cerr << right << "\n";
-cerr << "new interval length=" << (right-left) << "\n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 8  right=";
+if (verbose) cerr << right << "\n";
+if (verbose) cerr << "new interval length=" << (right-left) << "\n";
             out.emplace_back(left,right);
         }
-cerr << "vcf_record_to_path_intervals> 7 \n";
+if (verbose) cerr << "vcf_record_to_path_intervals> 7 \n";
     }
 }
 
@@ -722,18 +727,19 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
 
 
 bool VariantGraph::would_graph_be_nontrivial(vector<VcfRecord>& records) {
-cerr << "would_graph_be_nontrivial> 1 \n";
+bool verbose = false;
+if (verbose) cerr << "would_graph_be_nontrivial> 1 \n";
     if (records.size()==0) return false;
     pair<int32_t,int32_t> tmp_pair;
     for (auto& record: records) {
-cerr << "would_graph_be_nontrivial> 2 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> 2 \n";
         record.get_reference_coordinates(false,tmp_pair);
-cerr << "would_graph_be_nontrivial> 3 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> 3 \n";
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
-cerr << "would_graph_be_nontrivial> 4 \n";
-cerr << "would_graph_be_nontrivial> record.is_symbolic: " << record.is_symbolic << "\n";
-cerr << "would_graph_be_nontrivial> record.is_breakend_single: " << to_string(record.is_breakend_single()) << "\n";
-cerr << "would_graph_be_nontrivial> record.is_breakend_virtual: " << record.is_breakend_virtual(chromosomes) << "\n";
+if (verbose) cerr << "would_graph_be_nontrivial> 4 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> record.is_symbolic: " << record.is_symbolic << "\n";
+if (verbose) cerr << "would_graph_be_nontrivial> record.is_breakend_single: " << to_string(record.is_breakend_single()) << "\n";
+if (verbose) cerr << "would_graph_be_nontrivial> record.is_breakend_virtual: " << record.is_breakend_virtual(chromosomes) << "\n";
         if ( (record.sv_type==VcfReader::TYPE_INSERTION && !record.is_symbolic) ||
              record.sv_type==VcfReader::TYPE_DELETION ||
              record.sv_type==VcfReader::TYPE_INVERSION ||
@@ -742,12 +748,12 @@ cerr << "would_graph_be_nontrivial> record.is_breakend_virtual: " << record.is_b
              record.sv_type==VcfReader::TYPE_CNV ||
              (record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()>=1 && !record.is_breakend_virtual(chromosomes))
              ) {
-cerr << "would_graph_be_nontrivial> 5 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> 5 \n";
             return true;
         }
-cerr << "would_graph_be_nontrivial> 6 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> 6 \n";
     }
-cerr << "would_graph_be_nontrivial> 7 \n";
+if (verbose) cerr << "would_graph_be_nontrivial> 7 \n";
     return false;
 }
 
