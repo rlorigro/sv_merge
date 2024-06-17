@@ -252,39 +252,23 @@ void compute_graph_evaluation_thread_fn(
     vcf_reader.get_file_path(vcf);
     string vcf_name_prefix = get_vcf_name_prefix(vcf);
     string buffer;
-bool verbose = false;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
-if (verbose) cerr << "ANNOTATE> 0  region=" << region.name << ":" << region.start << ".." << region.stop << "\n";
-
         path subdir = output_dir / region.to_unflanked_string('_', flank_length);
-if (verbose) cerr << "ANNOTATE> 0.1  region_records contains the region? " << region_records.contains(region) << "\n";
-
         auto records = region_records.at(region);
-if (verbose) cerr << "ANNOTATE> 0.2\n";
-
         create_directories(subdir);
-if (verbose) cerr << "ANNOTATE> 0.3\n";
-
         path gfa_path = subdir / "graph.gfa";
         path fasta_filename = subdir / "haplotypes.fasta";
-if (verbose) cerr << "ANNOTATE> 0.4\n";
-
         VariantGraph variant_graph(ref_sequences, contig_tandems);
-if (verbose) cerr << "ANNOTATE> 0.5\n";
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)){
-if (verbose) cerr << "ANNOTATE> 0.6\n";
             variant_graph.build(records, int32_t(flank_length), numeric_limits<int32_t>::max(), region.start + flank_length, region.stop - flank_length, false);
-if (verbose) cerr << "ANNOTATE> 0.7\n";
         }
         else{
             // VariantGraph assumes that the flank length needs to be added to the region
-if (verbose) cerr << "ANNOTATE> 0.8\n";
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
-if (verbose) cerr << "ANNOTATE> 0.9\n";
         }
 
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
@@ -327,45 +311,32 @@ if (verbose) cerr << "ANNOTATE> 0.9\n";
 
         vector<VariantSupport> variant_supports(variant_graph.vcf_records.size());
         vector<float> max_observed_identities(variant_graph.vcf_records.size());
-if (verbose) cerr << "ANNOTATE> 1 \n";
         // First annotate all the variants as tandem or not
         int32_t bnd_pos;
         string bnd_chromosome;
         for (size_t v=0; v<variant_supports.size(); v++){
-if (verbose) cerr << "ANNOTATE> 1.1 \n";
             auto& record = variant_graph.vcf_records[v];
-if (verbose) cerr << "ANNOTATE> 1.2 \n";
             coord_t ref_coord;
             record.get_reference_coordinates(false, ref_coord);
-if (verbose) cerr << "ANNOTATE> 1.3 \n";
             bool is_tandem = false;
             if (contig_interval_trees.contains(region.name)) {
                 contig_interval_trees.at(region.name).overlap_find_all({ref_coord.first, ref_coord.second}, [&](auto iter) {
-if (verbose) cerr << "ANNOTATE> 1.4 \n";
                     is_tandem=true;
                     return false;
                 });
             }
-if (verbose) cerr << "ANNOTATE> 1.5 \n";
             if (!is_tandem && record.sv_type==VcfReader::TYPE_BREAKEND && record.is_breakend_single()==2) {
-if (verbose) cerr << "ANNOTATE> 1.6 \n";
                 record.get_breakend_chromosome(bnd_chromosome);
-if (verbose) cerr << "ANNOTATE> 1.7 \n";
                 bnd_pos=record.get_breakend_pos();
-if (verbose) cerr << "ANNOTATE> 1.8 \n";
                 if (contig_interval_trees.contains(bnd_chromosome)) {
                     contig_interval_trees.at(bnd_chromosome).overlap_find_all({bnd_pos,bnd_pos}, [&](auto iter) {
-if (verbose) cerr << "ANNOTATE> 1.9 \n";
                         is_tandem=true;
                         return false;
                     });
                 }
             }
-if (verbose) cerr << "ANNOTATE> 1.10 \n";
             variant_supports[v].is_tandem = is_tandem;
-if (verbose) cerr << "ANNOTATE> 1.11 \n";
         }
-if (verbose) cerr << "ANNOTATE> 2 \n";
 
         // Iterate the alignments and accumulate their stats w.r.t. variants.
         // For tandem-contained variants, stats pertain to entire tandem.
@@ -384,15 +355,9 @@ if (verbose) cerr << "ANNOTATE> 2 \n";
             vector<interval_t> ref_intervals, singleton_interval, no_interval;
             variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& _record){
                 auto record = _record;
-if (verbose) cerr << "ANNOTATE> 2.5  record: ";
-if (verbose) record.print(cerr);
-if (verbose) cerr << "\n";
                 variant_graph.vcf_record_to_path_intervals(path,edges_of_the_record,variant_flank_length,ref_intervals);
-if (verbose) cerr << "ANNOTATE> 2.6 \n";
                 max_identity=0; max_length=0;
                 for (const auto& interval: ref_intervals) {
-if (verbose) cerr << "ANNOTATE> 2.7  " << interval.first << ".." << interval.second << "\n";
-if (interval.second-interval.first>500000) cerr << "WARNING: TOO LONG INTERVAL!!!! " << (interval.second-interval.first) << "\n";
                     AlignmentSummary summary;
                     singleton_interval.clear(); singleton_interval.push_back(interval);
                     for_cigar_interval_in_alignment(false, alignment, singleton_interval, no_interval, [&](const CigarInterval& i, const interval_t& interval){
@@ -410,8 +375,6 @@ if (interval.second-interval.first>500000) cerr << "WARNING: TOO LONG INTERVAL!!
                         placeholder.code = 7;   // '=' operation
                         summary.update(placeholder,true);
                     }
-if (verbose) cerr << "ANNOTATE> 2.8 \n";
-
                     max_identity=max(max_identity,summary.compute_identity());
                     max_length=max(max_length,interval.second-interval.first);
                 }
@@ -419,21 +382,13 @@ if (verbose) cerr << "ANNOTATE> 2.8 \n";
                 // Update the max observed identity for this VCF record
                 max_observed_identities[id]=max(max_observed_identities[id],max_identity);
 
-                // FC> Max or min or avg?
                 // Update the region length for this VCF record to the max length over all intervals (arbitrary).
-if (verbose) cerr << "variant_supports[" << id << "].length_of_evaluated_region before: " << variant_supports[id].length_of_evaluated_region << "\n";
-                if (variant_supports[id].length_of_evaluated_region==0 || is_spanning) {
-                    variant_supports[id].length_of_evaluated_region=max(variant_supports[id].length_of_evaluated_region,max_length);
-if (verbose) cerr << "variant_supports[" << id << "].length_of_evaluated_region after: " << variant_supports[id].length_of_evaluated_region << "\n";
-                }
+                if (variant_supports[id].length_of_evaluated_region==0 || is_spanning) variant_supports[id].length_of_evaluated_region=max(variant_supports[id].length_of_evaluated_region,max_length);
 
-                // FC> Max or min or avg?
                 // Update the histogram for this VCF record to the max identity over all intervals (arbitrary).
                 variant_supports[id].identity[is_spanning][path_is_reverse].emplace_back(max_identity);
-if (verbose) cerr << "ANNOTATE> 2.9 \n";
             });
         });
-if (verbose) cerr << "ANNOTATE> 3 \n";
         const double total_coverage = float(l_coverage+r_coverage)/2.0;
 
         path output_path = subdir / "annotated.vcf";
@@ -444,7 +399,6 @@ if (verbose) cerr << "ANNOTATE> 3 \n";
         out_file << "##INFO=<ID=" << label << "_NEIGHBORS,Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
         vcf_reader.print_minimal_header(out_file);
         string s;
-if (verbose) cerr << "ANNOTATE> 4 \n";
         for (size_t v=0; v<variant_supports.size(); v++){
             VcfRecord& record = variant_graph.vcf_records[v];
             variant_supports.at(v).get_support_string(s);
@@ -458,11 +412,6 @@ if (verbose) cerr << "ANNOTATE> 4 \n";
             record.info.append(to_string(int(variant_supports.at(v).is_tandem)));
             record.info.append(",");
             record.info.append(to_string(variant_supports.at(v).length_of_evaluated_region));
-
-if (verbose && variant_supports.at(v).length_of_evaluated_region>500000) {
-    cerr << "length_of_evaluated_region=" << variant_supports.at(v).length_of_evaluated_region << "\n";
-    std::exit(1);
-}
             record.info.append(";");
             record.info.append(label);
             record.info.append("_MAX");
@@ -476,11 +425,9 @@ if (verbose && variant_supports.at(v).length_of_evaluated_region>500000) {
             record.print(out_file);
             out_file << '\n';
         }
-if (verbose) cerr << "ANNOTATE> 5 \n";
 
         i = job_index.fetch_add(1);
     }
-if (verbose) cerr << "ANNOTATE> 6 \n";
 }
 
 
