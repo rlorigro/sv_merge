@@ -411,48 +411,35 @@ void merge_thread_fn(
         try {
             // Optimize
             optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir);
-        }
-        catch (const exception& e) {
-            cerr << e.what() << '\n';
-            cerr << "ERROR caught at " << region.to_string() << '\n';
 
-            // Skip this region (do not attempt to generate VCF)
-            continue;
-        }
+            // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
+            // not conflict with existing names
+            for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+                transmap.add_variant("v" + to_string(v));
+            }
 
-        // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
-        // not conflict with existing names
-        for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-            transmap.add_variant("v" + to_string(v));
-        }
+            // Construct mapping of paths to variants
+            transmap.for_each_path([&](const string& path_name, int64_t path_id){
+                // Convert the path to a vector
+                vector <pair <string,bool> > path;
 
-        cerr << "constructing mapping from path to var" << '\n';
+                GafAlignment::parse_string_as_path(path_name, path);
 
-        // Construct mapping of paths to variants
-        transmap.for_each_path([&](const string& path_name, int64_t path_id){
-            // Convert the path to a vector
-            vector <pair <string,bool> > path;
-
-            GafAlignment::parse_string_as_path(path_name, path);
-
-            variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-                string var_name = "v" + to_string(id);
-                transmap.add_edge(var_name, path_name);
+                variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                    string var_name = "v" + to_string(id);
+                    transmap.add_edge(var_name, path_name);
+                });
             });
-        });
 
-        // Write the solution to a VCF
-        path output_path = subdir / "solution.vcf";
+            // Write the solution to a VCF
+            path output_path = subdir / "solution.vcf";
 
-        try {
             write_solution_to_vcf(variant_graph, transmap, output_path);
+
         }
         catch (const exception& e) {
             cerr << e.what() << '\n';
             cerr << "ERROR caught at " << region.to_string() << '\n';
-
-            // Skip this region (do not attempt to generate VCF)
-            continue;
         }
 
         i = job_index.fetch_add(1);
