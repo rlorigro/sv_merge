@@ -131,7 +131,7 @@ SHELL ["/bin/bash", "-c"]
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=9200f9878466c87c2d7ec91ef9950e7dec807f2f
+ARG HAPESTRY_COMMIT=5e284c6c5155cc91866e981d9315e4d9ed466dd8
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
@@ -141,7 +141,7 @@ RUN git checkout ${HAPESTRY_COMMIT} \
 
 WORKDIR /hapestry/sv_merge/build
 
-RUN cmake .. -Dno_ortools=1
+RUN cmake ..
 RUN make -j 16
 
 WORKDIR /hapestry
