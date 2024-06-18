@@ -81,7 +81,7 @@ void find_windows(
 
         // If the number of chunks iterated exceeds the desired chunk size, start a new chunk.
         // Also, if a new contig is reached, start a new chunk.
-        if (r % chunk_size == 0 or (prev_contig != region.name and not prev_contig.empty())){
+        if (r % chunk_size == 0){
             output_path = output_dir / ("windows_" + to_string(n) + ".bed");
             file.close();
             file.open(output_path);
