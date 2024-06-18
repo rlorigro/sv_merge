@@ -640,7 +640,7 @@ void annotate(
                 force_unique_reads,
                 false,
                 false,
-                flank_length
+                0
         );
     }
     else{
@@ -658,7 +658,7 @@ void annotate(
                 false,
                 force_unique_reads,
                 false,
-                flank_length
+                0
         );
     }
 
