@@ -224,6 +224,7 @@ void HtsAlignment::get_tag_as_string(const string& tag_name, string& result, boo
     }
 
     result.assign(s.s, s.l);
+    free(s.s);
 }
 
 
