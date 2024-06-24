@@ -224,6 +224,12 @@ public:
     void get_breakend_inserted_sequence(string& out) const;
 
     /**
+     * Every BND that involves two positions should have a mate, i.e. a symmetrical record at the other position.
+     * This function sets `out` to the ALT field of the mate of this record, which is assumed to be BND.
+     */
+    void get_alt_of_breakend_mate(const unordered_map<string,string>& chromosomes, string& out);
+
+    /**
      * Checks the IMPRECISE tag and the confidence intervals fields.
      */
     bool is_precise();
@@ -251,6 +257,12 @@ public:
      * `sv_length`, if available.
      */
     void get_reference_coordinates(bool use_confidence_intervals, coord_t& out);
+
+    /**
+     * @return TRUE iff the ALT field represents a regular (non-virtual) or a single BND. Some callers might emit ALTs
+     * that do not conform to the VCF spec (e.g. sniffles can output `ACNNNNNNNNNNNNNNN` in the ALT of a BND).
+     */
+    bool is_valid_bnd_alt();
 
 private:
     /**
@@ -321,6 +333,7 @@ public:
     static const char PHASED_CHAR;
     static const string CHR_STR_LOWER;
     static const string CHR_STR_UPPER;
+    static const char UNKNOWN_BASE;
 
     /**
      * Info field constants

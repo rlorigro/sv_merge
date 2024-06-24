@@ -30,6 +30,7 @@ const char VcfReader::UNPHASED_CHAR = '/';
 const char VcfReader::PHASED_CHAR = '|';
 const string VcfReader::CHR_STR_LOWER = "chr";
 const string VcfReader::CHR_STR_UPPER = "CHR";
+const char VcfReader::UNKNOWN_BASE = 'N';
 
 const char VcfReader::INFO_ASSIGNMENT = '=';
 const char VcfReader::INFO_SEPARATOR = ';';
@@ -529,7 +530,7 @@ bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_
 uint8_t VcfRecord::is_breakend_single() const {
     const char first = alt.at(0);
     const char last = alt.at(alt.length()-1);
-    if (first==VcfReader::VCF_MISSING_CHAR || last==VcfReader::VCF_MISSING_CHAR) {
+    if ((first==VcfReader::VCF_MISSING_CHAR&&last!=VcfReader::VCF_MISSING_CHAR) || (first!=VcfReader::VCF_MISSING_CHAR&&last==VcfReader::VCF_MISSING_CHAR)) {
         const uint32_t length = alt.length();
         if (length==2) return 0;
         else if (length>2) return 1;
@@ -539,19 +540,12 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
-bool verbose = false;
-if (verbose) cerr << "is_breakend_virtual> 1 \n";
     if (is_symbolic) return false;
-if (verbose) cerr << "is_breakend_virtual> 2 \n";
     if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
-if (verbose) cerr << "is_breakend_virtual> 3 \n";
     const int32_t p = get_breakend_pos();
-if (verbose) cerr << "is_breakend_virtual> 4 \n";
     if (p==INT32_MAX) return false;
-if (verbose) cerr << "is_breakend_virtual> 5 \n";
     string chr_trans;
     get_breakend_chromosome(chr_trans);
-if (verbose) cerr << "is_breakend_virtual> 6 \n";
     return (p==0 || p==chromosomes.at(chr_trans).length()+1);
 }
 
@@ -632,6 +626,48 @@ void VcfRecord::get_breakend_inserted_sequence(string& out) const {
         else if (i<LENGTH-2) { out.append(alt.substr(i+1,LENGTH-i-2)); return; }
     }
     if (LENGTH>2 && (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(LENGTH-1)==VcfReader::VCF_MISSING_CHAR)) { out.append(alt.substr(1,LENGTH-2)); return; }
+}
+
+
+void VcfRecord::get_alt_of_breakend_mate(const unordered_map<string,string>& chromosomes, string& out) {
+    const int32_t pos2 = get_breakend_pos();
+    get_breakend_chromosome(tmp_buffer_1);
+    const char char2 = chromosomes.at(tmp_buffer_1).at(pos2-1);
+
+    out.clear();
+    const char c = alt.at(0);
+    if (c==VcfReader::BREAKEND_CHAR_OPEN) {
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.push_back(char2);
+    }
+    else if (c==VcfReader::BREAKEND_CHAR_CLOSE) {
+        out.push_back(char2);
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+    }
+    else if (alt.find(VcfReader::BREAKEND_CHAR_OPEN)!=string::npos) {
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.push_back(char2);
+    }
+    else {
+        out.push_back(char2);
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+    }
 }
 
 
@@ -728,6 +764,23 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t
         out.second=pos+sv_length;
     }
     else { out.first=INT32_MAX; out.second=INT32_MAX; }
+}
+
+
+bool VcfRecord::is_valid_bnd_alt() {
+    if (is_symbolic) return true;
+    const bool is_single = is_breakend_single();
+    bool is_nonsingle;
+    size_t p;
+
+    p=alt.find(VcfReader::BREAKEND_CHAR_OPEN);
+    if (p!=string::npos) is_nonsingle=alt.find(VcfReader::BREAKEND_CHAR_OPEN,p+1)!=string::npos;
+    else {
+        p=alt.find(VcfReader::BREAKEND_CHAR_CLOSE);
+        if (p!=string::npos) is_nonsingle=alt.find(VcfReader::BREAKEND_CHAR_CLOSE,p+1)!=string::npos;
+        else is_nonsingle=false;
+    }
+    return is_single!=is_nonsingle;
 }
 
 
