@@ -60,7 +60,7 @@ task chunk_vcf {
         if ~{defined(confident_bed)}
         then
             # use bcftools to subset the vcf by the confident bed
-            bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+            bcftools view -T ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
 
             # convert to bgzipped vcf and overwrite the input VCF
             bcftools view -Oz -o ~{vcf_gz} confident.vcf

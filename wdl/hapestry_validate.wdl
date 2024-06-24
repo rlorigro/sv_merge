@@ -46,7 +46,7 @@ task validate {
         fi
 
         # use bcftools to subset the vcf by the training resource bed
-        bcftools view -R ~{training_resource_bed} ~{vcf_gz} -Ov -o training.vcf
+        bcftools view -T ~{training_resource_bed} ~{vcf_gz} -Ov -o training.vcf
 
         ~{docker_dir}/sv_merge/build/annotate \
         --output_dir ~{output_dir}/run/ \

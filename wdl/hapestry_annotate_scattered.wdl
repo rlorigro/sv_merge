@@ -60,7 +60,7 @@ task chunk_vcf {
         if ~{defined(confident_bed)}
         then
             # use bcftools to subset the vcf by the confident bed
-            bcftools view -R ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+            bcftools view -T ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
 
             # convert to bgzipped vcf and overwrite the input VCF
             bcftools view -Oz -o ~{vcf_gz} confident.vcf
@@ -90,7 +90,7 @@ task chunk_vcf {
         for file in ~{output_dir}/run/*; do
             [ -e "$file" ] || continue
             echo "processing ${file}"
-            bcftools view -R ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            bcftools view -T ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
