@@ -43,8 +43,8 @@ if (debug)
 
     if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
 #        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
@@ -393,7 +393,7 @@ if (NOT no_ortools OR NOT DEFINED no_ortools)
     include(FetchContent)
     FetchContent_Declare(
             ortools
-            URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
+            URL https://github.com/google/or-tools/archive/refs/tags/v9.10.tar.gz
     )
 
     set(BUILD_DEPS ON)
