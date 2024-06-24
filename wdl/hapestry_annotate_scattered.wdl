@@ -38,7 +38,7 @@ task chunk_vcf {
     String output_dir = "output"
 
     command <<<
-        set -eou pipefail
+        set -eoxu pipefail
 
         mkdir ~{output_dir}
 
