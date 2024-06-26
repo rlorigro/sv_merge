@@ -76,7 +76,7 @@ void test(const function<void(VcfRecord& record)>& callback, const string& test_
     cerr << "   n_samples_to_load: " << n_samples_to_load << '\n';
     cerr << "   min_allele_frequency: " << min_af << '\n';
     cerr << "   min_nonmissing_frequency: " << min_nmf << '\n';
-    VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf);
+    VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,INT32_MAX,n_samples_to_load,min_af,min_nmf);
     outstream.open(test_vcf);
     reader.for_record_in_vcf(callback);
     outstream.close();
