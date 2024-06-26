@@ -483,7 +483,7 @@ def main():
     # name_of_file = "_multiannotated_8x_asm10_20bp.vcf.gz"
 
     # ONT and PB (use this)
-    path_to_data = "/Users/mayam/Home/Internships/broad_summer_2024/data/intro/ONT_PB_annotated_vcfs/"
+    path_to_data = "/data/mmau/data/intro/ONT_PB_annotated_vcfs/"
     name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz" 
 
     train_vcfs = [
