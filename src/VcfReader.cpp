@@ -94,13 +94,14 @@ string get_vcf_name_prefix(const path& vcf){
 }
 
 
-VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency) {
+VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency) {
     this->vcf_path=vcf_path;
     this->progress_n_lines=progress_n_lines;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->pass_only=pass_only;
     this->min_sv_length=min_sv_length;
+    this->max_sv_length=max_sv_length;
     this->n_samples_to_load=n_samples_to_load;
     sample_ids=vector<string>(0);
     n_samples_in_vcf=0;
@@ -116,6 +117,7 @@ VcfReader::VcfReader(const path& vcf_path) {
     min_qual=0.0;
     pass_only=false;
     min_sv_length=0;
+    max_sv_length=INT32_MAX;
     n_samples_to_load=INT32_MAX;
     sample_ids=vector<string>(0);
     n_samples_in_vcf=0;
@@ -156,11 +158,12 @@ int8_t string_to_svtype_alt(const string& type) {
 }
 
 
-VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf) {
+VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf) {
     this->pass_only=pass_only;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->min_sv_length=min_sv_length;
+    this->max_sv_length=max_sv_length;
     this->n_samples_to_load=n_samples_to_load;
     this->min_af=min_af;
     this->min_nmf=min_nmf;
@@ -180,7 +183,7 @@ VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32
 
 
 VcfRecord VcfRecord::clone() const {
-    VcfRecord out = VcfRecord(false,0.0,false,0,0,0.0,0.0);
+    VcfRecord out = VcfRecord(false,0.0,false,0,0,0,0.0,0.0);
     out.is_autosomal=this->is_autosomal;
     out.qual=this->qual;
     out.pos=this->pos;
@@ -215,7 +218,7 @@ void VcfRecord::set_from_stream(ifstream& stream) {
     tmp_buffer_1.clear();
     while (stream.get(c)) {
         if (c==VcfReader::VCF_SEPARATOR || c==VcfReader::LINE_END) {
-            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
+            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
             if (fields_skipped) break;
             else {
                 tmp_buffer_1.clear(); current_field++;
@@ -236,11 +239,11 @@ void VcfRecord::set_from_stream(ifstream& stream) {
             if (current_field==4 && c==VcfReader::ALT_SEPARATOR) n_alts++;
         }
     }
-    if (!fields_skipped && !tmp_buffer_1.empty()) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
+    if (!fields_skipped && !tmp_buffer_1.empty()) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
 }
 
 
-bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
+bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
     if (field_id==0) {
         chrom=field;
         is_autosomal = chrom!="chrX" && chrom!="X" &&  chrom!="chrY" && chrom!="Y" && chrom!="chrM" && chrom!="M";
@@ -294,7 +297,7 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         set_sv_length(tmp_buffer);
         const auto alt_length = (int32_t)alt.length();
         if (sv_type==VcfReader::TYPE_INSERTION && !is_symbolic && sv_length!=alt_length-1) sv_length=alt_length-1;
-        if (sv_type==-1 || sv_length<min_sv_length || sv_length==0) {
+        if (sv_type==-1 || sv_length<min_sv_length || sv_length>max_sv_length || sv_length==0) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -407,7 +410,7 @@ bool VcfRecord::passes_constraints() const {
     return n_alts==1 &&
            (is_high_quality || !high_qual_only) &&
            (!pass_only || is_pass || filter.starts_with(VcfReader::VCF_MISSING_CHAR)) &&
-           sv_type!=-1 && sv_length>=min_sv_length &&
+           sv_type!=-1 && sv_length>=min_sv_length && sv_length<=max_sv_length &&
            (n_samples_to_load==0 || (n_samples==n_samples_to_load && n_haplotypes_alt>=min_n_haplotypes_alt && n_haplotypes_ref+n_haplotypes_alt>=min_n_haplotypes_nonmissing));
 }
 
@@ -501,7 +504,7 @@ void VcfRecord::info2map(unordered_map<string,string>& map) {
 
 void VcfRecord::get_samples_with_alt(unordered_set<int32_t>& out) {
     int32_t i;
-    const uint32_t SIZE = genotypes.size();
+    const auto SIZE = (int32_t)genotypes.size();
 
     out.clear();
     for (i=0; i<SIZE; i++) {
@@ -514,7 +517,7 @@ void VcfRecord::get_samples_with_alt(unordered_set<int32_t>& out) {
 
 void VcfRecord::get_samples_with_alt(set<int32_t>& out) {
     int32_t i;
-    const uint32_t SIZE = genotypes.size();
+    const auto SIZE = (int32_t)genotypes.size();
 
     out.clear();
     for (i=0; i<SIZE; i++) {
@@ -542,12 +545,12 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
     if (is_symbolic) return false;
-    if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
+    if (pos==0 || pos==(int32_t)(chromosomes.at(chrom).length()+1)) return true;
     const int32_t p = get_breakend_pos();
     if (p==INT32_MAX) return false;
     string chr_trans;
     get_breakend_chromosome(chr_trans);
-    return (p==0 || p==chromosomes.at(chr_trans).length()+1);
+    return (p==0 || p==(int32_t)(chromosomes.at(chr_trans).length()+1));
 }
 
 
@@ -791,7 +794,7 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
     uint8_t i;
     int32_t n_fields;
     int64_t n_lines;
-    VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
+    VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
     ifstream file;
     string buffer;
 
@@ -836,7 +839,7 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             record.min_n_haplotypes_alt_baseline=n_samples_to_load*min_allele_frequency;
             record.min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nonmissing_frequency;
             record.n_samples_to_load=n_samples_to_load;
-            if (n_samples_to_load>record.genotypes.size()) record.genotypes.resize(n_samples_to_load);
+            if (n_samples_to_load>(int32_t)record.genotypes.size()) record.genotypes.resize(n_samples_to_load);
             continue;
         }
         else if (c==EOF) break;

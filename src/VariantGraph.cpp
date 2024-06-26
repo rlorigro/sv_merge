@@ -350,7 +350,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         record.get_reference_coordinates(false,tmp_pair);
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
         if (tmp_pair.first!=tmp_pair.second) {
-            first_positions.push_back(tmp_pair.first); first_positions.push_back(tmp_pair.second);
+            first_positions.push_back(tmp_pair.first);
+            if (tmp_pair.second>main_chromosome_length) tmp_pair.second=main_chromosome_length;
+            first_positions.push_back(tmp_pair.second);
             if (record.sv_type==VcfReader::TYPE_REPLACEMENT) {
                 const handle_t handle_alt = graph.create_handle(record.alt.substr(1));
                 insertion_handles.emplace_back(handle_alt);

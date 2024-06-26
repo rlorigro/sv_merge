@@ -58,7 +58,7 @@ public:
      * Remark: `pass_only` means FILTER=PASS or FILTER='.'
      */
     bool pass_only, high_qual_only;
-    int32_t min_sv_length, n_samples_to_load;
+    int32_t min_sv_length, max_sv_length, n_samples_to_load;
     double min_qual, min_af, min_nmf;
 
     /**
@@ -91,10 +91,12 @@ public:
      * @param pass_only calls with FILTER different from PASS or `.` are discarded by the user;
      * @param high_qual_only calls with `QUAL<min_qual` are discarded by the user;
      * @param min_sv_length calls shorter than this are discarded by the user;
+     * @param max_sv_length calls longer than this are discarded by the user; a better approach consists in pre-
+     * processing the VCF to transform every large call into a set of BNDs: see `clean_bnds.cpp`;
      * @param min_af calls with too few haplotypes containing the ALT allele are discarded by the user;
      * @param min_nmf calls with too few non-missing haplotypes are discarded by the user.
      */
-    VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf);
+    VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf);
 
     /**
      * @return a new object that contains a copy of every variable of the current object that was loaded from a VCF
@@ -110,7 +112,7 @@ public:
      * - If `high_qual_only` is true and the call has low quality, no field after QUAL is loaded.
      * - If `pass_only` is true and the call is not PASS, no field after FILTER is loaded.
      * - If the call is not of a supported type, no field after INFO is loaded.
-     * - If the call is shorter than `min_sv_length`, no field after INFO is loaded.
+     * - If the call is shorter than `min_sv_length` or longer than `max_sv_length`, no field after INFO is loaded.
      * - If there are more samples than `n_samples_to_load`, no sample after the maximum is loaded.
      */
     void set_from_stream(ifstream& stream);
@@ -298,7 +300,7 @@ private:
      *
      * @return TRUE iff some VCF fields were skipped.
      */
-    bool set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
+    bool set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair);
 
     /**
      * Core logic of confidence intervals extraction
@@ -395,7 +397,7 @@ public:
     bool high_qual_only;
     double min_qual;
     bool pass_only;
-    int32_t min_sv_length;
+    int32_t min_sv_length, max_sv_length;
     int32_t n_samples_to_load;  // A prefix of the list of all samples. 0=do not load any sample. MAX=load all samples.
     double min_allele_frequency;
     double min_nonmissing_frequency;
@@ -410,7 +412,7 @@ public:
      * @param path a VCF file that contains only calls in `chromosome`;
      * @param progress_n_lines prints a progress message to STDERR after this number of lines have been read (0=silent).
      */
-    VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency);
+    VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency);
     VcfReader(const path& vcf_path);
 
     /**

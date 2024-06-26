@@ -58,7 +58,9 @@ void get_vcf_header(const path& input_vcf, string& header) {
  *   in the ALT of a BND record).
  * - Transforms long non-BND calls into sets of BNDs.
  *
- * Remark: the output VCF is not sorted.
+ * Remark: the output VCF is not sorted: if it is used for inter-sample SV merging, it should be sorted. If it is used
+ * for inter-sample SV merging or for intra-sample SV filtering, it should be post-processed to make a decision on a
+ * large call from information on its BNDs.
  */
 int main (int argc, char* argv[]) {
     bool has_mate;
