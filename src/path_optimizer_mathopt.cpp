@@ -124,7 +124,6 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     // First find one extreme of the pareto set (using a tie-breaker cost for the other objective)
     model.Minimize(vars.cost_d + vars.cost_n*1e-6);
 
-    cerr << "solving d_min" << '\n';
     const absl::StatusOr<SolveResult> response_d = Solve(model, solver_type);
     const auto result_d = response_d.value();
 
@@ -139,13 +138,9 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     double n_max = vars.cost_n.Evaluate(result_d.variable_values());
     double d_min = vars.cost_d.Evaluate(result_d.variable_values());
 
-    cerr << "n_max: " << n_max << '\n';
-    cerr << "d_min: " << d_min << '\n';
-
     // Then find the other extreme of the pareto set (using a tie-breaker cost for the other objective)
     model.Minimize(vars.cost_n + vars.cost_d*1e-6);
 
-    cerr << "solving n_min" << '\n';
     const absl::StatusOr<SolveResult> response_n = Solve(model, solver_type);
     const auto result_n = response_n.value();
 
@@ -160,25 +155,21 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     double n_min = vars.cost_n.Evaluate(result_n.variable_values());
     double d_max = vars.cost_d.Evaluate(result_n.variable_values());
 
-    cerr << "n_min: " << n_min << '\n';
-    cerr << "d_max: " << d_max << '\n';
-
     // Now that we have the range of n and d values, we can normalize the costs and construct the quadratic objective
     auto n_range = n_max - n_min;
     auto d_range = d_max - d_min;
 
-    n_range = n_range == 0 ? 1 : n_range;
-    d_range = d_range == 0 ? 1 : d_range;
+    // Avoid division by zero
+    n_range = (n_range == 0 ? 1 : n_range);
+    d_range = (d_range == 0 ? 1 : d_range);
 
-    cerr << "n_range: " << n_range << '\n';
-    cerr << "d_range: " << d_range << '\n';
+    Variable d_norm = model.AddContinuousVariable(0,1,"d");
+    Variable n_norm = model.AddContinuousVariable(0,1,"n");
 
-    LinearExpression d_norm = (vars.cost_d - d_min)/d_range;
-    LinearExpression n_norm = (vars.cost_n - n_min)/n_range;
-    QuadraticExpression d_square = d_norm*d_norm;
-    QuadraticExpression n_square = n_norm*n_norm;
+    model.AddLinearConstraint(d_norm == (vars.cost_d - d_min)/d_range);
+    model.AddLinearConstraint(n_norm == (vars.cost_n - n_min)/n_range);
 
-    model.Minimize(d_weight*d_square + n_weight*n_square);
+    model.Minimize(d_norm*d_norm*d_weight + n_norm*n_norm*n_weight);
 
     cerr << "solving joint objective" << '\n';
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type);
@@ -202,6 +193,12 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
         transmap = {};
         return;
     }
+
+    // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
+    double n = vars.cost_n.Evaluate(result_n.variable_values());
+    double d = vars.cost_d.Evaluate(result_n.variable_values());
+
+    cerr << "n: " << n << "\td: " << d << '\n';
 
     parse_read_model_solution(result_n_d, vars, transmap, output_dir);
 }
