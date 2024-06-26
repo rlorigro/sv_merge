@@ -124,11 +124,11 @@ void test_optimization(){
         cerr << "solver: " << name << '\n';
 
         try {
-            auto transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir, t);
+            TransMap transmap_copy = transmap;
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
 
             transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir, t);
 
             transmap_copy = transmap;
             optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir, t);
@@ -140,6 +140,77 @@ void test_optimization(){
 }
 
 
+void test_infeasible_by_ploidy(){
+    TransMap transmap;
+
+    transmap.add_sample("HG001");
+    transmap.add_sample("HG002");
+
+    transmap.add_read("read_01");
+    transmap.add_read("read_02");
+    transmap.add_read("read_03");
+    transmap.add_read("read_04");
+    transmap.add_read("read_05");
+    transmap.add_read("read_06");
+
+    transmap.add_path("a");
+    transmap.add_path("b");
+    transmap.add_path("c");
+
+    transmap.add_edge("read_01", "HG001");
+    transmap.add_edge("read_03", "HG001");
+    transmap.add_edge("read_05", "HG001");
+
+    transmap.add_edge("read_02", "HG002");
+    transmap.add_edge("read_04", "HG002");
+    transmap.add_edge("read_06", "HG002");
+
+    // HG001 (odd)
+    transmap.add_edge("read_01", "a", 1);
+
+    transmap.add_edge("read_03", "b", 2);
+
+    transmap.add_edge("read_05", "c", 3);
+
+    // Make tmp dir
+    path output_dir = "/tmp/" + get_uuid();
+
+    if (not exists(output_dir)){
+        create_directories(output_dir);
+    }
+    else{
+        throw runtime_error("Directory already exists: " + output_dir.string());
+    }
+
+    vector <pair <SolverType,string> > solver_type = {
+            {SolverType::kGscip,"kGscip"},
+            {SolverType::kGurobi,"kGurobi"},
+            {SolverType::kGlop,"kGlop"},
+            {SolverType::kCpSat,"kCpSat"},
+            {SolverType::kPdlp,"kPdlp"},
+            {SolverType::kGlpk,"kGlpk"},
+            {SolverType::kEcos,"kEcos"},
+            {SolverType::kScs,"kScs"},
+            {SolverType::kHighs,"kHighs"},
+            {SolverType::kSantorini,"kSantorin"}
+    };
+
+    for (const auto& [t,name]: solver_type) {
+        cerr << "solver: " << name << '\n';
+
+        try {
+            TransMap transmap_copy = transmap;
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
+        }
+        catch (const exception& e){
+            cerr << "ERROR: " << e.what() << '\n';
+        }
+    }
+
+}
+
+
 int main(){
     test_optimization();
+    test_infeasible_by_ploidy();
 }

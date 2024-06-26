@@ -22,9 +22,14 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         vars.haps.emplace(hap_id, model.AddBinaryVariable(name));
     });
 
-    transmap.for_each_sample([&](const string& name, int64_t sample_id){
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
+                string hap_name = transmap.get_node(hap_id).name;
+                string read_name = transmap.get_node(read_id).name;
+
+                cerr << "sample: " << sample_name << ',' << sample_id << "\tread: " << read_name << ',' << read_id << "\thap: " << hap_name << ',' << hap_id << '\n';
+
                 // DEFINE: read-hap vars
                 string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
                 auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddBinaryVariable(r_h_name));
@@ -49,7 +54,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     auto& s_h = result2.first->second;
 
                     // DEFINE: ploidy
-                    vars.ploidy[hap_id] += s_h;
+                    vars.ploidy[sample_id] += s_h;
 
                     // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
@@ -67,7 +72,8 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
     }
 
     // CONSTRAINT: ploidy
-    for (const auto& [hap_id,p]: vars.ploidy){
+    for (const auto& [sample_id,p]: vars.ploidy){
+        cerr << "sample_id: " << sample_id << "\tploidy: " << p << '\n';
         model.AddLinearConstraint(p <= 2);
     }
 
@@ -114,8 +120,6 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
 
 
 void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_weight, size_t n_threads, path output_dir, const SolverType& solver_type){
-    cerr << "solver_type: " << solver_type << '\n';
-
     Model model;
     PathVariables vars;
 
@@ -171,7 +175,6 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
 
     model.Minimize(d_norm*d_norm*d_weight + n_norm*n_norm*n_weight);
 
-    cerr << "solving joint objective" << '\n';
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type);
     const auto result_n_d = response_n_d.value();
 
@@ -195,8 +198,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     }
 
     // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
-    double n = vars.cost_n.Evaluate(result_n.variable_values());
-    double d = vars.cost_d.Evaluate(result_n.variable_values());
+    double n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    double d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     cerr << "n: " << n << "\td: " << d << '\n';
 
