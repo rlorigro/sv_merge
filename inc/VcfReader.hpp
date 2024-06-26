@@ -225,7 +225,7 @@ public:
 
     /**
      * Every BND that involves two positions should have a mate, i.e. a symmetrical record at the other position.
-     * This function sets `out` to the ALT field of the mate of this record, which is assumed to be BND.
+     * This function sets `out` to the ALT field of the mate of this record, which is assumed to be a BND.
      */
     void get_alt_of_breakend_mate(const unordered_map<string,string>& chromosomes, string& out);
 
@@ -321,6 +321,7 @@ public:
     static const char LINE_END;
     static const char VCF_SEPARATOR;
     static const char VCF_MISSING_CHAR;
+    static const string VCF_MISSING_STRING;
     static const char SYMBOLIC_CHAR_OPEN;
     static const char SYMBOLIC_CHAR_CLOSE;
     static const char BREAKEND_CHAR_OPEN;

@@ -18,6 +18,7 @@ const uint8_t VcfReader::N_NONSAMPLE_FIELDS_VCF = 9;
 const char VcfReader::LINE_END = '\n';
 const char VcfReader::VCF_SEPARATOR = '\t';
 const char VcfReader::VCF_MISSING_CHAR = '.';
+const string VcfReader::VCF_MISSING_STRING = ".";
 const char VcfReader::SYMBOLIC_CHAR_OPEN = '<';
 const char VcfReader::SYMBOLIC_CHAR_CLOSE = '>';
 const char VcfReader::BREAKEND_CHAR_OPEN = '[';
@@ -366,7 +367,7 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
 
 void VcfRecord::print(ostream& stream) const {
     stream << chrom << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << id << VcfReader::VCF_SEPARATOR << ref << VcfReader::VCF_SEPARATOR << alt << VcfReader::VCF_SEPARATOR;
-    if (qual==-1) stream << '.';
+    if (qual==-1) stream << VcfReader::VCF_MISSING_CHAR;
     else stream << qual;
     stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR << info << VcfReader::VCF_SEPARATOR << format;
 
