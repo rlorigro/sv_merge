@@ -45,7 +45,8 @@ def load_features_from_vcf(
 
         if filter_fn is not None:
             if not(filter_fn(record)):
-                continue
+                # print("skipped", record.INFO["SVLEN"][0]) # maya edit
+                continue # will skip the rest of the loop and move on to the next record
 
         if contigs is not None:
             if record.CHROM not in contigs:
@@ -91,13 +92,20 @@ def load_features_from_vcf(
         t = type_vector
         type_index = get_type_index(record)
         t[type_index] = 1
+        # print("type_vector", type_vector)
 
         caller_support = [0,0,0]
         caller_support[0] = info["SUPP_PAV"] if "SUPP_PAV" in info else 0
         caller_support[1] = info["SUPP_PBSV"] if "SUPP_PBSV" in info else 0
         caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
-        hapestry_data = list(map(float,info["HAPESTRY_READS"]))
+        hapestry_data = list(map(float,info["HAPESTRY_READS"])) # hapestry_data is HAPESTRY_READS
+        hapestry_data_neighbors = float(info["HAPESTRY_READS_NEIGHBORS"]) # hapestry_data_neighbors is HAPESTRY_READS_NEIGHBORS
+
+        # ALL MAYA EDITS
+        hapestry_reads_CCS = info["HAPESTRY_READS_CCS"] if "HAPESTRY_READS_CCS" in info else [] # should probably make this not an empty list??
+        hapestry_reads_max_CCS = info["HAPESTRY_READS_MAX_CCS"] if "HAPESTRY_READS_MAX_CCS" in info else 0
+        hapestry_reads_neighbors_CCS = info["HAPESTRY_READS_NEIGHBORS_CCS"] if "HAPESTRY_READS_NEIGHBORS_CCS" in info else 0
 
         y.append(is_true)
         x.append([])
@@ -133,17 +141,39 @@ def load_features_from_vcf(
         x[-1].extend(caller_support)
         if r == 0:
             feature_names.extend(["caller_support_" + str(i) for i in range(len(caller_support))])
-
+        
         if annotation_name.lower() == "hapestry":
-            max_align_score = info["HAPESTRY_READS_MAX"]
+            max_align_score = info["HAPESTRY_READS_MAX"] # is there a reason this is down here?
 
-            x[-1].extend(hapestry_data)
+            # add hapestry features (ONT)
+            """ x[-1].extend(hapestry_data)
             if r == 0:
                 feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
 
+            x[-1].append(hapestry_data_neighbors)
+            if r == 0:
+                feature_names.append("hapestry_data_neighbors")
+
             x[-1].append(max_align_score)
             if r == 0:
-                feature_names.append("max_align_score")
+                feature_names.append("max_align_score")  """
+            
+
+            # add hapestry_CCS features (PB CCS)
+            # hapestry_reads_CCS = hapestry_reads_CCS[:-2] # keep only if using both ONT and PB features
+
+            x[-1].extend(hapestry_reads_CCS)
+            if r == 0:
+                feature_names.extend(["hapestry_reads_CCS_" + str(i) for i in range(len(hapestry_reads_CCS))]) 
+            
+            x[-1].append(hapestry_reads_max_CCS)
+            if r == 0:
+                feature_names.append("hapestry_reads_max_CCS")
+            
+            x[-1].append(hapestry_reads_neighbors_CCS)
+            if r == 0:
+                feature_names.append("happestry_reads_neighbors_CCS")
+
 
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
@@ -383,6 +413,8 @@ def load_features_from_vcf(
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
         r += 1
+        # print(feature_names)
+        # break # maya comment out
 
 
 class VcfDataset(Dataset):
@@ -413,7 +445,9 @@ class VcfDataset(Dataset):
 
             self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
-        x = np.array(x)
+        # print("------x", x, len(x))
+        x = np.array(x) 
+        # print(x.shape) # maya edit
         y = np.array(y)
 
         x_dtype = torch.FloatTensor

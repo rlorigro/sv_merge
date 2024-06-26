@@ -40,6 +40,7 @@ print("USING pytorch VERSION: ", torch.__version__)
 def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epochs, max_batches_per_epoch):
     train_losses = list()
     test_losses = list()
+    train_aucs = list() # maya experiment
     test_aucs = list()
     models = list()
 
@@ -81,6 +82,12 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
 
             test_losses.append(test_loss)
             test_aucs.append(auc)
+
+            # maya experiment, try to evaluate model on training data
+            y_predict_train, y_true_train, train_loss = test(model=model, loader=train_loader, loss_fn=torch.nn.BCELoss(), use_sigmoid=True) # not sure if need train loss, maya experiment
+            train_auc = roc_auc_score(y_true=y_true_train, y_score=y_predict_train)
+            train_aucs.append(train_auc)
+
             models.append(deepcopy(model.state_dict()))
             model.train()
 
@@ -89,14 +96,14 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
                 test_auc_worsened = test_aucs[-1] < test_aucs[-2]
 
                 print(f"Epoch:{e}\tbatches:{batch_index}\tlr_rate:{scheduler.get_last_lr()}\tn_positive:{n_total_positive}\tn_negative:{n_total_negative}\tprev_loss:{test_losses[-2]:.3f}\tloss:{test_losses[-1]:.3f}\tworsened:{test_loss_worsened}\tprev_auc:{test_aucs[-2]:.3f}\tauc:{test_aucs[-1]:.3f}\tworsened:{test_auc_worsened}")
-
+                print("train_auc", train_auc)
     # Get index of greatest AUC
     max_auc_index = test_aucs.index(max(test_aucs))
 
     # Get the model with the greatest AUC
     model.load_state_dict(models[max_auc_index])
 
-    return train_losses, test_losses, test_aucs
+    return train_losses, test_losses, test_aucs, train_aucs # maya added the last one
 
 
 def train_batch(model, x, y, optimizer, scheduler, loss_fn):
@@ -219,13 +226,13 @@ def run(dataset_train, dataset_test, output_dir, downsample=False):
     # Define the loss function
     loss_fn = nn.BCEWithLogitsLoss()
 
-    # Train and get the resulting loss per iteration
-    train_losses, test_losses, test_aucs = train(model=shallow_model, train_loader=dataset_train, test_loader=dataset_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
+    # Train and get the resulting loss per iteration # maya experiment, added last variable
+    train_losses, test_losses, test_aucs, train_aucs = train(model=shallow_model, train_loader=dataset_train, test_loader=dataset_test, optimizer=optimizer, scheduler=scheduler, loss_fn=loss_fn, epochs=n_epochs, max_batches_per_epoch=max_batches_per_epoch)
 
     # Test and get the resulting predicted y values
     shallow_model.eval()    # switch to eval mode to disable dropout
 
-    return train_losses, test_losses, test_aucs, shallow_model
+    return train_losses, test_losses, test_aucs, train_aucs, shallow_model # maya experiment, added train_aucs
 
 
 def compute_downsampling_weight_tensor(dataset):
@@ -327,6 +334,13 @@ def min50bp(record):
         return record.INFO["SVLEN"][0] >= 50
     else:
         return record.INFO["SVLEN"] >= 50
+    
+# maya's added function, returns true or false 
+def min1000bp(record):
+    if type(record.INFO["SVLEN"]) == list:
+        return record.INFO["SVLEN"][0] >= 1000
+    else:
+        return record.INFO["SVLEN"][0] >= 1000
 
 
 def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir):
@@ -347,7 +361,8 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
     print('Input shape: ', dataset_train[0][0].shape)
     print('Output shape: ', dataset_train[0][1].shape)
 
-    train_losses, test_losses, test_aucs, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
+    # maya experiment, added train_aucs
+    train_losses, test_losses, test_aucs, train_aucs, model = run(dataset_train=dataset_train, dataset_test=dataset_test, downsample=True, output_dir=output_dir)
 
     # Format the date and time
     model_output_path = os.path.join(output_dir, label.replace(" ", "_") + ".pt")
@@ -459,21 +474,33 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # ONT
+    # path_to_data = "/Users/mayam/Home/Internships/broad_summer_2024/data/intro/ONT_vcfs/"
+    # name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz" 
+
+    # PB HiFi
+    # path_to_data = "/Users/mayam/Home/Internships/broad_summer_2024/data/intro/PB_HiFi_vcfs/"
+    # name_of_file = "_multiannotated_8x_asm10_20bp.vcf.gz"
+
+    # ONT and PB (use this)
+    path_to_data = "/Users/mayam/Home/Internships/broad_summer_2024/data/intro/ONT_PB_annotated_vcfs/"
+    name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz" 
+
     train_vcfs = [
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00621_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG01928_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG02572_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03098_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03492_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        path_to_data + "HG00621" + name_of_file,
+        path_to_data + "HG01928" + name_of_file,
+        path_to_data + "HG02572" + name_of_file,
+        path_to_data + "HG03098" + name_of_file,
+        path_to_data + "HG03492" + name_of_file,
     ]
 
     test_vcfs = [
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00673_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00733_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        path_to_data + "HG00673" + name_of_file,
+        path_to_data + "HG00733" + name_of_file,
     ]
 
     eval_vcfs = [
-        "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03516_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
+        path_to_data + "HG03516" + name_of_file,
     ]
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
@@ -482,13 +509,16 @@ def main():
 
     # Which truth info and annotation names to use (these names are hardcoded in the dataloader to define its behavior)
     truth_info_names = ["Hapestry"]
-    # truth_info_names = ["Hapestry", "TruvariBench_TP"]
+    #truth_info_names = ["Hapestry", "TruvariBench_TP"] # uncommented this and and corresponding below to show labels on plot
     annotation_names = ["Hapestry"]
-    # annotation_names = ["Hapestry", "Sniffles"]
+    #annotation_names = ["Hapestry", "Sniffles"]
 
     # Whether to subset the VCFs to >= 50bp
     filter_fn = min50bp
     # filter_fn = None
+
+    # Whether to subset the VCFs to >= 1000bp, maya's edit
+    # filter_fn = min1000bp 
 
     # Write a bunch of config files for record keeping
     write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs)
@@ -508,6 +538,7 @@ def main():
     length_axes = dict()
 
     n_processes = len(truth_info_names) * len(annotation_names)
+    n_processes = 1 # maya added
 
     args = list()
 
