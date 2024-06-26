@@ -1,17 +1,49 @@
 #include <iostream>
 #include <stdexcept>
+#include <filesystem>
+#include <string>
+#include <random>
 
+using std::ofstream;
+using std::string;
+using std::random_device;
+using std::uniform_int_distribution;
+using std::mt19937;
 using std::runtime_error;
+using std::filesystem::path;
+using std::filesystem::create_directories;
+using std::filesystem::exists;
 using std::exception;
 using std::cerr;
 
-#include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "TransitiveMap.hpp"
-#include "path_optimizer.hpp"
+#include "path_optimizer_mathopt.hpp"
 
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
-using sv_merge::optimize_d;
+using sv_merge::optimize_reads_with_d_and_n;
+
+
+// Taken from:
+// https://stackoverflow.com/a/58467162
+string get_uuid() {
+    static random_device dev;
+    static mt19937 rng(dev());
+
+    uniform_int_distribution<int> dist(0, 15);
+
+    const char *v = "0123456789abcdef";
+    const bool dash[] = {0,0,0,0,1,0,1,0,1,0,1,0,0,0,0,0};
+
+    string res;
+    res.reserve(16);
+    for (int i = 0; i < 16; i++) {
+        if (dash[i]) res += "-";
+        res += v[dist(rng)];
+        res += v[dist(rng)];
+    }
+    return res;
+}
 
 
 void test_optimization(){
@@ -65,10 +97,46 @@ void test_optimization(){
     transmap.add_edge("read_06", "b", 2);
     transmap.add_edge("read_06", "c", 3);
 
-    optimize_d(transmap);
-    optimize_d_plus_n(transmap, 1, 10);
-    optimize_d_plus_n(transmap, 1, 0);
-    optimize_d_plus_n(transmap, 10, 1);
+    // Make tmp dir
+    path output_dir = "/tmp/" + get_uuid();
+
+    if (not exists(output_dir)){
+        create_directories(output_dir);
+    }
+    else{
+        throw runtime_error("Directory already exists: " + output_dir.string());
+    }
+
+    vector <pair <SolverType,string> > solver_type = {
+            {SolverType::kGscip,"kGscip"},
+            {SolverType::kGurobi,"kGurobi"},
+            {SolverType::kGlop,"kGlop"},
+            {SolverType::kCpSat,"kCpSat"},
+            {SolverType::kPdlp,"kPdlp"},
+            {SolverType::kGlpk,"kGlpk"},
+            {SolverType::kEcos,"kEcos"},
+            {SolverType::kScs,"kScs"},
+            {SolverType::kHighs,"kHighs"},
+            {SolverType::kSantorini,"kSantorin"}
+    };
+
+    for (const auto& [t,name]: solver_type) {
+        cerr << "solver: " << name << '\n';
+
+        try {
+            auto transmap_copy = transmap;
+            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir, t);
+
+            transmap_copy = transmap;
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
+
+            transmap_copy = transmap;
+            optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir, t);
+        }
+        catch (const exception& e){
+            cerr << "ERROR: " << e.what() << '\n';
+        }
+    }
 }
 
 

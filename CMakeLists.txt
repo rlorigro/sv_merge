@@ -106,6 +106,7 @@ set(SOURCES
 if (NOT no_ortools OR NOT DEFINED no_ortools)
     list(APPEND SOURCES
             src/path_optimizer.cpp
+            src/path_optimizer_mathopt.cpp
             src/read_centroid_optimizer.cpp
             src/read_cluster_optimizer.cpp
     )

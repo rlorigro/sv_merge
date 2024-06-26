@@ -1,4 +1,4 @@
-#include "path_optimizer.hpp"
+#include "path_optimizer_mathopt.hpp"
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
@@ -410,7 +410,8 @@ void merge_thread_fn(
 
         try {
             // Optimize
-            optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir);
+            SolverType solver_type = SolverType::kGscip;
+            optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir, solver_type);
 
             // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
             // not conflict with existing names
@@ -435,7 +436,6 @@ void merge_thread_fn(
             path output_path = subdir / "solution.vcf";
 
             write_solution_to_vcf(variant_graph, transmap, output_path);
-
         }
         catch (const exception& e) {
             cerr << e.what() << '\n';
