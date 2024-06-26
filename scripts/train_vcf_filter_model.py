@@ -1,4 +1,4 @@
-from modules.shallow_linear import ShallowLinear
+from modules.shallow_linear import ShallowLinear 
 from modules.data_loader import VcfDataset
 from collections import defaultdict
 from torch import multiprocessing
