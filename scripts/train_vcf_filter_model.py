@@ -516,6 +516,7 @@ def main():
     # Whether to subset the VCFs to >= 50bp
     filter_fn = min50bp
     # filter_fn = None
+    # this is a test, maya delete 
 
     # Whether to subset the VCFs to >= 1000bp, maya's edit
     # filter_fn = min1000bp 
