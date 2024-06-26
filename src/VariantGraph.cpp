@@ -89,8 +89,13 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
     if (pos==CHROMOSOME_LENGTH-1) return INT32_MAX;
     if (!tandem_track.contains(chromosome_id)) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
+    return get_flank_boundary_right_impl(pos,CHROMOSOME_LENGTH,intervals,flank_length);
+}
+
+
+int32_t VariantGraph::get_flank_boundary_right_impl(int32_t pos, int32_t sequence_length, const vector<interval_t>& intervals, int32_t flank_length) {
     const size_t N_INTERVALS = intervals.size();
-    if (N_INTERVALS==0) return min(pos+flank_length-1,CHROMOSOME_LENGTH-1);
+    if (N_INTERVALS==0) return min(pos+flank_length-1,sequence_length-1);
     tmp_interval.first=pos; tmp_interval.second=pos+flank_length;
     auto iter = std::lower_bound(intervals.begin(),intervals.end(),tmp_interval);
     size_t p = iter-intervals.begin();
@@ -103,7 +108,7 @@ int32_t VariantGraph::get_flank_boundary_right(const string& chromosome_id, int3
         tmp_interval.second=tmp_interval.first+flank_length;
         p++;
     }
-    return tmp_interval.first>=CHROMOSOME_LENGTH?INT32_MAX:min(tmp_interval.second-1,CHROMOSOME_LENGTH-1);
+    return tmp_interval.first>=sequence_length?INT32_MAX:min(tmp_interval.second-1,sequence_length-1);
 }
 
 
@@ -111,6 +116,11 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
     if (pos==0) return INT32_MAX;
     if (!tandem_track.contains(chromosome_id)) return pos>=flank_length?pos-flank_length:0;
     const vector<interval_t>& intervals = tandem_track.at(chromosome_id);
+    return get_flank_boundary_left_impl(pos,intervals,flank_length);
+}
+
+
+int32_t VariantGraph::get_flank_boundary_left_impl(int32_t pos, const vector<interval_t>& intervals, int32_t flank_length) {
     const size_t N_INTERVALS = intervals.size();
     if (N_INTERVALS==0) return pos>=flank_length?pos-flank_length:0;
     tmp_interval.first=pos>=flank_length?pos-flank_length:0; tmp_interval.second=pos;
@@ -130,6 +140,172 @@ int32_t VariantGraph::get_flank_boundary_left(const string& chromosome_id, int32
         }
     }
     return tmp_interval.second==0?INT32_MAX:tmp_interval.first;
+}
+
+
+void VariantGraph::get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<interval_t>& out) {
+    size_t i, from;
+
+    const auto OUT_FIRST = out.size();
+    const pair<string,int32_t> COORDINATE = node_to_chromosome.find(node_id)->second;
+    const string CHROMOSOME_ID = COORDINATE.first;
+    if (!tandem_track.contains(CHROMOSOME_ID)) return;
+    const vector<interval_t>& INTERVALS = tandem_track.at(CHROMOSOME_ID);
+    if (INTERVALS.empty()) return;
+    const size_t N_INTERVALS = INTERVALS.size();
+    tmp_interval.first=COORDINATE.second;
+    tmp_interval.second=tmp_interval.first+node_length;
+    auto ITER = std::lower_bound(INTERVALS.begin(),INTERVALS.end(),tmp_interval);
+    if (ITER!=INTERVALS.end()) i=ITER-INTERVALS.begin()+1;
+    else i=N_INTERVALS;
+    from=N_INTERVALS;
+    while (i>0) {
+        i--;
+        if (INTERVALS.at(i).second<=tmp_interval.first) { from=i+1; break; }
+    }
+    i=from;
+    while (i<N_INTERVALS) {
+        if (INTERVALS.at(i).first>=tmp_interval.second) break;
+        out.emplace_back(max(tmp_interval.first,INTERVALS.at(i).first),min(tmp_interval.second,INTERVALS.at(i).second));
+        i++;
+    }
+    if (!is_reverse) {
+        for (i=OUT_FIRST; i<out.size(); i++) {
+            out.at(i).first=out.at(i).first-tmp_interval.first+offset;
+            out.at(i).second=out.at(i).second-tmp_interval.first+offset;
+        }
+    }
+    else {
+        std::reverse(out.begin()+OUT_FIRST,out.end());
+        for (i=OUT_FIRST; i<out.size(); i++) {
+            std::swap(out.at(i).first,out.at(i).second);
+            out.at(i).first=(tmp_interval.second-1)-(out.at(i).first-1)+offset;
+            out.at(i).second=(tmp_interval.second-1)-(out.at(i).second-1)+offset;
+        }
+    }
+}
+
+
+void VariantGraph::get_tandem_intervals(const vector<nid_t>& node_ids, const vector<bool>& is_reverse, const vector<int32_t>& node_lengths, vector<interval_t>& out) {
+    const size_t LENGTH = node_ids.size();
+    size_t i, j;
+    int32_t offset, length, length_prime;
+    nid_t node_id;
+
+    // Collecting per-node tandem intervals, including entire non-ref nodes.
+    out.clear(); offset=0; i=0;
+    while (i<LENGTH) {
+        node_id=node_ids.at(i);
+        length=node_lengths.at(i);
+        if (is_reference_node(node_id)) {
+            get_tandem_intervals(node_id,length,is_reverse.at(i),offset,out);
+            offset+=length;
+            i++;
+        }
+        else {
+            if (!out.empty() && out.at(out.size()-1).second==offset) {
+                out.at(out.size()-1).second=offset+length;
+                offset+=length;
+                i++;
+            }
+            else if (i<LENGTH-1) {
+                j=out.size();
+                i++;
+                node_id=node_ids.at(i);
+                length_prime=node_lengths.at(i);
+                if (!is_reference_node(node_id)) throw runtime_error("ERROR: the path contains a non-ref node adjacent to another non-ref node?!");
+                get_tandem_intervals(node_id,length_prime,is_reverse.at(i),offset+length,out);
+                if (out.size()>j && out.at(j).first==offset+length) out.at(j).first=offset;
+                offset+=length+length_prime;
+                i++;
+            }
+            else {
+                offset+=length;
+                i++;
+            }
+        }
+    }
+    if (out.empty()) return;
+
+    // Compacting adjacent intervals
+    j=0;
+    for (i=1; i<out.size(); i++) {
+        if (out.at(i).first==out.at(j).second) out.at(j).second=out.at(i).second;
+        else std::swap(out.at(++j),out.at(i));
+    }
+    out.erase(out.begin()+(j+1),out.end());
+}
+
+/**
+ * Remark: this is implemented naively in `O(|path|^2)` time.
+ *
+ * Remark: the procedure uses global buffers `node_ids_buffer, is_reverse_buffer, node_lengths_buffer,
+ * intervals_buffer`.
+ */
+void VariantGraph::vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<interval_t>& out) {
+    const auto PATH_LENGTH = (int32_t)path.size();
+    if (PATH_LENGTH<2) { out.clear(); return; }
+    const auto N_EDGES = (int32_t)edges_of_the_record.size();
+    bool found, rev;
+    int32_t i, j, p, x, y;
+    int32_t length, path_length_bps;
+    nid_t id;
+    handle_t handle1, handle2;
+
+    node_ids_buffer.clear(); is_reverse_buffer.clear(); node_lengths_buffer.clear(); tmp_edges.clear();
+    id=stoll(path.at(0).first);
+    rev=path.at(0).second;
+    node_ids_buffer.emplace_back(id);
+    is_reverse_buffer.emplace_back(rev);
+    handle1=graph.get_handle(id,rev);
+    length=int32_t(graph.get_length(handle1));
+    node_lengths_buffer.emplace_back(length);
+    path_length_bps=length;
+    for (i=1; i<PATH_LENGTH; i++) {
+        id=stoll(path.at(i).first);
+        rev=path.at(i).second;
+        node_ids_buffer.emplace_back(id);
+        is_reverse_buffer.emplace_back(rev);
+        handle2=graph.get_handle(id,rev);
+        length=int32_t(graph.get_length(handle2));
+        node_lengths_buffer.emplace_back(length);
+        path_length_bps+=length;
+        tmp_edges.emplace_back(graph.edge_handle(handle1,handle2));  // Canonized
+        handle1=handle2;
+    }
+    get_tandem_intervals(node_ids_buffer,is_reverse_buffer,node_lengths_buffer,intervals_buffer);
+    out.clear(); x=0;
+    for (i=0; i<PATH_LENGTH-1; i++) {
+        x+=node_lengths_buffer.at(i);
+        found=false;
+        if (tmp_edges.at(i)==edges_of_the_record.at(0)) {
+            // Forward match
+            j=i; p=1; y=x;
+            while (j<(PATH_LENGTH-1)-1 && p<N_EDGES) {
+                j++;
+                y+=node_lengths_buffer.at(j);
+                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p++;
+            }
+            if (p==N_EDGES) found=true;
+        }
+        if (!found && tmp_edges.at(i)==edges_of_the_record.at(N_EDGES-1)) {
+            // Reverse match
+            j=i; p=N_EDGES-2; y=x;
+            while (j<(PATH_LENGTH-1)-1 && p>=0) {
+                j++;
+                y+=node_lengths_buffer.at(j);
+                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p--;
+            }
+            if (p==-1) found=true;
+        }
+        if (found) {
+            int32_t left = get_flank_boundary_left_impl(x,intervals_buffer,flank_length);
+            if (left==INT32_MAX) left=0;
+            int32_t right = get_flank_boundary_right_impl(y,path_length_bps,intervals_buffer,flank_length);
+            if (right==INT32_MAX) right=path_length_bps-1;
+            out.emplace_back(left,right);
+        }
+    }
 }
 
 
@@ -174,7 +350,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         record.get_reference_coordinates(false,tmp_pair);
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
         if (tmp_pair.first!=tmp_pair.second) {
-            first_positions.push_back(tmp_pair.first); first_positions.push_back(tmp_pair.second);
+            first_positions.push_back(tmp_pair.first);
+            if (tmp_pair.second>main_chromosome_length) tmp_pair.second=main_chromosome_length;
+            first_positions.push_back(tmp_pair.second);
             if (record.sv_type==VcfReader::TYPE_REPLACEMENT) {
                 const handle_t handle_alt = graph.create_handle(record.alt.substr(1));
                 insertion_handles.emplace_back(handle_alt);
@@ -496,7 +674,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
 
 
 bool VariantGraph::would_graph_be_nontrivial(vector<VcfRecord>& records) {
-    if (records.size()==0) return false;
+    if (records.empty()) return false;
     pair<int32_t,int32_t> tmp_pair;
     for (auto& record: records) {
         record.get_reference_coordinates(false,tmp_pair);
@@ -810,16 +988,15 @@ void VariantGraph::get_main_chromosome(string& result) {
 
 
 void VariantGraph::get_region_of_node(const handle_t& h, Region& result){
-    nid_t n = graph.get_id(h);
-    bool is_reverse = graph.get_is_reverse(h);
-
-    auto iter = node_to_chromosome.find(n);
+    const nid_t n = graph.get_id(h);
+    const bool is_reverse = graph.get_is_reverse(h);
+    const auto iter = node_to_chromosome.find(n);
 
     result.name.clear();
     result.start = -1;
     result.stop = -1;
     if (iter != node_to_chromosome.end()){
-        auto l = graph.get_length(h);
+        const auto l = graph.get_length(h);
 
         result.name = iter->second.first;
         result.start = iter->second.second;

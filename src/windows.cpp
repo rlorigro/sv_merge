@@ -95,9 +95,9 @@ void construct_windows_from_vcf_and_bed(
 
             r.get_reference_coordinates(use_confidence_intervals, coord);
 
-            // Skip large events in the population
-            // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
-            // for very large events
+            // Skip large events in the population.
+            // A better solution consists in pre-processing the VCF to transform every large event into a set of BNDs:
+            // see `clean_bnds.cpp`.
             if (coord.second - coord.first > interval_max_length){
                 vcf_omissions.back().second++;
                 return;
