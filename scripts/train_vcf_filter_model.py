@@ -283,15 +283,23 @@ def downsample_test_data(y_true, y_predict, seed=37):
 
 def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style='-', use_text=False):
     fpr, tpr, thresholds = roc_curve(y_true, y_predict)
+    auc = roc_auc_score(y_true, y_predict) 
+    labels_with_auc = []
 
     if color is not None:
         if label is not None:
+            label_uncropped = label + " (AUC " + str(auc) + ")" # for txt file
+            label = label + " (AUC " + str(round(auc, 3)) + ")" # for plot
+            labels_with_auc.append(label_uncropped)
             axes.plot(fpr, tpr, label=label, color=color, linestyle=style, alpha=alpha)
         else:
             axes.plot(fpr, tpr, color=color, linestyle=style, alpha=alpha)
 
     else:
         if label is not None:
+            label_uncropped = label + " (AUC " + str(auc) + ")" # for txt file
+            label = label + " (AUC " + str(round(auc, 3)) + ")" # for plot
+            labels_with_auc.append(label_uncropped)
             axes.plot(fpr, tpr, label=label, linestyle=style, alpha=alpha)
         else:
             axes.plot(fpr, tpr, linestyle=style, alpha=alpha)
@@ -316,7 +324,7 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style=
                 # add marker
                 axes.plot(x, y, marker='o', color=color, markeredgewidth=0)
 
-    return axes, fpr, tpr, thresholds
+    return axes, fpr, tpr, thresholds, labels_with_auc
 
 
 def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf_path):
@@ -384,6 +392,7 @@ def thread_fn(truth_info_name, annotation_name, train_vcfs, train_contigs, test_
 def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name):
     tandem = [[],[]]
     non_tandem = [[],[]]
+    labels_with_auc = ["Tandem stratified ROC curves"]
 
     for r,record in enumerate(records):
         is_tandem = record.INFO["tr_coverage"] > 0.9
@@ -396,14 +405,16 @@ def plot_tandem_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
             non_tandem[1].append(y_predict[r])
 
     label = truth_info_name + " truth labels and " + annotation_name + " features TANDEM"
-    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=tandem[0], y_predict=tandem[1], label=label, axes=axes, style=':')
+    axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=tandem[0], y_predict=tandem[1], label=label, axes=axes, style=':')
+    labels_with_auc.extend(labels)
 
     color = axes.get_lines()[-1].get_color()
 
     label = truth_info_name + " truth labels and " + annotation_name + " features NON-TANDEM"
-    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=non_tandem[0], y_predict=non_tandem[1], label=label, color=color, axes=axes)
+    axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=non_tandem[0], y_predict=non_tandem[1], label=label, color=color, axes=axes)
+    labels_with_auc.extend(labels)
 
-    return axes
+    return axes, labels_with_auc
 
 
 def get_length(record: vcfpy.Record):
@@ -419,6 +430,7 @@ def get_length(record: vcfpy.Record):
 def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=False):
     length_stratified_results = defaultdict(lambda: [[],[]])
     colormap = pyplot.colormaps['viridis']
+    labels_with_auc = ["Length stratified ROC curves"]
 
     for r,record in enumerate(records):
         length_bin = int(math.log2(get_length(record) + 1))
@@ -436,12 +448,14 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
 
         f = float(i)/float(len(length_stratified_results))
         color = colormap(f)
-        axes, fpr, tpr, thresholds = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+        labels_with_auc.extend(labels)
 
-    return axes
+    return axes, labels_with_auc
 
 
-def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs):
+def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, aucs):
+    # maya added txt file with aucs
     with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
         for path in train_vcfs:
             f.write(path + "\n")
@@ -465,6 +479,10 @@ def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs
     with open(os.path.join(output_dir, "eval_contigs.txt"), "w") as f:
         for contig in eval_contigs:
             f.write(contig + "\n")
+
+    with open(os.path.join(output_dir, "aucs.txt"), "w") as f:
+        for auc in aucs:
+            f.write(auc + "\n")
 
 
 def main():
@@ -509,20 +527,16 @@ def main():
 
     # Which truth info and annotation names to use (these names are hardcoded in the dataloader to define its behavior)
     truth_info_names = ["Hapestry"]
-    #truth_info_names = ["Hapestry", "TruvariBench_TP"] # uncommented this and and corresponding below to show labels on plot
+    truth_info_names = ["Hapestry", "TruvariBench_TP"] # uncommented this and and corresponding below to show labels on plot
     annotation_names = ["Hapestry"]
-    #annotation_names = ["Hapestry", "Sniffles"]
+    annotation_names = ["Hapestry", "Sniffles"]
 
     # Whether to subset the VCFs to >= 50bp
     filter_fn = min50bp
     # filter_fn = None
-    # this is a test, maya delete 
 
-    # Whether to subset the VCFs to >= 1000bp, maya's edit
+    # Whether to subset the VCFs to >= 1000bp
     # filter_fn = min1000bp 
-
-    # Write a bunch of config files for record keeping
-    write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs)
 
     # Initialize some things for plotting
     fig = pyplot.figure()
@@ -542,6 +556,8 @@ def main():
     n_processes = 1 # maya added
 
     args = list()
+
+    labels_with_auc = []
 
     # Set up args for multithreading (each combo of truth/label will get its own thread)
     for truth_info_name in truth_info_names:
@@ -563,17 +579,20 @@ def main():
         if annotation_name != "Hapestry" and truth_info_name == "TruvariBench_TP":
             cmap = pyplot.get_cmap('tab20')
 
-            for name,index in feature_indexes.items():
+            for name,index in feature_indexes.items(): # plots dotted lines in all_combos, shows performance from using each of the raw features by thresholding them directly
+                print("in mysterious for loop") # delete
                 if index > 12:
                     y_trivial = x[:,index]
                     y, y_trivial = downsample_test_data(y_true, y_trivial)
 
                     color = cmap(float(index-12)/(len(feature_indexes)-12))
+                    print("______name_____", name) # delete
 
                     axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
-        tandem_axes = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
-        length_axis = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
+        tandem_axes, tandem_labels = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
+        length_axis, length_labels = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
+        labels_with_auc.extend(tandem_labels + length_labels)
 
         # write the filtered VCF (BEFORE DOWNSAMPLING)
         write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=eval_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
@@ -586,7 +605,9 @@ def main():
         print('y_predict y')
         print(y_predict[0], y_true[0])
 
-        axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
+        labels_with_auc.append("All combos ROC curves") # maybe delete
+        labels_with_auc.extend(labels) # TODO are these two lines in the right place?
 
         roc_data[label] = (fpr, tpr, thresholds)
 
@@ -599,7 +620,7 @@ def main():
     tandem_axes.legend(loc="lower right", fontsize='small')
     tandem_fig.savefig(os.path.join(output_dir,"roc_curve_tandem_stratified.png"), dpi=200)
 
-    for label,length_axis in length_axes.items():
+    for label,length_axis in length_axes.items():  
         length_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
         length_axis.legend(loc="lower right", fontsize='small')
         length_figs[label].savefig(os.path.join(output_dir,label+"_length.png"), dpi=200)
@@ -612,6 +633,9 @@ def main():
 
     # pyplot.show()
     # pyplot.close()
+
+    # Write a bunch of config files for record keeping, maya changed order and moved to bottom
+    write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, labels_with_auc)
 
 
 if __name__ == "__main__":
