@@ -77,6 +77,7 @@ public:
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
 
     bool has_edge(int64_t id_a, int64_t id_b) const;
+    bool has_node(const string& name) const;
 
     /// Global iterators
     void for_each_edge(const function<void(const string& a,const string& b, float weight)>& f) const;
@@ -249,6 +250,11 @@ template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, floa
 
 template<class T> bool HeteroGraph<T>::has_edge(int64_t id_a, int64_t id_b) const {
     return try_get_edge_weight(id_a, id_b).first;
+}
+
+
+template<class T> bool HeteroGraph<T>::has_node(const string& name) const {
+    return id_map.find(name) != id_map.end();
 }
 
 
