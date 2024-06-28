@@ -15,11 +15,11 @@ namespace sv_merge{
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral){
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
         string name = "h" + std::to_string(hap_id);
-        vars.haps.emplace(hap_id, model.AddBinaryVariable(name));
+        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
     });
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
@@ -28,11 +28,9 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 string hap_name = transmap.get_node(hap_id).name;
                 string read_name = transmap.get_node(read_id).name;
 
-                cerr << "sample: " << sample_name << ',' << sample_id << "\tread: " << read_name << ',' << read_id << "\thap: " << hap_name << ',' << hap_id << '\n';
-
                 // DEFINE: read-hap vars
                 string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
-                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddBinaryVariable(r_h_name));
+                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
                 auto& r_h = result.first->second;
 
                 // DEFINE: flow
@@ -50,7 +48,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
                     // DEFINE: sample-hap vars
                     string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
-                    auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddBinaryVariable(s_h_name));
+                    auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
                     auto& s_h = result2.first->second;
 
                     // DEFINE: ploidy
@@ -73,7 +71,6 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
     // CONSTRAINT: ploidy
     for (const auto& [sample_id,p]: vars.ploidy){
-        cerr << "sample_id: " << sample_id << "\tploidy: " << p << '\n';
         model.AddLinearConstraint(p <= 2);
     }
 
@@ -123,7 +120,12 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     Model model;
     PathVariables vars;
 
-    construct_joint_n_d_model(transmap, model, vars);
+    bool integral = true;
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+        integral = false;
+    }
+
+    construct_joint_n_d_model(transmap, model, vars, integral);
 
     // First find one extreme of the pareto set (using a tie-breaker cost for the other objective)
     model.Minimize(vars.cost_d + vars.cost_n*1e-6);
@@ -142,6 +144,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     double n_max = vars.cost_n.Evaluate(result_d.variable_values());
     double d_min = vars.cost_d.Evaluate(result_d.variable_values());
 
+    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
+
     // Then find the other extreme of the pareto set (using a tie-breaker cost for the other objective)
     model.Minimize(vars.cost_n + vars.cost_d*1e-6);
 
@@ -158,6 +162,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
     double n_min = vars.cost_n.Evaluate(result_n.variable_values());
     double d_max = vars.cost_d.Evaluate(result_n.variable_values());
+
+    cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 
     // Now that we have the range of n and d values, we can normalize the costs and construct the quadratic objective
     auto n_range = n_max - n_min;

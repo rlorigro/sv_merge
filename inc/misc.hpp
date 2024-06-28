@@ -74,5 +74,6 @@ bool point_is_contained(int32_t p, const coord_t& i, bool or_equal);
 
 bool point_is_contained(int32_t p, const Region& r, bool or_equal);
 
+string get_uuid();
 
 }

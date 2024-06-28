@@ -2,13 +2,9 @@
 #include <stdexcept>
 #include <filesystem>
 #include <string>
-#include <random>
 
 using std::ofstream;
 using std::string;
-using std::random_device;
-using std::uniform_int_distribution;
-using std::mt19937;
 using std::runtime_error;
 using std::filesystem::path;
 using std::filesystem::create_directories;
@@ -18,32 +14,12 @@ using std::cerr;
 
 #include "TransitiveMap.hpp"
 #include "path_optimizer_mathopt.hpp"
+#include "misc.hpp"
 
+using sv_merge::get_uuid;
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
 using sv_merge::optimize_reads_with_d_and_n;
-
-
-// Taken from:
-// https://stackoverflow.com/a/58467162
-string get_uuid() {
-    static random_device dev;
-    static mt19937 rng(dev());
-
-    uniform_int_distribution<int> dist(0, 15);
-
-    const char *v = "0123456789abcdef";
-    const bool dash[] = {0,0,0,0,1,0,1,0,1,0,1,0,0,0,0,0};
-
-    string res;
-    res.reserve(16);
-    for (int i = 0; i < 16; i++) {
-        if (dash[i]) res += "-";
-        res += v[dist(rng)];
-        res += v[dist(rng)];
-    }
-    return res;
-}
 
 
 void test_optimization(){

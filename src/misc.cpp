@@ -6,6 +6,11 @@
 #include <cstdio>
 #include <array>
 #include <stdexcept>
+#include <random>
+
+using std::random_device;
+using std::uniform_int_distribution;
+using std::mt19937;
 
 using std::runtime_error;
 using std::chrono::seconds;
@@ -282,6 +287,28 @@ bool point_is_contained(int32_t p, const coord_t& i, bool or_equal){
 
 bool point_is_contained(int32_t p, const Region& r, bool or_equal){
     return less_than(r.start, p, r.stop, or_equal) or less_than(r.stop, p, r.start, or_equal);
+}
+
+
+// Taken from:
+// https://stackoverflow.com/a/58467162
+string get_uuid() {
+    static random_device dev;
+    static mt19937 rng(dev());
+
+    uniform_int_distribution<int> dist(0, 15);
+
+    const char *v = "0123456789abcdef";
+    const bool dash[] = {0,0,0,0,1,0,1,0,1,0,1,0,0,0,0,0};
+
+    string res;
+    res.reserve(16);
+    for (int i = 0; i < 16; i++) {
+        if (dash[i]) res += "-";
+        res += v[dist(rng)];
+        res += v[dist(rng)];
+    }
+    return res;
 }
 
 

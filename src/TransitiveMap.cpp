@@ -202,6 +202,11 @@ bool TransMap::has_edge(int64_t a, int64_t b) const{
 }
 
 
+bool TransMap::has_node(const string& name) const{
+    return graph.has_node(name);
+}
+
+
 void TransMap::remove_edge(int64_t a, int64_t b){
     return graph.remove_edge(a,b);
 }

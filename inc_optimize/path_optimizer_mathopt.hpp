@@ -67,7 +67,7 @@ void construct_d_model(const TransMap& transmap, Model& model, PathVariables& va
  * @param model - model to be constructed
  * @param vars - CPSAT BoolVar and LinearExpr objects to be filled in
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars);
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral = true);
 
 void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_weight, size_t n_threads, path output_dir, const SolverType& solver_type);
 
