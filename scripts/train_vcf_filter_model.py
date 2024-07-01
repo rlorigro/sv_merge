@@ -1,3 +1,7 @@
+import time
+start = time.time()
+
+
 from modules.shallow_linear import ShallowLinear 
 from modules.data_loader import VcfDataset
 from collections import defaultdict
@@ -262,6 +266,7 @@ def downsample_test_data(y_true, y_predict, seed=37):
     random.seed(seed)
 
     n_true = sum(y_true)
+    print("number of true", n_true)
     n_false = len(y_true) - n_true
 
     true_weight = min(1.0, float(n_false) / float(n_true))
@@ -433,6 +438,8 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
     labels_with_auc = ["Length stratified ROC curves"]
 
     for r,record in enumerate(records):
+        #print("--------r", r, "record", record)
+        #print("should be SV type:", record.INFO["SVTYPE"])
         length_bin = int(math.log2(get_length(record) + 1))
 
         if tandem_only and record.INFO["tr_coverage"] <= 0.9:
@@ -453,6 +460,39 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
 
     return axes, labels_with_auc
 
+def plot_variant_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=False):
+    variant_stratified_results = defaultdict(lambda: [[],[]])
+    colormap = pyplot.colormaps['viridis']
+    labels_with_auc = ["Variant stratified ROC curves"]
+
+    for r,record in enumerate(records):
+        # print("--------r", r, "record", record)
+        sv_type = record.INFO["SVTYPE"]
+
+        """ if tandem_only and record.INFO["tr_coverage"] <= 0.9:
+            continue """ # TODO what is this for???
+
+        variant_stratified_results[sv_type][0].append(y_true[r])
+        variant_stratified_results[sv_type][1].append(y_predict[r])
+        # print("variant_stratified_results", variant_stratified_results)
+        # break
+    
+    for i,(sv_type,result) in enumerate(sorted(variant_stratified_results.items(), key=lambda x: x[0])):
+        # print("i", i)
+        print("sv_type", sv_type)
+        """ if sv_type == "INV":
+            print("INV skipped")
+            continue """
+        # print("result", result)
+        label = truth_info_name + " truth labels and " + annotation_name + " features SV_TYPE: " + sv_type
+
+        f = float(i)/float(len(variant_stratified_results))
+        color = colormap(f)
+        print("result[0]", result[0][:50])
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+        labels_with_auc.extend(labels)
+
+    return axes, labels_with_auc
 
 def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, aucs):
     # maya added txt file with aucs
@@ -527,15 +567,15 @@ def main():
 
     # Which truth info and annotation names to use (these names are hardcoded in the dataloader to define its behavior)
     truth_info_names = ["Hapestry"]
-    truth_info_names = ["Hapestry", "TruvariBench_TP"] # uncommented this and and corresponding below to show labels on plot
+    # truth_info_names = ["Hapestry", "TruvariBench_TP"] # uncommented this and and corresponding below to show labels on plot
     annotation_names = ["Hapestry"]
-    annotation_names = ["Hapestry", "Sniffles"]
+    # annotation_names = ["Hapestry", "Sniffles"]
 
     # Whether to subset the VCFs to >= 50bp
     filter_fn = min50bp
     # filter_fn = None
 
-    # Whether to subset the VCFs to >= 1000bp
+    # Whether to subset the VCFs to >= 1000bp 
     # filter_fn = min1000bp 
 
     # Initialize some things for plotting
@@ -549,11 +589,19 @@ def main():
     tandem_fig.set_size_inches(10,8)
     tandem_axes = pyplot.axes()
 
+    """ variant_fig = pyplot.figure()
+    variant_fit.set_size_inches(10,8)
+    variant_axes = pyplot.axes() """ # maybe delete
+
     length_figs = dict()
     length_axes = dict()
 
+    variant_figs = dict()
+    variant_axes = dict()
+
+    # number of parallel processes, if running too slowly use n_processes = 1
     n_processes = len(truth_info_names) * len(annotation_names)
-    n_processes = 1 # maya added
+    n_processes = 1 
 
     args = list()
 
@@ -566,6 +614,9 @@ def main():
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
+            variant_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
+            variant_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
+
     with multiprocessing.Pool(processes=n_processes) as pool:
         results = pool.starmap(thread_fn, args)
 
@@ -574,30 +625,31 @@ def main():
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
         length_axis = length_axes[truth_info_name + "_" + annotation_name]
+        variant_axis = variant_axes[truth_info_name + "_" + annotation_name]
 
         # Plot the individual feature ROCs (without modeling)
         if annotation_name != "Hapestry" and truth_info_name == "TruvariBench_TP":
             cmap = pyplot.get_cmap('tab20')
 
             for name,index in feature_indexes.items(): # plots dotted lines in all_combos, shows performance from using each of the raw features by thresholding them directly
-                print("in mysterious for loop") # delete
+                # name is DV, DR, GQ, etc.
                 if index > 12:
                     y_trivial = x[:,index]
                     y, y_trivial = downsample_test_data(y_true, y_trivial)
 
                     color = cmap(float(index-12)/(len(feature_indexes)-12))
-                    print("______name_____", name) # delete
 
-                    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
+                    axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
         tandem_axes, tandem_labels = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
         length_axis, length_labels = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
-        labels_with_auc.extend(tandem_labels + length_labels)
+        variant_axis, variant_labels = plot_variant_stratified_roc_curves(variant_axis, records, y_true, y_predict, truth_info_name, annotation_name)
+        labels_with_auc.extend(tandem_labels + length_labels + variant_labels)
 
         # write the filtered VCF (BEFORE DOWNSAMPLING)
         write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=eval_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
 
-        y_true, y_predict = downsample_test_data(y_true, y_predict)
+        y_true, y_predict = downsample_test_data(y_true, y_predict) # downsampling step
 
         # print shape of y_predict and y_true; print all values in one element
         print("y_predict shape: ", y_predict.shape)
@@ -621,10 +673,22 @@ def main():
     tandem_fig.savefig(os.path.join(output_dir,"roc_curve_tandem_stratified.png"), dpi=200)
 
     for label,length_axis in length_axes.items():  
+        # print("label", label)
+        # print("length axis", length_axis)
         length_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
         length_axis.legend(loc="lower right", fontsize='small')
         length_figs[label].savefig(os.path.join(output_dir,label+"_length.png"), dpi=200)
 
+    for label,variant_axis in variant_axes.items():
+        # print("label", label)
+        # print("variant axis", variant_axis)   TODO figure out what these axes are
+        # they are the same for length and variant:
+        # length axis Axes(0.125,0.11;0.775x0.77)
+        # variant axis Axes(0.125,0.11;0.775x0.77)
+        variant_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+        variant_axis.legend(loc="lower right", fontsize='small')
+        variant_figs[label].savefig(os.path.join(output_dir,label+"_variant.png"), dpi=200)
+ 
     for label,(fpr,tpr,thresholds) in roc_data.items():
         with open(os.path.join(output_dir, label.replace(" ", "_") + "_roc.csv"), "w") as f:
             f.write("threshold,fpr,tpr\n")
@@ -640,3 +704,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+end = time.time()
+
+print("time of execution is:", (end - start) * 10**3, "ms")
+print("time of execution is:", (end - start) * 10, "s")
+print("time of execution is:", (end - start) * 10 / 60, "min")

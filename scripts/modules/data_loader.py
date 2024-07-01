@@ -146,7 +146,7 @@ def load_features_from_vcf(
             max_align_score = info["HAPESTRY_READS_MAX"] # is there a reason this is down here?
 
             # add hapestry features (ONT)
-            """ x[-1].extend(hapestry_data)
+            x[-1].extend(hapestry_data)
             if r == 0:
                 feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
 
@@ -156,13 +156,13 @@ def load_features_from_vcf(
 
             x[-1].append(max_align_score)
             if r == 0:
-                feature_names.append("max_align_score")  """
+                feature_names.append("max_align_score")  
             
 
             # add hapestry_CCS features (PB CCS)
             # hapestry_reads_CCS = hapestry_reads_CCS[:-2] # keep only if using both ONT and PB features
 
-            x[-1].extend(hapestry_reads_CCS)
+            """ x[-1].extend(hapestry_reads_CCS)
             if r == 0:
                 feature_names.extend(["hapestry_reads_CCS_" + str(i) for i in range(len(hapestry_reads_CCS))]) 
             
@@ -172,7 +172,7 @@ def load_features_from_vcf(
             
             x[-1].append(hapestry_reads_neighbors_CCS)
             if r == 0:
-                feature_names.append("happestry_reads_neighbors_CCS")
+                feature_names.append("happestry_reads_neighbors_CCS") """
 
 
         elif annotation_name.lower() == "sniffles":
