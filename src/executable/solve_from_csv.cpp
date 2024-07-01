@@ -108,7 +108,7 @@ void for_each_row_in_csv(path csv_path, const function<void(const vector<string>
 }
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type){
+void optimize(TransMap& transmap, const SolverType& solver_type, bool use_ploidy_constraint){
     // Make tmp dir
     path output_dir = "/tmp/" + get_uuid();
 
@@ -119,11 +119,11 @@ void optimize(TransMap& transmap, const SolverType& solver_type){
         throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
-    optimize_reads_with_d_and_n(transmap, 1, 1, 1, output_dir, solver_type);
+    optimize_reads_with_d_and_n(transmap, 1, 1, 1, output_dir, solver_type, use_ploidy_constraint);
 }
 
 
-void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample){
+void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample, bool use_ploidy_constraint){
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -174,11 +174,11 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
         });
     }
 
-    optimize(transmap, solver_type);
+    optimize(transmap, solver_type, use_ploidy_constraint);
 }
 
 
-void solve_from_csv_samplewise(path csv, const SolverType& solver_type){
+void solve_from_csv_samplewise(path csv, const SolverType& solver_type, bool use_ploidy_constraint){
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -201,7 +201,8 @@ void solve_from_csv_samplewise(path csv, const SolverType& solver_type){
         float weight = stof(items[3]);
 
         if (sample != prev_sample and not sample_data.empty()){
-            optimize(transmap, solver_type);
+            cerr << prev_sample << '\n';
+            optimize(transmap, solver_type, use_ploidy_constraint);
             if (transmap.empty()){
                 cerr << "WARNING: no result for sample: " << prev_sample << '\n';
                 for (const auto& item: sample_data){
@@ -240,7 +241,7 @@ void solve_from_csv_samplewise(path csv, const SolverType& solver_type){
         prev_sample = sample;
     });
 
-    optimize(transmap, solver_type);
+    optimize(transmap, solver_type, use_ploidy_constraint);
 }
 
 
@@ -251,11 +252,13 @@ int main(int argc, char** argv){
     string solver;
     SolverType solver_type;
     bool samplewise = false;
+    bool use_ploidy_constraint = true;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
 
     app.add_option("-i,--input", input_csv, "Input CSV file with sample-read-path data for optimizer")->required();
     app.add_option("--solver", solver, "Solver to use, must be one of: scip, glop, pdlp")->required();
     app.add_flag("-s,--samplewise", samplewise, "Optimize each sample separately (default: optimize all samples together)");
+    app.add_flag("!--no_ploidy", use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
 
     CLI11_PARSE(app, argc, argv);
@@ -273,10 +276,17 @@ int main(int argc, char** argv){
         throw runtime_error("ERROR: unknown solver: " + solver);
     }
 
-    if (samplewise){
-        solve_from_csv_samplewise(input_csv, solver_type);
+    if (use_ploidy_constraint){
+        cerr << "Using ploidy constraint...\n";
     }
     else{
-        solve_from_csv(input_csv, solver_type, max_reads_per_sample);
+        cerr << "NOT using ploidy constraint...\n";
+    }
+
+    if (samplewise){
+        solve_from_csv_samplewise(input_csv, solver_type, use_ploidy_constraint);
+    }
+    else{
+        solve_from_csv(input_csv, solver_type, max_reads_per_sample, use_ploidy_constraint);
     }
 }

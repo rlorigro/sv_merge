@@ -15,7 +15,7 @@ namespace sv_merge{
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
         string name = "h" + std::to_string(hap_id);
@@ -69,9 +69,11 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         model.AddLinearConstraint(f == 1);
     }
 
-    // CONSTRAINT: ploidy
-    for (const auto& [sample_id,p]: vars.ploidy){
-        model.AddLinearConstraint(p <= 2);
+    if (use_ploidy_constraint){
+        // CONSTRAINT: ploidy
+        for (const auto& [sample_id,p]: vars.ploidy){
+            model.AddLinearConstraint(p <= 2);
+        }
     }
 
     // OBJECTIVE: accumulate n cost sum
@@ -95,6 +97,8 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
     // Write header
     file << "sample,read,path" << '\n';
 
+    vector <pair <int64_t, int64_t> > to_be_removed;
+
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
     if (result_n_d.termination.reason == TerminationReason::kOptimal) {
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
@@ -107,16 +111,29 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
                     }
                     else{
                         // Delete all the edges that are not assigned (to simplify iteration later)
-                        transmap.remove_edge(read_id, path_id);
+                        to_be_removed.emplace_back(read_id, path_id);
                     }
                 });
             });
         });
     }
+
+    for (const auto& [read_id, path_id]: to_be_removed){
+        transmap.remove_edge(read_id, path_id);
+    }
 }
 
 
-void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_weight, size_t n_threads, path output_dir, const SolverType& solver_type){
+void optimize_reads_with_d_and_n(
+        TransMap& transmap,
+        double d_weight,
+        double n_weight,
+        size_t n_threads,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint
+        ){
+
     Model model;
     PathVariables vars;
     double n_max = -1;
@@ -131,7 +148,7 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
         integral = false;
     }
 
-    construct_joint_n_d_model(transmap, model, vars, integral);
+    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (using a tie-breaker cost for the other objective)
     model.Minimize(vars.cost_d + vars.cost_n*1e-6);
@@ -209,7 +226,7 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
         return;
     }
 
-    // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
+    // Infer the optimal n and d values of the joint solution
     n = vars.cost_n.Evaluate(result_n_d.variable_values());
     d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
@@ -217,7 +234,6 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
 
     parse_read_model_solution(result_n_d, vars, transmap, output_dir);
 }
-
 
 
 }

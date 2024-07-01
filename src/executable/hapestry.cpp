@@ -153,7 +153,6 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
 //            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
-            // Scale max_edit_distance by 4 as a rough conversion into affine score
             if (scaled_score > min_percent_score) {
                 transmap.add_edge(id, transmap.get_id(path_name), float(n_indels));
             }
