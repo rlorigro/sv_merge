@@ -62,6 +62,8 @@ using namespace wfa;
 void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
+    vector <tuple <int64_t,int64_t,float> > edges_to_add;
+
     auto sample_id = transmap.get_id(sample_name);
     transmap.for_each_read_of_sample(sample_id, [&](int64_t a){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t b){
@@ -86,12 +88,17 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 
 //                int64_t scaled_score = score > -100 ? 1 : -1;
 
-                transmap.add_edge(a,b, float(scaled_score));
+                // Avoid adding while iterating
+                edges_to_add.emplace_back(a,b,scaled_score);
 
                 cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << ' ' << scaled_score << '\n';
             }
         });
     });
+
+    for (const auto& [a,b,score]: edges_to_add){
+        transmap.add_edge(a,b,score);
+    }
 }
 
 
@@ -116,6 +123,8 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             sequence += variant_graph.graph.get_sequence(h);
         }
     });
+
+    vector <tuple <int64_t,int64_t,float> > edges_to_add;
 
     transmap.for_each_read([&](const string& name, int64_t id){
         auto& read_sequence = transmap.get_sequence(id);
@@ -154,10 +163,15 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 //            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
             if (scaled_score > min_percent_score) {
-                transmap.add_edge(id, transmap.get_id(path_name), float(n_indels));
+                // Avoid adding while iterating
+                edges_to_add.emplace_back(id, transmap.get_id(path_name), scaled_score);
             }
         }
     });
+
+    for (const auto& [a,b,score]: edges_to_add){
+        transmap.add_edge(a,b,score);
+    }
 }
 
 
