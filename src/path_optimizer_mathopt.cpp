@@ -119,6 +119,12 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
 void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_weight, size_t n_threads, path output_dir, const SolverType& solver_type){
     Model model;
     PathVariables vars;
+    double n_max = -1;
+    double d_min = -1;
+    double n_min = -1;
+    double d_max = -1;
+    double n = -1;
+    double d = -1;
 
     bool integral = true;
     if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
@@ -141,8 +147,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     }
 
     // Infer the n and d values of the D_MIN solution (ignoring tie-breaker cost)
-    double n_max = vars.cost_n.Evaluate(result_d.variable_values());
-    double d_min = vars.cost_d.Evaluate(result_d.variable_values());
+    n_max = vars.cost_n.Evaluate(result_d.variable_values());
+    d_min = vars.cost_d.Evaluate(result_d.variable_values());
 
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
@@ -160,8 +166,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     }
 
     // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
-    double n_min = vars.cost_n.Evaluate(result_n.variable_values());
-    double d_max = vars.cost_d.Evaluate(result_n.variable_values());
+    n_min = vars.cost_n.Evaluate(result_n.variable_values());
+    d_max = vars.cost_d.Evaluate(result_n.variable_values());
 
     cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 
@@ -204,8 +210,8 @@ void optimize_reads_with_d_and_n(TransMap& transmap, double d_weight, double n_w
     }
 
     // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
-    double n = vars.cost_n.Evaluate(result_n_d.variable_values());
-    double d = vars.cost_d.Evaluate(result_n_d.variable_values());
+    n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     cerr << "n: " << n << "\td: " << d << '\n';
 

@@ -35,6 +35,16 @@ void TransMap::reserve_sequences(size_t n){
 }
 
 
+bool TransMap::empty() const{
+    // In the context of a TransMap, empty means that the graph has only the source/sink nodes
+    return graph.get_node_count() == 4 and
+        graph.get_edge_count(0) == 0 and
+        graph.get_edge_count(1) == 0 and
+        graph.get_edge_count(2) == 0 and
+        graph.get_edge_count(3) == 0;
+}
+
+
 int64_t TransMap::get_id(const string& name) const{
     return graph.name_to_id(name);
 }
@@ -50,8 +60,8 @@ int64_t TransMap::get_node_count() const{
 }
 
 
-int64_t TransMap::get_edge_count(int64_t id, char type) const{
-    return graph.get_edge_count(id, type);
+int64_t TransMap::get_edge_count(int64_t id) const{
+    return graph.get_edge_count(id);
 }
 
 

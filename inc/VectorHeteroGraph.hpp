@@ -73,7 +73,7 @@ public:
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
     int64_t get_node_count() const;
-    int64_t get_edge_count(int64_t id, char type) const;
+    int64_t get_edge_count(int64_t id) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
 
     bool has_edge(int64_t id_a, int64_t id_b) const;
@@ -355,12 +355,12 @@ template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, con
 }
 
 
-template<class T> int64_t HeteroGraph<T>::get_edge_count(int64_t id, char type) const{
+template<class T> int64_t HeteroGraph<T>::get_edge_count(int64_t id) const{
     auto result = edges.find(id);
 
     // No neighbors
     if (result == edges.end()){
-        return -1;
+        return 0;
     }
 
     return int64_t(result->second.size());
