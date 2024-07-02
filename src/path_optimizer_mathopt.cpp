@@ -91,13 +91,12 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
 
     if (not file.is_open() or not file.good()){
         throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-        return;
     }
 
     // Write header
     file << "sample,read,path" << '\n';
 
-    vector <pair <int64_t, int64_t> > to_be_removed;
+    unordered_set <pair <int64_t, int64_t> > to_be_removed;
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
     if (result_n_d.termination.reason == TerminationReason::kOptimal) {
@@ -105,21 +104,32 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
             transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
                 transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
                     const Variable& var = vars.read_hap.at({read_id, path_id});
-                    bool is_assigned = result_n_d.variable_values().at(var);
-                    if (is_assigned){
-                        file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
+
+                    if (var.is_integer()){
+                        auto is_assigned = bool(int64_t(round(result_n_d.variable_values().at(var))));
+
+                        if (is_assigned){
+                            file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
+                        }
+                        else{
+                            // Delete all the edges that are not assigned (to simplify iteration later)
+                            to_be_removed.emplace(read_id, path_id);
+                        }
                     }
                     else{
-                        // Delete all the edges that are not assigned (to simplify iteration later)
-                        to_be_removed.emplace_back(read_id, path_id);
+                        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
                     }
                 });
             });
         });
-    }
 
-    for (const auto& [read_id, path_id]: to_be_removed){
-        transmap.remove_edge(read_id, path_id);
+        for (const auto& [read_id, path_id]: to_be_removed){
+            transmap.remove_edge(read_id, path_id);
+        }
+    }
+    else{
+        cerr << "WARNING: cannot update transmap for non-optimal solution" << '\n';
+        transmap = {};
     }
 }
 
@@ -232,7 +242,13 @@ void optimize_reads_with_d_and_n(
 
     cerr << "n: " << n << "\td: " << d << '\n';
 
-    parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    if (integral) {
+        parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    }
+    else{
+        cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
+        transmap = {};
+    }
 }
 
 

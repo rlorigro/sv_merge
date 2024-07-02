@@ -198,13 +198,16 @@ template<class T> void HeteroGraph<T>::update_adjacency_list(
         float weight,
         vector<pair <int64_t,float> >& adjacencies) {
 
+    // Search for the destination node id in the adjacency list
     auto ab = std::find_if(adjacencies.begin(), adjacencies.end(), [&](pair<int64_t, float>& p){
         return p.first == id;
     });
 
+    // Only append the vector if id is not found (edge doesn't already exist)
     if (ab == adjacencies.end()){
         adjacencies.emplace_back(id, weight);
     }
+    // Otherwise just overwrite the weight
     else{
         ab->second = weight;
     }

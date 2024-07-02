@@ -409,7 +409,8 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
             path_ids[1] = p;
         }
         else{
-            throw runtime_error("ERROR: more than two paths found for sample: " + get_node(sample_id).name);
+            string s = "'" + graph.get_node(path_ids[0]).name + "' '" + graph.get_node(path_ids[1]).name + "' '" + path_name + "'";
+            throw runtime_error("ERROR: more than two paths found for sample " + get_node(sample_id).name + ": " + s);
         }
     });
 
