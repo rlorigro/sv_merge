@@ -30,6 +30,7 @@ using operations_research::math_opt::Solve;
 using operations_research::math_opt::SolveResult;
 using operations_research::math_opt::SolverType;
 using operations_research::math_opt::TerminationReason;
+using operations_research::math_opt::SolveArguments;
 
 
 namespace sv_merge {
@@ -76,6 +77,16 @@ void construct_joint_n_d_model(
         );
 
 void optimize_reads_with_d_and_n(
+        TransMap& transmap,
+        double d_weight,
+        double n_weight,
+        size_t n_threads,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint = true
+        );
+
+void optimize_reads_with_d_and_n_using_golden_search(
         TransMap& transmap,
         double d_weight,
         double n_weight,

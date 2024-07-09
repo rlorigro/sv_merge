@@ -77,7 +77,8 @@ void test_optimization(){
     path output_dir = "/tmp/" + get_uuid();
 
     if (not exists(output_dir)){
-        create_directories(output_dir);
+        create_directories(output_dir / "conventional");
+        create_directories(output_dir / "golden_search");
     }
     else{
         throw runtime_error("Directory already exists: " + output_dir.string());
@@ -101,18 +102,45 @@ void test_optimization(){
 
         try {
             TransMap transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir/"conventional", t);
 
             transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir, t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir/"conventional", t);
 
             transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir, t);
+            optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir/"conventional", t);
         }
         catch (const exception& e){
             cerr << "ERROR: " << e.what() << '\n';
         }
     }
+
+
+    cerr << "-- golden search\n";
+    try {
+        TransMap transmap_copy = transmap;
+        optimize_reads_with_d_and_n_using_golden_search(transmap_copy, 1, 1, 1, output_dir/"golden_search", SolverType::kGscip);
+    }
+    catch (const exception& e){
+        cerr << "ERROR: " << e.what() << '\n';
+    }
+
+    try {
+        TransMap transmap_copy = transmap;
+        optimize_reads_with_d_and_n_using_golden_search(transmap_copy, 1, 10, 1, output_dir/"golden_search", SolverType::kGscip);
+    }
+    catch (const exception& e){
+        cerr << "ERROR: " << e.what() << '\n';
+    }
+
+    try {
+        TransMap transmap_copy = transmap;
+        optimize_reads_with_d_and_n_using_golden_search(transmap_copy, 10, 1, 1, output_dir/"golden_search", SolverType::kGscip);
+    }
+    catch (const exception& e){
+        cerr << "ERROR: " << e.what() << '\n';
+    }
+
 }
 
 
