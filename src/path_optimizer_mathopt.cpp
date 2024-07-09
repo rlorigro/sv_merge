@@ -649,20 +649,28 @@ void optimize_with_golden_search(
 
     const auto& optimal_result = result_edges_cache.at(n);
 
+    vector <pair <int64_t,int64_t> > to_be_removed;
+
     // Filter the transmap using edges of the solution and re-infer the raw distance
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
                 if (optimal_result.find({read_id, path_id}) == optimal_result.end()){
-                    transmap.remove_edge(read_id, path_id);
+                    to_be_removed.emplace_back(read_id, path_id);
                 }
                 else{
                     auto [success, w] = transmap.try_get_edge_weight(read_id, path_id);
                     n_distance += round(w);
+
+                    cerr << sample_name << " -> " << transmap.get_node(read_id).name << " -> " << transmap.get_node(path_id).name << ' ' << w << '\n';
                 }
             });
         });
     });
+
+    for (const auto& [read_id, path_id]: to_be_removed){
+        transmap.remove_edge(read_id, path_id);
+    }
 
     cerr << "n: " << n << "\td: " << n_distance << '\n';
 }
