@@ -532,6 +532,7 @@ set(TESTS
         test_authenticator
         test_bam
         test_bed
+        test_bisection_method
         test_command_timeout
         test_fasta
         test_gaf

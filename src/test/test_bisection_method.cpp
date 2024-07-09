@@ -83,7 +83,7 @@ pair<int64_t,double> solve_with_binary_search(
         auto c_result = results.find(c_i);
         if (c_result == results.end()){
             double c = f(c_i);
-            c_cost = get_normalized_distance(c, c_i, d_min, d_max, n_min, n_max);
+            c_cost = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max);
             results.emplace(c_i, c_cost);
         }
         else{
@@ -93,7 +93,7 @@ pair<int64_t,double> solve_with_binary_search(
         auto d_result = results.find(d_i);
         if (d_result == results.end()){
             double d = f(d_i);
-            d_cost = get_normalized_distance(d, d_i, d_min, d_max, n_min, n_max);
+            d_cost = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max);
             results.emplace(d_i, d_cost);
 
         }
@@ -135,6 +135,17 @@ pair<int64_t,double> solve_with_binary_search(
         n_cost = d_cost;
     }
 
+    // Check if the true minimum is at the edge and replace the minimum with the edge value if it is
+    if (results.at(n_min) < n_cost){
+        n = n_min;
+        n_cost = results.at(n_min);
+    }
+
+    if (results.at(n_max) < n_cost){
+        n = n_max;
+        n_cost = results.at(n_max);
+    }
+
     return {n, n_cost};
 }
 
@@ -165,7 +176,7 @@ void test_solve(double slope, double intercept, int64_t n_min, int64_t n_max){
         auto y = f(i);
 
         // Compute euclidean distance of i and f(i) from utopia point
-        double cost = get_normalized_distance(y, i, d_min, d_max, n_min, n_max);
+        double cost = get_normalized_distance(y, i, n_min, n_max, d_min, d_max);
 
         if (cost < cost_min_empirical){
             cost_min_empirical = cost;
@@ -181,7 +192,7 @@ void test_solve(double slope, double intercept, int64_t n_min, int64_t n_max){
             auto y = f(i);
 
             // Compute euclidean distance of i and f(i) from utopia point
-            double cost = get_normalized_distance(y, i, d_min, d_max, n_min, n_max);
+            double cost = get_normalized_distance(y, i, n_min, n_max, d_min, d_max);
 
             cerr << "i: " << i << "\tcost: " << cost << '\n';
         }

@@ -155,7 +155,7 @@ double optimize_d_given_n(
         PathVariables& vars,
         const SolverType& solver_type,
         unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
-        size_t n,
+        int64_t n,
         size_t n_threads,
         path output_dir
         ){
@@ -172,14 +172,14 @@ double optimize_d_given_n(
 
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
+    const auto result = response.value();
+
     // Immediately undo the constraint after solving
     model.DeleteLinearConstraint(constraint);
 
-    const auto result = response.value();
-
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
+        cerr << "WARNING: no solution for d_given_n found: " << output_dir << '\n';
         return -1;
     }
 
@@ -217,7 +217,264 @@ double optimize_d_given_n(
 }
 
 
-double get_normalized_distance(double d, double n, double n_min, double n_max, double d_min, double d_max){
+/**
+ * Optimize the assignment of reads to a given number of paths
+ * @param model
+ * @param vars
+ * @param transmap
+ * @param solver_type
+ * @param result_read_path_edges The set of read-path edges that are assigned in the solution (result)
+ * @param d the given distance cost to constrain to
+ * @param n_threads
+ * @param output_dir
+ * @return
+ */
+double optimize_n_given_d(
+        Model& model,
+        PathVariables& vars,
+        const SolverType& solver_type,
+        unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
+        double d,
+        size_t n_threads,
+        path output_dir
+        ){
+
+    cerr << "Optimizing n for d: " << d << '\n';
+
+    result_read_path_edges.clear();
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
+    auto constraint = model.AddLinearConstraint(vars.cost_d == d);
+    model.Minimize(vars.cost_n);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+
+    // Immediately undo the constraint after solving
+    model.DeleteLinearConstraint(constraint);
+
+    // Check if the first solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for n_given_d found: " << output_dir << '\n';
+        return -1;
+    }
+
+    // Extract the n value
+    double n = vars.cost_n.Evaluate(result.variable_values());
+
+    // Print the n and d values of the solution
+    cerr << "n: " << n << "\td: " << d << '\n';
+
+    // Parse the solution
+    for (const auto& [edge,var]: vars.read_hap){
+        if (var.is_integer()){
+            // Round the value to the nearest integer (0 or 1)
+            auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+            if (is_assigned){
+                result_read_path_edges.emplace(edge);
+            }
+        }
+        else{
+            throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+        }
+    }
+
+    // Append log line to output file which contains the result of each optimization
+    path out_path = output_dir/"log_optimizer.txt";
+    ofstream file(out_path, std::ios_base::app);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+    }
+
+    file << n << ',' << d << '\n';
+
+    return n;
+}
+
+
+/**
+ * Optimize the assignment of reads to a given number of paths
+ * @param model
+ * @param vars
+ * @param transmap
+ * @param solver_type
+ * @param n the given number of paths
+ * @param n_threads
+ * @return
+ */
+double optimize_d_given_n(
+        Model& model,
+        PathVariables& vars,
+        const SolverType& solver_type,
+        int64_t n,
+        size_t n_threads
+        ){
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
+    auto constraint = model.AddLinearConstraint(vars.cost_n == n);
+    model.Minimize(vars.cost_d);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+
+    // Immediately undo the constraint after solving
+    model.DeleteLinearConstraint(constraint);
+
+    // Check if the first solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for d_given_n found " << '\n';
+        return -1;
+    }
+
+    // Extract the d value
+    double d = vars.cost_d.Evaluate(result.variable_values());
+
+    // Print the n and d values of the solution
+    cerr << "n: " << n << "\td: " << d << '\n';
+
+    return d;
+}
+
+
+/**
+ * Optimize the assignment of reads to a given number of paths
+ * @param model
+ * @param vars
+ * @param transmap
+ * @param solver_type
+ * @param d the given cost to constrain to
+ * @param n_threads
+ * @return
+ */
+double optimize_n_given_d(
+        Model& model,
+        PathVariables& vars,
+        const SolverType& solver_type,
+        int64_t d,
+        size_t n_threads
+        ){
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
+    auto constraint = model.AddLinearConstraint(vars.cost_d == d);
+    model.Minimize(vars.cost_n);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+
+    // Immediately undo the constraint after solving
+    model.DeleteLinearConstraint(constraint);
+
+    // Check if the first solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for n_given_d found " << '\n';
+        return -1;
+    }
+
+    // Extract the n value
+    double n = vars.cost_n.Evaluate(result.variable_values());
+
+    // Print the n and d values of the solution
+    cerr << "n: " << n << "\td: " << d << '\n';
+
+    return n;
+}
+
+
+/**
+ * Optimize the assignment of reads to a given number of paths
+ * @param model
+ * @param vars
+ * @param transmap
+ * @param solver_type
+ * @param d the given cost to constrain to
+ * @param n_threads
+ * @return
+ */
+double optimize_n(
+        Model& model,
+        PathVariables& vars,
+        const SolverType& solver_type,
+        size_t n_threads
+        ){
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
+    model.Minimize(vars.cost_n);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+
+    // Check if the first solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for n_given_d found " << '\n';
+        return -1;
+    }
+
+    // Extract the n value
+    double n = vars.cost_n.Evaluate(result.variable_values());
+
+    // Print the n and d values of the solution
+    cerr << "n: " << n << '\n';
+
+    return n;
+}
+
+
+/**
+ * Optimize the assignment of reads to a given number of paths
+ * @param model
+ * @param vars
+ * @param transmap
+ * @param solver_type
+ * @param d the given cost to constrain to
+ * @param n_threads
+ * @return
+ */
+double optimize_d(
+        Model& model,
+        PathVariables& vars,
+        const SolverType& solver_type,
+        size_t n_threads
+        ){
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
+    model.Minimize(vars.cost_d);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+
+    // Check if the first solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for n_given_d found " << '\n';
+        return -1;
+    }
+
+    // Extract the d value
+    double d = vars.cost_d.Evaluate(result.variable_values());
+
+    // Print the n and d values of the solution
+    cerr << "d: " << d << '\n';
+
+    return d;
+}
+
+
+double get_normalized_distance(double d, double n, double n_min, double n_max, double d_min, double d_max, double n_weight=1, double d_weight=1){
     double n_range = n_max - n_min;
     double d_range = d_max - d_min;
 
@@ -233,7 +490,7 @@ double get_normalized_distance(double d, double n, double n_min, double n_max, d
     double d_norm = (d - d_min)/(d_range);
     double n_norm = (n - n_min)/(n_range);
 
-    return sqrt(d_norm*d_norm + n_norm*n_norm);
+    return sqrt(d_norm*d_norm*d_weight + n_norm*n_norm*n_weight);
 }
 
 
@@ -250,32 +507,51 @@ double get_normalized_distance(double d, double n, double n_min, double n_max, d
  * @param n_threads
  * @param output_dir
  */
-void solve_with_golden_search(
+void optimize_with_golden_search(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
         TransMap& transmap,
-        int64_t n_min,
-        int64_t n_max,
-        double d_min,
-        double d_max,
+        double n_weight,
+        double d_weight,
         size_t n_threads,
         path output_dir
 ){
+    unordered_map<int64_t, double> results;
+    unordered_map<int64_t, unordered_set <pair <int64_t,int64_t> > > result_edges_cache;
+
+    double n_max = -1;
+    double d_min = -1;
+    double n_min = -1;
+    double d_max = -1;
+
+    // First find one extreme of the pareto set (D_MIN)
+    unordered_set <pair <int64_t,int64_t> > n_max_result_edges;
+    d_min = round(optimize_d(model, vars, solver_type, n_threads));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, n_max_result_edges, d_min, n_threads, output_dir));
+
+    // Need to manually add the result edges to the cache (chicken and egg problem)
+    result_edges_cache.emplace(n_max, n_max_result_edges);
+
+    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
+
+    // Then find the other extreme of the pareto set (N_MIN)
+    n_min = round(optimize_n(model, vars, solver_type, n_threads));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, result_edges_cache[n_min], n_min, n_threads, output_dir));
+
+    cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
+
     // Within this function the d_cost is now referred to as simply "distance" and the d_cost for a given n value is
     // referred to as "n_distance". 'd' is no loger short for "distance" but is used to refer to the d point which
     // is generated during the sectioning step of the golden section search algorithm, which yields a,b and interior
     // points c,d.
     int64_t n;
-    int64_t n_distance;
+    int64_t n_distance = 0;
 
-    // With the range of n determined, we can now use binary search to find the optimal n and d values
-    unordered_map<int64_t, double> results;
-    unordered_map<int64_t, unordered_set <pair <int64_t,int64_t> > > result_edges_cache;
-
+    // With the range of n determined, we can now use golden section search to find the optimal n and d values
     // Add the extreme values to the results map
-    results.emplace(n_min, get_normalized_distance(d_max, n_min, n_min, n_max, d_min, d_max));
-    results.emplace(n_max, get_normalized_distance(d_min, n_max, n_min, n_max, d_min, d_max));
+    results.emplace(n_min, get_normalized_distance(d_max, n_min, n_min, n_max, d_min, d_max, n_weight, d_weight));
+    results.emplace(n_max, get_normalized_distance(d_min, n_max, n_min, n_max, d_min, d_max, n_weight, d_weight));
 
     // Set arbitrary limit on maximum iterations
     int64_t max_iter = 20;
@@ -288,8 +564,8 @@ void solve_with_golden_search(
 
     // Minimize d for each given n until it can be proven that the d value is optimal (left and right values are larger)
     while (i < max_iter){
-        ///        c = b - (b - a) * invphi
-        ///        d = a + (b - a) * invphi
+        ///        c = b - (b - a) * phi_inv
+        ///        d = a + (b - a) * phi_inv
         ///        if f(c) < f(d):
         ///            b = d
         ///        else:  # f(c) > f(d) to find the maximum
@@ -305,7 +581,7 @@ void solve_with_golden_search(
         auto c_result = results.find(c_i);
         if (c_result == results.end()){
             double c = optimize_d_given_n(model, vars, solver_type, result_edges_cache[c_i], c_i, n_threads, output_dir);
-            c_distance = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max);
+            c_distance = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(c_i, c_distance);
         }
         else{
@@ -315,9 +591,8 @@ void solve_with_golden_search(
         auto d_result = results.find(d_i);
         if (d_result == results.end()){
             double d = optimize_d_given_n(model, vars, solver_type, result_edges_cache[d_i], d_i, n_threads, output_dir);
-            d_distance = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max);
+            d_distance = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(d_i, d_distance);
-
         }
         else{
             d_distance = d_result->second;
@@ -355,19 +630,35 @@ void solve_with_golden_search(
     // Compute the final minimum
     if (c_distance < d_distance){
         n = c;
-        n_distance = c_distance;
     }
     else {
         n = d;
-        n_distance = d_distance;
     }
 
-    // Filter the transmap using edges of the solution
+    // Check if the minimum is at the edge of the range (not assessed by the golden section search)
+    if (results.at(n_min) < results.at(n)){
+        n = n_min;
+    }
+
+    // Check if the minimum is at the edge of the range (not assessed by the golden section search)
+    if (results.at(n_max) < results.at(n)){
+        n = n_max;
+    }
+
+    cerr << "Final n: " << n << '\n';
+
+    const auto& optimal_result = result_edges_cache.at(n);
+
+    // Filter the transmap using edges of the solution and re-infer the raw distance
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
-                if (result_edges_cache[n].find({read_id, path_id}) == result_edges_cache[n].end()){
+                if (optimal_result.find({read_id, path_id}) == optimal_result.end()){
                     transmap.remove_edge(read_id, path_id);
+                }
+                else{
+                    auto [success, w] = transmap.try_get_edge_weight(read_id, path_id);
+                    n_distance += round(w);
                 }
             });
         });
@@ -400,11 +691,6 @@ void optimize_reads_with_d_and_n_using_golden_search(
     PathVariables vars;
 
     args.parameters.threads = n_threads;
-
-    double n_max = -1;
-    double d_min = -1;
-    double n_min = -1;
-    double d_max = -1;
     double n = -1;
     double d = -1;
 
@@ -415,46 +701,8 @@ void optimize_reads_with_d_and_n_using_golden_search(
 
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
-    // First find one extreme of the pareto set (using a tie-breaker cost for the other objective)
-    model.Minimize(vars.cost_d + vars.cost_n*1e-6);
-
-    const absl::StatusOr<SolveResult> response_d = Solve(model, solver_type, args);
-    const auto result_d = response_d.value();
-
-    // Check if the first solution is feasible
-    if (result_d.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
-        transmap = {};
-        return;
-    }
-
-    // Infer the n and d values of the D_MIN solution (ignoring tie-breaker cost)
-    n_max = vars.cost_n.Evaluate(result_d.variable_values());
-    d_min = vars.cost_d.Evaluate(result_d.variable_values());
-
-    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
-
-    // Then find the other extreme of the pareto set (using a tie-breaker cost for the other objective)
-    model.Minimize(vars.cost_n + vars.cost_d*1e-6);
-
-    const absl::StatusOr<SolveResult> response_n = Solve(model, solver_type, args);
-    const auto result_n = response_n.value();
-
-    // Check if the second solution is feasible
-    if (result_n.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_min found: " << output_dir << '\n';
-        transmap = {};
-        return;
-    }
-
-    // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
-    n_min = vars.cost_n.Evaluate(result_n.variable_values());
-    d_max = vars.cost_d.Evaluate(result_n.variable_values());
-
-    cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
-
     // Solve with golden search
-    solve_with_golden_search(model, vars, solver_type, transmap, n_min, n_max, d_min, d_max, n_threads, output_dir);
+    optimize_with_golden_search(model, vars, solver_type, transmap, n_weight, d_weight, n_threads, output_dir);
 
     return;
 }
@@ -490,41 +738,15 @@ void optimize_reads_with_d_and_n(
 
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
-    // First find one extreme of the pareto set (using a tie-breaker cost for the other objective)
-    model.Minimize(vars.cost_d + vars.cost_n*1e-6);
-
-    const absl::StatusOr<SolveResult> response_d = Solve(model, solver_type, args);
-    const auto result_d = response_d.value();
-
-    // Check if the first solution is feasible
-    if (result_d.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
-        transmap = {};
-        return;
-    }
-
-    // Infer the n and d values of the D_MIN solution (ignoring tie-breaker cost)
-    n_max = vars.cost_n.Evaluate(result_d.variable_values());
-    d_min = vars.cost_d.Evaluate(result_d.variable_values());
+    // First find one extreme of the pareto set (D_MIN)
+    d_min = round(optimize_d(model, vars, solver_type, n_threads));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
 
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
-    // Then find the other extreme of the pareto set (using a tie-breaker cost for the other objective)
-    model.Minimize(vars.cost_n + vars.cost_d*1e-6);
-
-    const absl::StatusOr<SolveResult> response_n = Solve(model, solver_type, args);
-    const auto result_n = response_n.value();
-
-    // Check if the second solution is feasible
-    if (result_n.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_min found: " << output_dir << '\n';
-        transmap = {};
-        return;
-    }
-
-    // Infer the n and d values of the N_MIN solution (ignoring tie-breaker cost)
-    n_min = vars.cost_n.Evaluate(result_n.variable_values());
-    d_max = vars.cost_d.Evaluate(result_n.variable_values());
+    // Then find the other extreme of the pareto set (N_MIN)
+    n_min = round(optimize_n(model, vars, solver_type, n_threads));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, n_min, n_threads));
 
     cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 

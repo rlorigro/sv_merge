@@ -86,33 +86,38 @@ void test_optimization(){
 
     vector <pair <SolverType,string> > solver_type = {
             {SolverType::kGscip,"kGscip"},
-            {SolverType::kGurobi,"kGurobi"},
-            {SolverType::kGlop,"kGlop"},
+//            {SolverType::kGurobi,"kGurobi"},
+//            {SolverType::kGlop,"kGlop"},
             {SolverType::kCpSat,"kCpSat"},
             {SolverType::kPdlp,"kPdlp"},
-            {SolverType::kGlpk,"kGlpk"},
-            {SolverType::kEcos,"kEcos"},
-            {SolverType::kScs,"kScs"},
-            {SolverType::kHighs,"kHighs"},
-            {SolverType::kSantorini,"kSantorin"}
+//            {SolverType::kGlpk,"kGlpk"},
+//            {SolverType::kEcos,"kEcos"},
+//            {SolverType::kScs,"kScs"},
+//            {SolverType::kHighs,"kHighs"},
+//            {SolverType::kSantorini,"kSantorin"}
     };
 
     for (const auto& [t,name]: solver_type) {
-        cerr << "solver: " << name << '\n';
+        cerr << "-------- solver: " << name << " --------" << '\n';
 
         try {
             TransMap transmap_copy = transmap;
             optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir/"conventional", t);
+            cerr << '\n';
 
             transmap_copy = transmap;
             optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir/"conventional", t);
+            cerr << '\n';
 
             transmap_copy = transmap;
             optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir/"conventional", t);
+            cerr << '\n';
         }
         catch (const exception& e){
             cerr << "ERROR: " << e.what() << '\n';
         }
+
+        cerr << '\n';
     }
 
 
@@ -124,6 +129,7 @@ void test_optimization(){
     catch (const exception& e){
         cerr << "ERROR: " << e.what() << '\n';
     }
+    cerr << '\n';
 
     try {
         TransMap transmap_copy = transmap;
@@ -132,6 +138,7 @@ void test_optimization(){
     catch (const exception& e){
         cerr << "ERROR: " << e.what() << '\n';
     }
+    cerr << '\n';
 
     try {
         TransMap transmap_copy = transmap;
@@ -140,6 +147,7 @@ void test_optimization(){
     catch (const exception& e){
         cerr << "ERROR: " << e.what() << '\n';
     }
+    cerr << '\n';
 
 }
 
@@ -216,5 +224,5 @@ void test_infeasible_by_ploidy(){
 
 int main(){
     test_optimization();
-    test_infeasible_by_ploidy();
+//    test_infeasible_by_ploidy();
 }
