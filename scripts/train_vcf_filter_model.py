@@ -37,6 +37,9 @@ import os
 # set matplotlib to use the Agg backend
 pyplot.switch_backend('Agg')
 
+# set number of threads for pytorch to 32
+n_threads = 32
+torch.set_num_threads(n_threads)
 
 print("USING pytorch VERSION: ", torch.__version__)
 
@@ -266,7 +269,6 @@ def downsample_test_data(y_true, y_predict, seed=37):
     random.seed(seed)
 
     n_true = sum(y_true)
-    print("number of true", n_true)
     n_false = len(y_true) - n_true
 
     true_weight = min(1.0, float(n_false) / float(n_true))
@@ -330,6 +332,33 @@ def plot_roc_curve(y_true, y_predict, label, axes, color=None, alpha=1.0, style=
                 axes.plot(x, y, marker='o', color=color, markeredgewidth=0)
 
     return axes, fpr, tpr, thresholds, labels_with_auc
+
+def value_labels_on_bar(rects, ax):
+    # puts a text label with the bar's value above each bar
+    for rect in rects: 
+        x = rect.get_x() + rect.get_width() / 2
+        y = rect.get_height()
+        ax.text(x, y, str(y)[:5], ha='center', va='bottom')
+
+def plot_auc_bar(y_true, y_predict, label, axes, color=None, alpha=1.0):
+    # calculates AUC value
+    auc = roc_auc_score(y_true, y_predict) 
+    # interesting, maya check this out: y_true and/or y_predict is a list TODO
+    label_new = label.replace(" ", "\n").replace("NON-TANDEM", "NT").replace("TANDEM", "T")
+
+    if color is not None: 
+        rect = axes.bar(x=label_new, height=auc, color=color)
+        value_labels_on_bar(rect, axes)
+
+    else:
+        rect = axes.bar(x=label_new, height=auc)
+        value_labels_on_bar(rect, axes)
+        color = axes.get_lines()[-1].get_color()
+
+    axes.set_xlabel("Category")
+    axes.set_ylabel("AUC")
+
+    return axes
 
 
 def write_filtered_vcf(y_predict, records, threshold, input_vcf_path, output_vcf_path):
@@ -438,12 +467,10 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
     labels_with_auc = ["Length stratified ROC curves"]
 
     for r,record in enumerate(records):
-        #print("--------r", r, "record", record)
-        #print("should be SV type:", record.INFO["SVTYPE"])
         length_bin = int(math.log2(get_length(record) + 1))
 
         if tandem_only and record.INFO["tr_coverage"] <= 0.9:
-            continue
+            continue 
 
         length_stratified_results[length_bin][0].append(y_true[r])
         length_stratified_results[length_bin][1].append(y_predict[r])
@@ -460,39 +487,164 @@ def plot_length_stratified_roc_curves(axes, records, y_true, y_predict, truth_in
 
     return axes, labels_with_auc
 
+# combines all variant stratified ROC curves onto one plot, main version
 def plot_variant_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=False):
+    INS = [[],[]]
+    DEL = [[],[]]
+    INV = [[],[]]
+    
+    # (results, name of sv type, linestyle for plot)
+    sv_types = [(INS, "INS", "-"), (DEL, "DEL", ":"), (INV, "INV", "--")]
+    labels_with_auc = ["Variant stratified ROC curves"]
+
+    for r,record in enumerate(records):
+        sv_type = record.INFO["SVTYPE"]
+
+        if sv_type == "INS":
+            INS[0].append(y_true[r])
+            INS[1].append(y_predict[r])
+        elif sv_type == "DEL":
+            DEL[0].append(y_true[r])
+            DEL[1].append(y_predict[r])
+        elif sv_type == "INV":
+            INV[0].append(y_true[r])
+            INV[1].append(y_predict[r])
+
+    for (results, sv_type, line_style) in sv_types:
+        if sv_type == "INV" and truth_info_name == "TruvariBench_TP":
+            print('INV skipped')
+            continue
+       
+        label = truth_info_name + " truth labels and " + annotation_name + " features SV_TYPE: " + sv_type 
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=results[0], y_predict=results[1], label=label, axes=axes, style=line_style)
+        labels_with_auc.extend(labels)
+
+    return axes, labels_with_auc
+
+# alt version of variant stratified plotting plots them separately by different combinations
+def plot_variant_stratified_roc_curves_alt(axes, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=False):
     variant_stratified_results = defaultdict(lambda: [[],[]])
     colormap = pyplot.colormaps['viridis']
     labels_with_auc = ["Variant stratified ROC curves"]
 
     for r,record in enumerate(records):
-        # print("--------r", r, "record", record)
         sv_type = record.INFO["SVTYPE"]
 
-        """ if tandem_only and record.INFO["tr_coverage"] <= 0.9:
-            continue """ # TODO what is this for???
+        if tandem_only and record.INFO["tr_coverage"] <= 0.9:
+            continue 
 
         variant_stratified_results[sv_type][0].append(y_true[r])
         variant_stratified_results[sv_type][1].append(y_predict[r])
-        # print("variant_stratified_results", variant_stratified_results)
-        # break
     
     for i,(sv_type,result) in enumerate(sorted(variant_stratified_results.items(), key=lambda x: x[0])):
-        # print("i", i)
         print("sv_type", sv_type)
-        """ if sv_type == "INV":
+        if sv_type == "INV" and truth_info_name == "TruvariBench_TP":
             print("INV skipped")
-            continue """
-        # print("result", result)
+            continue
+
         label = truth_info_name + " truth labels and " + annotation_name + " features SV_TYPE: " + sv_type
 
         f = float(i)/float(len(variant_stratified_results))
         color = colormap(f)
-        print("result[0]", result[0][:50])
         axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
         labels_with_auc.extend(labels)
 
     return axes, labels_with_auc
+
+# helper function to sort for length and tandem multi stratified
+# Tandem is ranked earlier than Non-tandem
+def sort_helper_multi_roc(x):
+    # x is something like 32 to 64 bp TANDEM
+    if x[0].split(" ")[4] == "TANDEM":
+        return (int(x[0].split(" ")[0]), 0)
+    else:
+        return (int(x[0].split(" ")[0]), 1) 
+
+# doing length and tandem first
+def plot_multi_stratified_roc_curves(axes, records, y_true, y_predict, truth_info_name, annotation_name):
+    length_tandem_stratified_results = defaultdict(lambda: [[],[]])
+    colormap = pyplot.colormaps['viridis']
+    labels_with_auc = ["Length and tandem stratified ROC curves"]
+
+    # iterate through records to assign length bins
+    for r,record in enumerate(records):
+        length_bin = int(math.log2(get_length(record) + 1)) # 2 ** length_bin is bin_start
+        bin_start = 2**(length_bin)
+        bin_end = 2**(length_bin + 1)
+
+        bin_name = str(bin_start) + " to " + str(bin_end) + " bp"
+        is_tandem = record.INFO["tr_coverage"] > 0.9
+
+        if is_tandem:
+            length_tandem_stratified_results[bin_name + " TANDEM"][0].append(y_true[r])
+            length_tandem_stratified_results[bin_name + " TANDEM"][1].append(y_predict[r])
+        else:
+            length_tandem_stratified_results[bin_name + " NON-TANDEM"][0].append(y_true[r])
+            length_tandem_stratified_results[bin_name + " NON-TANDEM"][1].append(y_predict[r])
+
+    for i,(key,result) in enumerate(sorted(length_tandem_stratified_results.items(), key=sort_helper_multi_roc)):
+        label = truth_info_name + " truth labels and " + annotation_name + " features " + key
+
+        f = float(i)/float(len(length_tandem_stratified_results))
+        color = colormap(f)
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+        labels_with_auc.extend(labels)
+
+    return axes, labels_with_auc
+
+def sort_helper_multi_auc(x):
+    # x is something like "TANDEM 32 to 64 bp" (string)
+    if x[0].split(" ")[0] == "TANDEM":
+        return (0, int(x[0].split(" ")[1]))
+    else:
+        return (1, int(x[0].split(" ")[1])) 
+
+def plot_multi_stratified_auc_bar(axes, records, y_true, y_predict, truth_info_name, annotation_name):
+    length_tandem_stratified_results = defaultdict(lambda: [[],[]])
+    colormap = pyplot.colormaps['tab20']
+
+    # iterate through records to assign length bins
+    for r,record in enumerate(records):
+        length_bin = int(math.log2(get_length(record) + 1)) # 2 ** length_bin is bin_start
+        bin_start = 2**(length_bin)
+        bin_end = 2**(length_bin + 1)
+
+        bin_name = str(bin_start) + " to " + str(bin_end) + " bp"
+        is_tandem = record.INFO["tr_coverage"] > 0.9
+
+        if is_tandem:
+            length_tandem_stratified_results["TANDEM " + bin_name][0].append(y_true[r])
+            length_tandem_stratified_results["TANDEM " + bin_name][1].append(y_predict[r])
+        else:
+            length_tandem_stratified_results["NON-TANDEM " + bin_name][0].append(y_true[r])
+            length_tandem_stratified_results["NON-TANDEM " + bin_name][1].append(y_predict[r])
+
+    num_results = len(length_tandem_stratified_results)
+    print("num_results", num_results)
+    num_unique_colors = (num_results) // 2
+    print("num_unique_colors", num_unique_colors)
+
+    for i,(key,result) in enumerate(sorted(length_tandem_stratified_results.items(), key=sort_helper_multi_auc)):
+        print("i", i)
+        label = key
+        color_index = i % num_unique_colors
+        f = float(color_index)/float(num_unique_colors)
+        print("______f ", f)
+        
+        color = colormap(f)
+        axes = plot_auc_bar(y_true=result[0], y_predict=result[1], label=label, axes=axes, color=color, alpha = 0.7)
+
+    return axes
+
+
+
+
+
+
+
+
+
+
 
 def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, aucs):
     # maya added txt file with aucs
@@ -540,9 +692,13 @@ def main():
     # path_to_data = "/Users/mayam/Home/Internships/broad_summer_2024/data/intro/PB_HiFi_vcfs/"
     # name_of_file = "_multiannotated_8x_asm10_20bp.vcf.gz"
 
-    # ONT and PB (use this)
-    path_to_data = "/data/mmau/data/intro/ONT_PB_annotated_vcfs/"
-    name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz" 
+    # ONT and PB (use this for Union)
+    # path_to_data = "/data/mmau/data/intro/ONT_PB_annotated_vcfs/"
+    # name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz" 
+
+    # PB and VG (use this for short and long reads combined)
+    path_to_data = "/data/mmau/data/intro/with_vg_vcfs/"
+    name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz"
 
     train_vcfs = [
         path_to_data + "HG00621" + name_of_file,
@@ -585,19 +741,27 @@ def main():
 
     roc_data = dict()
 
+    # only want hapestry hapestry
     tandem_fig = pyplot.figure()
     tandem_fig.set_size_inches(10,8)
     tandem_axes = pyplot.axes()
 
-    """ variant_fig = pyplot.figure()
-    variant_fit.set_size_inches(10,8)
-    variant_axes = pyplot.axes() """ # maybe delete
+    variant_fig = pyplot.figure()
+    variant_fig.set_size_inches(10,8)
+    variant_axes = pyplot.axes()
+
+    # want all combos
+    multi_bar_figs = dict()
+    multi_bar_axes = dict()
 
     length_figs = dict()
     length_axes = dict()
 
-    variant_figs = dict()
-    variant_axes = dict()
+    variant_figs_alt = dict()
+    variant_axes_alt = dict() 
+
+    multi_figs = dict()
+    multi_axes = dict()
 
     # number of parallel processes, if running too slowly use n_processes = 1
     n_processes = len(truth_info_names) * len(annotation_names)
@@ -611,11 +775,23 @@ def main():
     for truth_info_name in truth_info_names:
         for annotation_name in annotation_names:
             args.append((truth_info_name, annotation_name, train_vcfs, train_contigs, test_vcfs, test_contigs, eval_vcfs, eval_contigs, filter_fn, output_dir))
+            
             length_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
             length_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
 
-            variant_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
-            variant_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
+            variant_figs_alt[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
+            variant_axes_alt[truth_info_name + "_" + annotation_name] = pyplot.axes() 
+
+            multi_figs[truth_info_name + "_" + annotation_name] = pyplot.figure(figsize=(10,8))
+            multi_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
+
+            multi_bar_figs[truth_info_name + "_" + annotation_name] = pyplot.figure()
+            multi_bar_figs[truth_info_name + "_" + annotation_name].set_size_inches(15,8)
+            multi_bar_axes[truth_info_name + "_" + annotation_name] = pyplot.axes()
+            multi_bar_axes[truth_info_name + "_" + annotation_name].set_ylim(0.5, 1.0)
+            multi_bar_axes[truth_info_name + "_" + annotation_name].set_axisbelow(True) # put grid lines behind bars
+            multi_bar_axes[truth_info_name + "_" + annotation_name].grid() # create grid lines
+
 
     with multiprocessing.Pool(processes=n_processes) as pool:
         results = pool.starmap(thread_fn, args)
@@ -625,7 +801,9 @@ def main():
     for r,[records, x, feature_indexes, y_true, y_predict, truth_info_name, annotation_name] in enumerate(results):
         label = truth_info_name + " truth labels and " + annotation_name + " features"
         length_axis = length_axes[truth_info_name + "_" + annotation_name]
-        variant_axis = variant_axes[truth_info_name + "_" + annotation_name]
+        variant_axis_alt = variant_axes_alt[truth_info_name + "_" + annotation_name] 
+        multi_axis = multi_axes[truth_info_name + "_" + annotation_name]
+        multi_bar_axis = multi_bar_axes[truth_info_name + "_" + annotation_name]
 
         # Plot the individual feature ROCs (without modeling)
         if annotation_name != "Hapestry" and truth_info_name == "TruvariBench_TP":
@@ -642,9 +820,16 @@ def main():
                     axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
         tandem_axes, tandem_labels = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
+        
         length_axis, length_labels = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
-        variant_axis, variant_labels = plot_variant_stratified_roc_curves(variant_axis, records, y_true, y_predict, truth_info_name, annotation_name)
-        labels_with_auc.extend(tandem_labels + length_labels + variant_labels)
+        
+        variant_axes, variant_labels = plot_variant_stratified_roc_curves(variant_axes, records, y_true, y_predict, truth_info_name, annotation_name)
+        variant_axis_alt, variant_labels_alt = plot_variant_stratified_roc_curves_alt(variant_axis_alt, records, y_true, y_predict, truth_info_name, annotation_name)
+        
+        multi_axis, multi_labels = plot_multi_stratified_roc_curves(multi_axis, records, y_true, y_predict, truth_info_name, annotation_name)
+        multi_bar_axis = plot_multi_stratified_auc_bar(multi_bar_axis, records, y_true, y_predict, truth_info_name, annotation_name)
+        
+        labels_with_auc.extend(tandem_labels + length_labels + variant_labels + multi_labels)
 
         # write the filtered VCF (BEFORE DOWNSAMPLING)
         write_filtered_vcf(y_predict=y_predict, threshold=0.5, records=records, input_vcf_path=eval_vcfs[0], output_vcf_path=os.path.join(output_dir, label.replace(" ", "_") + ".vcf"))
@@ -672,6 +857,15 @@ def main():
     tandem_axes.legend(loc="lower right", fontsize='small')
     tandem_fig.savefig(os.path.join(output_dir,"roc_curve_tandem_stratified.png"), dpi=200)
 
+    variant_axes.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+    variant_axes.legend(loc="lower right", fontsize='small')
+    variant_fig.savefig(os.path.join(output_dir,"roc_curve_variant_stratified.png"), dpi=200)
+
+    """ multi_bar_axes.set_xticklabels(multi_bar_axes.get_xticklabels())
+    multi_bar_fig.tight_layout()
+    multi_bar_fig.savefig(os.path.join(output_dir,"Hapestry_Hapestry_auc_bar_tandem_length_stratified.png"), dpi=200)
+     """# TODO delete
+
     for label,length_axis in length_axes.items():  
         # print("label", label)
         # print("length axis", length_axis)
@@ -679,15 +873,33 @@ def main():
         length_axis.legend(loc="lower right", fontsize='small')
         length_figs[label].savefig(os.path.join(output_dir,label+"_length.png"), dpi=200)
 
-    for label,variant_axis in variant_axes.items():
+    for label,variant_axis_alt in variant_axes_alt.items():
         # print("label", label)
-        # print("variant axis", variant_axis)   TODO figure out what these axes are
+        # print("variant axis", variant_axis)
         # they are the same for length and variant:
         # length axis Axes(0.125,0.11;0.775x0.77)
         # variant axis Axes(0.125,0.11;0.775x0.77)
-        variant_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
-        variant_axis.legend(loc="lower right", fontsize='small')
-        variant_figs[label].savefig(os.path.join(output_dir,label+"_variant.png"), dpi=200)
+        variant_axis_alt.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+        variant_axis_alt.legend(loc="lower right", fontsize='small')
+        variant_figs_alt[label].savefig(os.path.join(output_dir,label+"_variant_separated.png"), dpi=200)
+
+    for label,multi_axis in multi_axes.items():
+        # print("label", label)
+        # print("variant axis", variant_axis)
+        # they are the same for length and variant:
+        # length axis Axes(0.125,0.11;0.775x0.77)
+        # variant axis Axes(0.125,0.11;0.775x0.77)
+        multi_axis.plot([0, 1], [0, 1], linestyle='--', label="Random classifier", color="gray")
+        multi_axis.legend(loc="lower right", fontsize='small')
+        multi_figs[label].savefig(os.path.join(output_dir,label+"_multi_length_tandem_separated.png"), dpi=200)
+
+    for label,multi_bar_axis in multi_bar_axes.items():
+        print("multi bar axis", multi_bar_axis)
+        multi_bar_axis.set_xticklabels(multi_bar_axis.get_xticklabels())
+        multi_bar_figs[label].tight_layout()
+        multi_bar_figs[label].savefig(os.path.join(output_dir,label+"_auc_bar_tandem_length_stratified.png"), dpi=200)
+    
+
  
     for label,(fpr,tpr,thresholds) in roc_data.items():
         with open(os.path.join(output_dir, label.replace(" ", "_") + "_roc.csv"), "w") as f:
@@ -707,6 +919,5 @@ if __name__ == "__main__":
 
 end = time.time()
 
-print("time of execution is:", (end - start) * 10**3, "ms")
-print("time of execution is:", (end - start) * 10, "s")
-print("time of execution is:", (end - start) * 10 / 60, "min")
+print("using", n_threads, "threads")
+print("time of execution is:", (end - start), "s")
