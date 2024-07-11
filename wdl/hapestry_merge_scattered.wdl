@@ -130,6 +130,8 @@ workflow hapestry_merge_scattered {
         Int interval_max_length = 50000
         Int flank_length = 200
         Int min_sv_length = 20
+        Int graphaligner_timeout = 120
+        Float min_read_hap_identity = 0.5
         Int n_threads
         Int n_chunks
         File tandems_bed
@@ -137,6 +139,7 @@ workflow hapestry_merge_scattered {
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
+        Boolean skip_solve = false
 
         String docker
         File? monitoring_script
@@ -145,16 +148,19 @@ workflow hapestry_merge_scattered {
     }
 
     parameter_meta {
-        interval_max_length: "Maximum length of each window evaluated"
-        flank_length: "Length of flanking sequence to include in each window"
-        n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
-        min_sv_length: "Minimum SV length to consider"
-        n_threads: "Maximum number of threads to use"
-        tandems_bed: "BED file of tandem repeats"
-        reference_fa: "Reference fasta file"
-        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
-        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
+        flank_length: "Length of flanking sequence to include in each window"
+        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
+        graphaligner_timeout: "Timeout for graphaligner in seconds"
+        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
+        interval_max_length: "Maximum length of each window evaluated"
+        min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        min_sv_length: "Minimum SV length to consider"
+        n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
+        n_threads: "Maximum number of threads to use"
+        reference_fa: "Reference fasta file"
+        skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        tandems_bed: "BED file of tandem repeats"
     }
 
     call chunk_vcf{
@@ -182,11 +188,14 @@ workflow hapestry_merge_scattered {
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,
                 min_sv_length = min_sv_length,
+                graphaligner_timeout = graphaligner_timeout,
+                min_read_hap_identity = min_read_hap_identity,
                 n_threads = n_threads,
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
                 haps_vs_ref_csv = haps_vs_ref_csv,
                 force_unique_reads = force_unique_reads,
+                skip_solve = skip_solve,
                 docker = docker,
                 monitoring_script = monitoring_script,
                 runtime_attributes = merge_runtime_attributes,

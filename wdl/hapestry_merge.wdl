@@ -23,12 +23,15 @@ task merge {
         Int interval_max_length = 50000
         Int min_sv_length = 20
         Int flank_length = 200
+        Int graphaligner_timeout = 120
+        Float min_read_hap_identity = 0.5
         Int n_threads
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
+        Boolean skip_solve = false
 
         String docker = "fcunial/hapestry:merge"
         File? monitoring_script
@@ -75,7 +78,12 @@ task merge {
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
-        --n_threads ~{n_threads} ~{if force_unique_reads then "--force_unique_reads" else ""} ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""}
+        --graphaligner_timeout ~{graphaligner_timeout} \
+        --min_read_hap_identity ~{min_read_hap_identity} \
+        --n_threads ~{n_threads} \
+        ~{if force_unique_reads then "--force_unique_reads" else ""} \
+        ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
+        ~{if skip_solve then "--skip_solve" else ""}
 
         # tarball only the csv files in the output subdirectories
         find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
@@ -84,15 +92,19 @@ task merge {
     >>>
 
     parameter_meta {
-        interval_max_length: "Maximum length of each window evaluated"
-        flank_length: "Length of flanking sequence to include in each window"
-        n_threads: "Maximum number of threads to use"
-        tandems_bed: "BED file of tandem repeats"
-        confident_bed: "BED file of regions to be included, if not provided, all variants will be merged"
-        reference_fa: "Reference fasta file"
-        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
-        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
+        confident_bed: "BED file of regions to be included, if not provided, all variants will be merged"
+        flank_length: "Length of flanking sequence to include in each window"
+        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
+        graphaligner_timeout: "Timeout for graphaligner in seconds"
+        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
+        interval_max_length: "Maximum length of each window evaluated"
+        min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        min_sv_length: "Minimum length of SVs to consider"
+        n_threads: "Maximum number of threads to use"
+        reference_fa: "Reference fasta file"
+        skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        tandems_bed: "BED file of tandem repeats"
     }
 
     runtime {
@@ -123,12 +135,15 @@ workflow hapestry_merge {
         Int interval_max_length = 50000
         Int flank_length = 200
         Int min_sv_length = 20
+        Int graphaligner_timeout = 120
+        Float min_read_hap_identity = 0.5
         Int n_threads
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
+        Boolean skip_solve = false
 
         String docker
         File? monitoring_script
@@ -137,14 +152,19 @@ workflow hapestry_merge {
     }
 
     parameter_meta {
-        interval_max_length: "Maximum length of each window evaluated"
-        flank_length: "Length of flanking sequence to include in each window"
-        n_threads: "Maximum number of threads to use"
-        tandems_bed: "BED file of tandem repeats"
-        reference_fa: "Reference fasta file"
-        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
-        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
+        confident_bed: "BED file of regions to be included, if not provided, all variants will be merged"
+        flank_length: "Length of flanking sequence to include in each window"
+        force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
+        graphaligner_timeout: "Timeout for graphaligner in seconds"
+        haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
+        interval_max_length: "Maximum length of each window evaluated"
+        min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        min_sv_length: "Minimum length of SVs to consider"
+        n_threads: "Maximum number of threads to use"
+        reference_fa: "Reference fasta file"
+        skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        tandems_bed: "BED file of tandem repeats"
     }
 
     call merge {
@@ -156,11 +176,14 @@ workflow hapestry_merge {
             interval_max_length = interval_max_length,
             flank_length = flank_length,
             min_sv_length = min_sv_length,
+            graphaligner_timeout = graphaligner_timeout,
+            min_read_hap_identity = min_read_hap_identity,
             n_threads = n_threads,
             tandems_bed = tandems_bed,
             reference_fa = reference_fa,
             haps_vs_ref_csv = haps_vs_ref_csv,
             force_unique_reads = force_unique_reads,
+            skip_solve = skip_solve,
             docker = docker,
             monitoring_script = monitoring_script,
             runtime_attributes = merge_runtime_attributes

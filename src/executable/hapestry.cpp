@@ -102,7 +102,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 }
 
 
-void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, int64_t min_percent_score){
+void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity){
     // TODO: test these params?? why is gap extension greater than mismatch cost?
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -158,11 +158,11 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             }
 
             // Can be negative because indels can be greater than the length of the smaller sequence
-            int64_t scaled_score = 100 - (100*n_indels) / min(read_sequence.size(), path_sequence.size());
+            float scaled_score = 1.0f - float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
 
-//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscore: "  << score << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
+//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
-            if (scaled_score > min_percent_score) {
+            if (scaled_score > min_read_hap_identity) {
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), scaled_score);
             }
@@ -321,14 +321,15 @@ void merge_thread_fn(
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
-        const string& label,
         const path& output_dir,
         int32_t flank_length,
+        int32_t graphaligner_timeout,
+        float min_read_hap_identity,
+        bool skip_solve,
         atomic<size_t>& job_index
 ) {
-    // TODO: make these parameters
-    int64_t min_path_coverage = 1;
-    int64_t min_percent_score = 85;
+    // TODO: make this a parameter
+    int64_t min_path_coverage = 2;
 
     unordered_map<string, interval_tree_t<int32_t> > contig_interval_trees;
 
@@ -391,7 +392,7 @@ void merge_thread_fn(
 
         // Run GraphAligner and check how long it takes, if it times out
         Timer t;
-        bool success = run_command(command, false, 90);
+        bool success = run_command(command, false, float(graphaligner_timeout));
         string time_csv = t.to_csv();
 
         write_graphaligner_time_log(subdir, vcf_name_prefix, time_csv, success);
@@ -409,50 +410,52 @@ void merge_thread_fn(
 
         // Add the paths to the TransMap
         for (const auto& [path_name, coverage]: path_coverage) {
-            if (coverage > min_path_coverage){
+            if (coverage >= min_path_coverage){
                 transmap.add_path(path_name);
             }
         }
 
         // Align all reads to all candidate paths and update transmap
-        align_reads_vs_paths(transmap, variant_graph, min_percent_score);
+        align_reads_vs_paths(transmap, variant_graph, min_read_hap_identity);
 
         // Write the full transmap to CSV (in the form of annotated edges)
         path output_csv = subdir / "reads_to_paths.csv";
         transmap.write_edge_info_to_csv(output_csv);
 
-        try {
-            // Optimize
-            SolverType solver_type = SolverType::kGscip;
-            optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir, solver_type);
+        if (not skip_solve){
+            try {
+                // Optimize
+                SolverType solver_type = SolverType::kGscip;
+                optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir, solver_type);
 
-            // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
-            // not conflict with existing names
-            for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-                transmap.add_variant("v" + to_string(v));
-            }
+                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
+                // not conflict with existing names
+                for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+                    transmap.add_variant("v" + to_string(v));
+                }
 
-            // Construct mapping of paths to variants
-            transmap.for_each_path([&](const string& path_name, int64_t path_id){
-                // Convert the path to a vector
-                vector <pair <string,bool> > path;
+                // Construct mapping of paths to variants
+                transmap.for_each_path([&](const string& path_name, int64_t path_id){
+                    // Convert the path to a vector
+                    vector <pair <string,bool> > path;
 
-                GafAlignment::parse_string_as_path(path_name, path);
+                    GafAlignment::parse_string_as_path(path_name, path);
 
-                variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-                    string var_name = "v" + to_string(id);
-                    transmap.add_edge(var_name, path_name);
+                    variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                        string var_name = "v" + to_string(id);
+                        transmap.add_edge(var_name, path_name);
+                    });
                 });
-            });
 
-            // Write the solution to a VCF
-            path output_path = subdir / "solution.vcf";
+                // Write the solution to a VCF
+                path output_path = subdir / "solution.vcf";
 
-            write_solution_to_vcf(variant_graph, transmap, output_path);
-        }
-        catch (const exception& e) {
-            cerr << e.what() << '\n';
-            cerr << "ERROR caught at " << region.to_string() << '\n';
+                write_solution_to_vcf(variant_graph, transmap, output_path);
+            }
+            catch (const exception& e) {
+                cerr << e.what() << '\n';
+                cerr << "ERROR caught at " << region.to_string() << '\n';
+            }
         }
 
         i = job_index.fetch_add(1);
@@ -466,12 +469,14 @@ void merge_variants(
         unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
-        const string& label,
         const path& vcf,
         size_t n_threads,
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t min_sv_length,
+        int32_t graphaligner_timeout,
+        float min_read_hap_identity,
+        bool skip_solve,
         const path& output_dir
 ){
 
@@ -551,9 +556,11 @@ void merge_variants(
                                      std::cref(ref_sequences),
                                      std::cref(regions),
                                      std::cref(vcf_reader),
-                                     std::cref(label),
                                      std::cref(output_dir),
                                      flank_length,
+                                     graphaligner_timeout,
+                                     min_read_hap_identity,
+                                     skip_solve,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -576,11 +583,13 @@ void hapestry(
         path tandem_bed,
         path bam_csv,
         path ref_fasta,
-        const string& label,
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t min_sv_length,
         int32_t n_threads,
+        int32_t graphaligner_timeout,
+        float min_read_hap_identity,
+        bool skip_solve,
         bool debug,
         bool force_unique_reads,
         bool bam_not_hardclipped
@@ -747,12 +756,14 @@ void hapestry(
             region_transmaps,
             ref_sequences,
             regions,
-            label,
             vcf,
             n_threads,
             flank_length,
             interval_max_length,
             min_sv_length,
+            graphaligner_timeout,
+            min_read_hap_identity,
+            skip_solve,
             staging_dir
     );
 
@@ -819,11 +830,18 @@ int main (int argc, char* argv[]){
     int32_t interval_max_length = 15000;
     int32_t min_sv_length = 20;
     int32_t n_threads = 1;
+    int32_t graphaligner_timeout = 90;
+    float min_read_hap_identity = 0.85;
+    bool skip_solve = false;
     bool debug = false;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
     CLI::App app{"App description"};
+
+    // TODO: add skip_solve arg
+    // TODO: add graphaligner timeout arg
+    // TODO: break out transmap edge filtering and add edge weight parameter
 
     app.add_option(
             "--n_threads",
@@ -835,11 +853,6 @@ int main (int argc, char* argv[]){
             output_dir,
             "Path to output directory which must not exist yet")
             ->required();
-
-    app.add_option(
-            "--label",
-            label,
-            "Label to give this annotation in the INFO field of the VCF");
 
     app.add_option(
             "--windows",
@@ -886,6 +899,20 @@ int main (int argc, char* argv[]){
             "Skip all variants less than this length (bp)")
             ->required();
 
+    app.add_option(
+            "--graphaligner_timeout",
+            graphaligner_timeout,
+            "Abort graphaligner after this many seconds, and do not compute the remaining steps for that window")
+            ->required();
+
+    app.add_option(
+            "--min_read_hap_identity",
+            min_read_hap_identity,
+            "Minimum alignment identity to consider a read-hap assignment in the optimization step")
+            ->required();
+
+    app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
+
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
@@ -906,11 +933,13 @@ int main (int argc, char* argv[]){
             tandem_bed,
             bam_csv,
             ref_fasta,
-            label,
             flank_length,
             interval_max_length,
             min_sv_length,
             n_threads,
+            graphaligner_timeout,
+            min_read_hap_identity,
+            skip_solve,
             debug,
             force_unique_reads,
             bam_not_hardclipped
