@@ -1,11 +1,11 @@
 #include "path_optimizer_mathopt.hpp"
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
-#include <fstream>
+#include "Timer.hpp"
 
+#include <fstream>
 #include <map>
 
 using std::map;
-
 using std::ofstream;
 
 
@@ -187,7 +187,7 @@ double optimize_d_given_n(
     double d = vars.cost_d.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "n: " << n << "\td: " << d << '\n';
+//    cerr << "n: " << n << "\td: " << d << '\n';
 
     // Parse the solution
     for (const auto& [edge,var]: vars.read_hap){
@@ -266,7 +266,7 @@ double optimize_n_given_d(
     double n = vars.cost_n.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "n: " << n << "\td: " << d << '\n';
+//    cerr << "n: " << n << "\td: " << d << '\n';
 
     // Parse the solution
     for (const auto& [edge,var]: vars.read_hap){
@@ -337,7 +337,7 @@ double optimize_d_given_n(
     double d = vars.cost_d.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "n: " << n << "\td: " << d << '\n';
+//    cerr << "n: " << n << "\td: " << d << '\n';
 
     return d;
 }
@@ -384,7 +384,7 @@ double optimize_n_given_d(
     double n = vars.cost_n.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "n: " << n << "\td: " << d << '\n';
+//    cerr << "n: " << n << "\td: " << d << '\n';
 
     return n;
 }
@@ -426,7 +426,7 @@ double optimize_n(
     double n = vars.cost_n.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "n: " << n << '\n';
+//    cerr << "n: " << n << '\n';
 
     return n;
 }
@@ -468,7 +468,7 @@ double optimize_d(
     double d = vars.cost_d.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-    cerr << "d: " << d << '\n';
+//    cerr << "d: " << d << '\n';
 
     return d;
 }
@@ -525,19 +525,35 @@ void optimize_with_golden_search(
     double n_min = -1;
     double d_max = -1;
 
+    Timer t;
+
     // First find one extreme of the pareto set (D_MIN)
     unordered_set <pair <int64_t,int64_t> > n_max_result_edges;
     d_min = round(optimize_d(model, vars, solver_type, n_threads));
+
+    cerr << t << '\n';
+    t.reset();
+
     n_max = round(optimize_n_given_d(model, vars, solver_type, n_max_result_edges, d_min, n_threads, output_dir));
 
     // Need to manually add the result edges to the cache (chicken and egg problem)
     result_edges_cache.emplace(n_max, n_max_result_edges);
 
+    cerr << t << '\n';
+    t.reset();
+
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
     n_min = round(optimize_n(model, vars, solver_type, n_threads));
+
+    cerr << t << '\n';
+    t.reset();
+
     d_max = round(optimize_d_given_n(model, vars, solver_type, result_edges_cache[n_min], n_min, n_threads, output_dir));
+
+    cerr << t << '\n';
+    t.reset();
 
     cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 
@@ -583,6 +599,8 @@ void optimize_with_golden_search(
             double c = optimize_d_given_n(model, vars, solver_type, result_edges_cache[c_i], c_i, n_threads, output_dir);
             c_distance = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(c_i, c_distance);
+            cerr << t << '\n';
+            t.reset();
         }
         else{
             c_distance = c_result->second;
@@ -593,13 +611,15 @@ void optimize_with_golden_search(
             double d = optimize_d_given_n(model, vars, solver_type, result_edges_cache[d_i], d_i, n_threads, output_dir);
             d_distance = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(d_i, d_distance);
+            cerr << t << '\n';
+            t.reset();
         }
         else{
             d_distance = d_result->second;
         }
 
-        cerr << "a: " << a_i << "\tc: " << c_i << "\td: " << d_i << "\tb: " << b_i << '\n';
-        cerr << "a: " << results.at(a_i) << "\tc: " << c_distance << "\td: " << d_distance << "\tb: " << results.at(b_i) << '\n';
+//        cerr << "a: " << a_i << "\tc: " << c_i << "\td: " << d_i << "\tb: " << b_i << '\n';
+//        cerr << "a: " << results.at(a_i) << "\tc: " << c_distance << "\td: " << d_distance << "\tb: " << results.at(b_i) << '\n';
 
         if (c_distance < d_distance){
             // Prevent recomputing the same interval
@@ -661,8 +681,6 @@ void optimize_with_golden_search(
                 else{
                     auto [success, w] = transmap.try_get_edge_weight(read_id, path_id);
                     n_distance += round(w);
-
-                    cerr << sample_name << " -> " << transmap.get_node(read_id).name << " -> " << transmap.get_node(path_id).name << ' ' << w << '\n';
                 }
             });
         });
@@ -671,8 +689,6 @@ void optimize_with_golden_search(
     for (const auto& [read_id, path_id]: to_be_removed){
         transmap.remove_edge(read_id, path_id);
     }
-
-    cerr << "n: " << n << "\td: " << n_distance << '\n';
 }
 
 
