@@ -111,9 +111,9 @@ COPY ./limits.conf /etc/security/limits.conf
 # GRAPHALIGNER
 # The following would install version 1.0.13, which is from 2021: 
 # RUN /miniconda3/bin/conda install -c bioconda graphaligner
-#
+# Pinned to a specific version of conda for speed of building docker img... TODO: update to the latest version as needed
 RUN mkdir -p /miniconda3 \
-    && wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /miniconda3/miniconda.sh \
+    && wget https://repo.anaconda.com/miniconda/Miniconda3-py39_24.5.0-0-Linux-x86_64.sh -O /miniconda3/miniconda.sh \
     && bash /miniconda3/miniconda.sh -b -u -p /miniconda3 \
     && rm -rf /miniconda3/miniconda.sh \
     && /miniconda3/bin/conda init bash zsh
@@ -131,7 +131,7 @@ SHELL ["/bin/bash", "-c"]
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=5e284c6c5155cc91866e981d9315e4d9ed466dd8
+ARG HAPESTRY_COMMIT=e05e7366671e4b05ef4a80effbe384da45b8f6fb
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
