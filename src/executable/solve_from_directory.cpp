@@ -25,9 +25,11 @@ using lib_interval_tree::interval_tree_t;
 using bdsg::HandleGraph;
 
 #include <filesystem>
+#include <fstream>
 
 using std::filesystem::path;
 using std::filesystem::create_directories;
+using std::filesystem::recursive_directory_iterator;
 
 
 #include <unordered_map>
@@ -108,7 +110,7 @@ void for_each_row_in_csv(path csv_path, const function<void(const vector<string>
 }
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search){
+void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint){
     // Make tmp dir
     path output_dir = "/tmp/" + get_uuid();
 
@@ -119,18 +121,18 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
         throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
-    if (use_golden_search){
-        cerr << "Using golden search...\n";
-        optimize_reads_with_d_and_n_using_golden_search(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
-    }
-    else {
-        cerr << "NOT using golden search...\n";
-        optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
-    }
+    optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
 }
 
 
-void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search){
+void solve_from_csv(
+        path csv,
+        const SolverType& solver_type,
+        size_t max_reads_per_sample,
+        size_t n_threads,
+        bool use_ploidy_constraint
+        ){
+
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -183,78 +185,102 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
         transmap.remove_edge(edge.first, edge.second);
     }
 
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
+    try {
+        optimize(transmap, solver_type, 1, use_ploidy_constraint);
+    }
+    catch (const exception& e) {
+        cerr << e.what() << '\n';
+        cerr << "ERROR caught at " << csv.string() << '\n';
+    }
 }
 
 
-void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search = false){
-    TransMap transmap;
+void thread_fn(
+        atomic<size_t>& job_index,
+        const vector<path>& jobs,
+        mutex& io_mutex,
+        const SolverType& solver_type,
+        size_t max_reads_per_sample,
+        size_t n_threads,
+        bool use_ploidy_constraint,
+        path output_dir
+        ){
 
-    ifstream csv_file(csv);
+    size_t i = job_index.fetch_add(1);
+    path log_path = output_dir / "log.csv";
 
-    if (use_golden_search){
-        cerr << "Using golden search...\n";
+    while (i < jobs.size()){
+        Timer t;
+        solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
+
+        io_mutex.lock();
+        ofstream log(log_path, std::ios_base::app);
+
+        // get directory name of job (excluding non-leaf dirs)
+        string job_dir = jobs[i].parent_path().filename();
+
+        log << job_dir << "," << t.to_csv() << "\n";
+        log.close();
+
+        io_mutex.unlock();
+
+        i = job_index.fetch_add(1);
+    }
+}
+
+
+// A function which opens a directory and iterates all subdirectories, calling solve_from_csv on each reads_to_paths.csv
+void solve_from_directory(
+        path directory,
+        const SolverType& solver_type,
+        size_t max_reads_per_sample,
+        size_t n_threads,
+        bool use_ploidy_constraint,
+        path output_dir
+        ){
+
+    if (not exists(output_dir)){
+        create_directories(output_dir);
     }
     else{
-        cerr << "NOT using golden search...\n";
+        throw runtime_error("ERROR: output directory already exists: " + output_dir.string());
     }
 
-    if (not csv_file.is_open() or csv_file.bad()){
-        throw runtime_error("Could not open CSV file " + csv.string());
+    if (not exists(directory)){
+        throw runtime_error("ERROR: input directory does not exist: " + directory.string());
     }
 
-    string prev_sample;
-    vector <vector <string> > sample_data;
-
-    for_each_row_in_csv(csv, [&](const vector<string>& items){
-        if (items.size() != 4){
-            throw runtime_error("ERROR: CSV row does not have 3 items: " + csv.string());
+    // Find all reads_to_paths.csv files in the subdirectories of the input directory and add them to a vector of jobs
+    vector<path> jobs;
+    for (const auto& entry : recursive_directory_iterator(directory)){
+        if (entry.path().filename() == "reads_to_paths.csv"){
+            jobs.push_back(entry.path());
         }
+    }
 
-        const string& sample = items[0];
-        const string& read = items[1];
-        const string& hap = items[2];
-        float weight = stof(items[3]);
+    // Launch n_threads using the given args and the jobs vector
+    vector<thread> threads;
+    atomic<size_t> job_index(0);
+    mutex io_mutex;
 
-        if (sample != prev_sample and not sample_data.empty()){
-            cerr << prev_sample << '\n';
-            optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
-            if (transmap.empty()){
-                cerr << "WARNING: no result for sample: " << prev_sample << '\n';
-                for (const auto& item: sample_data){
-                    for (const string& x: item){
-                        cerr << x << ',';
-                    }
-                    cerr << '\n';
-                }
-            }
+    for (size_t i = 0; i < n_threads; i++){
+        threads.emplace_back(thread_fn,
+                ref(job_index),
+                cref(jobs),
+                ref(io_mutex),
+                solver_type,
+                max_reads_per_sample,
+                n_threads,
+                use_ploidy_constraint,
+                output_dir
+            );
+    }
 
-            transmap = {};
-            sample_data.clear();
-        }
+    for (auto& t : threads){
+        t.join();
+    }
 
-        sample_data.emplace_back(items);
 
-        if (not transmap.has_node(sample)){
-            transmap.add_sample(sample);
-        }
-
-        if (not transmap.has_node(read)){
-            transmap.add_read(read);
-        }
-
-        if (not transmap.has_node(hap)){
-            transmap.add_path(hap);
-        }
-
-//        cerr << "adding edge: " << read << ',' << hap << ',' << weight << '\n';
-        transmap.add_edge(read, hap, weight);
-        transmap.add_edge(sample, read);
-
-        prev_sample = sample;
-    });
-
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
 }
 
 
@@ -262,19 +288,17 @@ int main(int argc, char** argv){
     CLI::App app{"Solve from CSV"};
 
     path input_csv;
+    path output_dir;
     string solver;
     SolverType solver_type;
-    bool samplewise = false;
     bool use_ploidy_constraint = true;
-    bool use_golden_search = false;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
     size_t n_threads = 1;
 
     app.add_option("-i,--input", input_csv, "Input CSV file with sample-read-path data for optimizer")->required();
+    app.add_option("-o,--output_dir", output_dir, "Output directory (must not exist)")->required();
     app.add_option("--solver", solver, "Solver to use, must be one of: scip, glop, pdlp")->required();
-    app.add_flag("-s,--samplewise", samplewise, "Optimize each sample separately (default: optimize all samples together)");
     app.add_flag("!--no_ploidy", use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
-    app.add_flag("-g,--use_golden_search", use_golden_search, "If invoked, use explicit n-centric optimization with golden search to find joint minimum instead of encoding joint objective in the solver.");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
 
@@ -300,16 +324,5 @@ int main(int argc, char** argv){
         cerr << "NOT using ploidy constraint...\n";
     }
 
-    if (samplewise){
-        solve_from_csv_samplewise(input_csv, solver_type, use_ploidy_constraint, use_golden_search);
-    }
-    else{
-        solve_from_csv(input_csv,
-            solver_type,
-            max_reads_per_sample,
-            n_threads,
-            use_ploidy_constraint,
-            use_golden_search
-        );
-    }
+    solve_from_directory(input_csv, solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, output_dir);
 }

@@ -607,6 +607,7 @@ set(EXECUTABLES
         find_windows
         extract_reads_from_windows
         solve_from_csv
+        solve_from_directory
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
