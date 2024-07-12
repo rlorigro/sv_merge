@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VectorHeteroGraph.hpp"
+#include "VariantGraph.hpp"
 #include "misc.hpp"
 
 #include <unordered_map>
@@ -112,7 +113,7 @@ public:
             const function<void(const HeteroNode& node, int64_t id)>& f) const;
 
     /// Writing
-    void write_edge_info_to_csv(path output_path) const;
+    void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;
 };
 
 

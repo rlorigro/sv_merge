@@ -157,14 +157,14 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 }
             }
 
-            // Can be negative because indels can be greater than the length of the smaller sequence
-            float scaled_score = 1.0f - float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
+            // Can be >1 because indels can be greater than the length of the smaller sequence
+            float scaled_score = float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
 
 //            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
-            if (scaled_score > min_read_hap_identity) {
+            if ((1.0f - scaled_score) > min_read_hap_identity) {
                 // Avoid adding while iterating
-                edges_to_add.emplace_back(id, transmap.get_id(path_name), scaled_score);
+                edges_to_add.emplace_back(id, transmap.get_id(path_name), n_indels);
             }
         }
     });
@@ -288,7 +288,6 @@ void write_solution_to_vcf(
         vcf_file << '\t' << sample_name;
     }
     vcf_file << '\n';
-
 
     for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
         auto& record = variant_graph.vcf_records.at(v);
@@ -420,7 +419,7 @@ void merge_thread_fn(
 
         // Write the full transmap to CSV (in the form of annotated edges)
         path output_csv = subdir / "reads_to_paths.csv";
-        transmap.write_edge_info_to_csv(output_csv);
+        transmap.write_edge_info_to_csv(output_csv, variant_graph);
 
         if (not skip_solve){
             try {

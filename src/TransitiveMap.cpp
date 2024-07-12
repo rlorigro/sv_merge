@@ -1,4 +1,5 @@
 #include "TransitiveMap.hpp"
+#include "gaf.hpp"
 #include <fstream>
 
 using std::ofstream;
@@ -453,8 +454,11 @@ void TransMap::for_node_in_bfs(
 }
 
 
-void TransMap::write_edge_info_to_csv(path output_path) const{
+void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const{
     ofstream out(output_path);
+
+    // Write header
+    out << "sample,read,read_length,path,path_length,weight\n";
 
     for_each_sample([&](const string& sample_name, int64_t sample_id){
         for_each_read_of_sample(sample_id, [&](int64_t read_id){
@@ -465,7 +469,24 @@ void TransMap::write_edge_info_to_csv(path output_path) const{
                     throw runtime_error("ERROR: edge weight not found for read-path edge: " + to_string(read_id) + " " + to_string(path_id));
                 }
 
-                out << sample_name << ',' << get_node(read_id).name << ',' << get_node(path_id).name << ',' << weight << '\n';
+                auto read_length = sequences.at(read_id).size();
+
+                // Get the length of the path by summing the lengths of the nodes in the variant graph
+                auto path_length = 0;
+
+                // Convert path name to vector of ID/orientation pairs
+                vector <pair <string,bool> > path;
+                GafAlignment::parse_string_as_path(graph.get_node(path_id).name, path);
+
+                // Sum the lengths of the nodes in the path
+                for (const auto& [node_name, is_reverse]: path){
+                    // Get hashgraph handle from name/orientation pair
+                    auto h = variant_graph.graph.get_handle(stoll(node_name), is_reverse);
+                    auto node_length = variant_graph.graph.get_length(h);
+                    path_length += int32_t(node_length);
+                }
+
+                out << sample_name << ',' << get_node(read_id).name << ',' << read_length << ',' << get_node(path_id).name << ',' << path_length << ',' << weight << '\n';
             });
         });
     });

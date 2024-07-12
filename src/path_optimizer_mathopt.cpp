@@ -418,7 +418,7 @@ double optimize_n(
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_given_d found " << '\n';
+        cerr << "WARNING: no solution for n found " << '\n';
         return -1;
     }
 
@@ -460,7 +460,7 @@ double optimize_d(
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_given_d found " << '\n';
+        cerr << "WARNING: no solution for d found " << '\n';
         return -1;
     }
 
@@ -468,7 +468,7 @@ double optimize_d(
     double d = vars.cost_d.Evaluate(result.variable_values());
 
     // Print the n and d values of the solution
-//    cerr << "d: " << d << '\n';
+    cerr << "d: " << d << '\n';
 
     return d;
 }
