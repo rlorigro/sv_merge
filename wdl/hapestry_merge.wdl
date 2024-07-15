@@ -87,7 +87,7 @@ task merge {
 
         # tarball only the csv files in the output subdirectories
         find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
-        find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa"  -o -name "*.gaf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
+        find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
 
     >>>
 
