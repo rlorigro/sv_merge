@@ -120,6 +120,74 @@ task chunk_vcf {
 }
 
 
+# Task to combine the chunks
+task concat_vcfs{
+    input {
+        Array[File] sequence_tarballs
+
+        String docker = "staphb/bcftools:1.20"
+
+        RuntimeAttributes runtime_attributes = {}
+    }
+
+    command <<<
+    set -eou pipefail
+
+    # Temporary directory for extracted VCF files
+    temp_dir=$(mktemp -d)
+    echo "Temporary directory created at: $temp_dir"
+
+    # Array to hold paths of extracted VCF files
+    vcf_files=()
+
+    # Loop through each tar.gz file provided as an argument
+    for archive in ~{sep=' ' sequence_tarballs}; do
+        echo "Processing archive: $archive"
+
+        # find the path of the VCF file in the tarball
+        vcf_path=$(tar -tzf "$archive" | grep -oP '.*\merged.vcf$')
+
+        echo $vcf_path
+
+        # Extract the VCF file
+        tar -xzf "$archive" -C "$temp_dir" "$vcf_path"
+
+        # Pick a new name for the extracted VCF file and then rename it to avoid conflicts
+        new_vcf_path="$temp_dir/$(basename $archive .tar.gz)_$(basename $vcf_path).gz"
+
+        echo "new path: $new_vcf_path"
+
+        bcftools view -Oz -o "$new_vcf_path" "$temp_dir/$vcf_path"
+        bcftools index -t "$new_vcf_path"
+
+        # Add the path of the extracted VCF to the array
+        vcf_files+=("$new_vcf_path")
+    done
+
+    bcftools concat -a -D -Oz -o concatenated.vcf.gz "${vcf_files[@]}"
+    bcftools sort -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
+    bcftools index -t concatenated_sorted.vcf.gz
+
+    >>>
+
+    output {
+        File concatenated_vcf = "concatenated_sorted.vcf.gz"
+        File concatenated_vcf_tbi = "concatenated_sorted.vcf.gz.tbi"
+    }
+
+
+    runtime {
+        docker: docker
+        cpu: select_first([runtime_attributes.cpu, 1])
+        memory: select_first([runtime_attributes.command_mem_gb, 6]) + select_first([runtime_attributes.additional_mem_gb, 1]) + " GB"
+        disks: "local-disk " + select_first([runtime_attributes.disk_size_gb, 100]) + if select_first([runtime_attributes.use_ssd, false]) then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attributes.boot_disk_size_gb, 15])
+        preemptible: select_first([runtime_attributes.preemptible, 2])
+        maxRetries: select_first([runtime_attributes.max_retries, 1])
+    }
+}
+
+
 workflow hapestry_merge_scattered {
     input {
         File vcf_gz
@@ -203,9 +271,15 @@ workflow hapestry_merge_scattered {
         }
     }
 
+    call concat_vcfs {
+        input:
+            sequence_tarballs = scattered_merge.sequence_data_tarball
+    }
 
     output {
         Array[File] non_sequence_data_tarball = scattered_merge.non_sequence_data_tarball
         Array[File] sequence_data_tarball = scattered_merge.sequence_data_tarball
+        File hapestry_vcf = concat_vcfs.concatenated_vcf
+        File hapestry_vcf_tbi = concat_vcfs.concatenated_vcf_tbi
     }
 }
