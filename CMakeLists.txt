@@ -449,7 +449,6 @@ else()
     ExternalProject_Add(project_bdsg
             GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
             PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
-            PATCH_COMMAND wget https://github.com/rlorigro/sdsl-lite/commit/4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch && git apply -v --unsafe-paths --directory ${CMAKE_SOURCE_DIR}/external/bdsg/src/project_bdsg/bdsg/deps/sdsl-lite 4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch || git apply --unsafe-paths --directory ${CMAKE_SOURCE_DIR}/external/bdsg/src/project_bdsg/bdsg/deps/sdsl-lite 4516d46d2a29ce4f23ff286c8ce7e636d546a534.patch -R --check && echo already applied
             CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF
             BUILD_IN_SOURCE True
             INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
