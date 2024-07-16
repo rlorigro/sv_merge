@@ -125,7 +125,7 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
 }
 
 
-void solve_from_csv(
+size_t solve_from_csv(
         path csv,
         const SolverType& solver_type,
         size_t max_reads_per_sample,
@@ -141,15 +141,22 @@ void solve_from_csv(
         throw runtime_error("Could not open CSV file " + csv.string());
     }
 
+    size_t i = 0;
     for_each_row_in_csv(csv, [&](const vector<string>& items){
-        if (items.size() != 4){
-            throw runtime_error("ERROR: CSV row does not have 3 items: " + csv.string());
+        if (i == 0){
+            i++;
+            return;
         }
 
+        if (items.size() != 6){
+            throw runtime_error("ERROR: CSV row does not have 6 items: " + csv.string());
+        }
+
+        //sample,read,read_length,path,path_length,weight
         const string& sample = items[0];
         const string& read = items[1];
-        const string& path = items[2];
-        float weight = stof(items[3]);
+        const string& path = items[3];
+        float weight = stof(items[5]);
 
         if (not transmap.has_node(sample)){
             transmap.add_sample(sample);
@@ -165,6 +172,7 @@ void solve_from_csv(
 
         transmap.add_edge(read, path, weight);
         transmap.add_edge(sample, read);
+        i++;
     });
 
     vector <pair <int64_t, int64_t> > edges_to_remove;
@@ -192,6 +200,8 @@ void solve_from_csv(
         cerr << e.what() << '\n';
         cerr << "ERROR caught at " << csv.string() << '\n';
     }
+
+    return i-1;
 }
 
 
@@ -211,7 +221,7 @@ void thread_fn(
 
     while (i < jobs.size()){
         Timer t;
-        solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
+        auto n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
 
         io_mutex.lock();
         ofstream log(log_path, std::ios_base::app);
@@ -219,7 +229,7 @@ void thread_fn(
         // get directory name of job (excluding non-leaf dirs)
         string job_dir = jobs[i].parent_path().filename();
 
-        log << job_dir << "," << t.to_csv() << "\n";
+        log << job_dir << "," << n_vars << ',' << t.to_csv() << "\n";
         log.close();
 
         io_mutex.unlock();
@@ -262,6 +272,11 @@ void solve_from_directory(
     vector<thread> threads;
     atomic<size_t> job_index(0);
     mutex io_mutex;
+
+    // Write header to log csv
+    ofstream log(output_dir / "log.csv");
+    log << "name,n_path_to_read_vars,h,m,s,ms\n";
+    log.close();
 
     for (size_t i = 0; i < n_threads; i++){
         threads.emplace_back(thread_fn,
