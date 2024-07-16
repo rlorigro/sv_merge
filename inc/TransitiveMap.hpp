@@ -114,6 +114,9 @@ public:
 
     /// Writing
     void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;
+
+    /// Clearing
+    void clear_non_samples();
 };
 
 

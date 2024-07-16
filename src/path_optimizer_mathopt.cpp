@@ -766,11 +766,18 @@ void optimize_reads_with_d_and_n(
     d_min = round(optimize_d(model, vars, solver_type, n_threads));
     n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
 
+    // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
+    n_max += 1;
+
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
     n_min = round(optimize_n(model, vars, solver_type, n_threads));
     d_max = round(optimize_d_given_n(model, vars, solver_type, n_min, n_threads));
+
+    // Put a pseudo count into d_max to try to guard against haploid cases being reduced to diploid
+    // TODO: remove this or modify it when switching to non-integer distance costs
+    d_max += 5;
 
     cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 

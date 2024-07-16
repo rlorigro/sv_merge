@@ -241,19 +241,17 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 void write_solution_to_vcf(
         VariantGraph& variant_graph,
         const TransMap& transmap,
+        const vector<string>& sample_names,
         const path& output_path
         ){
 
-    vector <pair <string,int64_t> > sorted_samples;
+    vector <pair <string,int64_t> > samples;
 
     // Collect all the samples in the window and sort them
-    transmap.for_each_sample([&](const string& name, int64_t sample_id){
-        sorted_samples.emplace_back(name, sample_id);
-    });
-
-    sort(sorted_samples.begin(), sorted_samples.end(), [&](const auto& a, const auto& b){
-        return a.first < b.first;
-    });
+    for (const auto& name: sample_names){
+        auto sample_id = transmap.get_id(name);
+        samples.emplace_back(name, sample_id);
+    }
 
     // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
     // Generate a vector of genotypes for each sample, where the vector indexes correspond to the VariantGraph indexes
@@ -261,7 +259,9 @@ void write_solution_to_vcf(
 
     cerr << output_path << '\n';
 
-    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+    // TODO: find a way to deal with regions for which the transmap was cleared by the optimizer and no calls were made
+    // (for now they get 0|0 genotypes)
+    for (const auto& [sample_name, sample_id]: samples){
         // Initialize the vectors with arrays of {0,0}
         sample_genotypes[sample_name] = vector <array<int8_t,2> >(variant_graph.vcf_records.size(), {0,0});
 
@@ -272,7 +272,7 @@ void write_solution_to_vcf(
             // If there is a transitive edge from sample->path->variant, set the genotype to 1 (with phase)
             sample_genotypes[sample_name][v][phase] = 1;
         });
-    });
+    }
 
     // Open the VCF output file
     ofstream vcf_file(output_path);
@@ -284,7 +284,7 @@ void write_solution_to_vcf(
     // Write the VCF header
     vcf_file << "##fileformat=VCFv4.2" << '\n';
     vcf_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
-    for (const auto& [sample_name, sample_id]: sorted_samples) {
+    for (const auto& [sample_name, sample_id]: samples) {
         vcf_file << '\t' << sample_name;
     }
     vcf_file << '\n';
@@ -296,7 +296,7 @@ void write_solution_to_vcf(
         record.format = "GT";
 
         // Iterate all the samples and accumulate GTs for the variant object
-        for (const auto& [sample_name, sample_id]: sorted_samples) {
+        for (const auto& [sample_name, sample_id]: samples) {
             string variant_name = "v" + to_string(v);
 
             // Get the genotype for this sample
@@ -449,7 +449,7 @@ void merge_thread_fn(
                 // Write the solution to a VCF
                 path output_path = subdir / "solution.vcf";
 
-                write_solution_to_vcf(variant_graph, transmap, output_path);
+                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path);
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';
@@ -821,7 +821,6 @@ int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
     path tandem_bed;
-    string label = "HAPESTRY_SUPPORT";
     string bam_csv;
     path ref_fasta;
     path vcf;

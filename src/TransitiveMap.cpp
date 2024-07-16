@@ -415,18 +415,26 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
         }
     });
 
+    // If only one haplotype was found then it must be homozygous
+    // TODO: implement some kind of genotyping that is aware of coverage distributions?
+    if (path_ids[1] == -1){
+        path_ids[1] = path_ids[0];
+    }
+
     if (path_ids[0] > path_ids[1]){
         std::swap(path_ids[0], path_ids[1]);
     }
 
     // Iterate the variants transitively through the paths
-    for (int64_t path_id: path_ids) {
+    for (size_t i = 0; i < 2; ++i){
+        auto path_id = path_ids[i];
+
         if (path_id == -1){
             continue;
         }
 
         graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t v) {
-            f(graph.get_node(v).name, v, path_id == path_ids[0]);
+            f(graph.get_node(v).name, v, i);
         });
     }
 }
