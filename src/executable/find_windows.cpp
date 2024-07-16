@@ -63,7 +63,20 @@ void find_windows(
         contig_tandems[r.name].emplace_back(interval);
     });
 
-    construct_windows_from_vcf_and_bed(contig_tandems, vcf, flank_length, interval_max_length, min_sv_length, regions);
+    vector<path> vcfs = {vcf};
+    path bed_log_path = output_dir / "log.bed";
+
+    unordered_map<string,string> ref_sequences;
+    construct_windows_from_vcf_and_bed(
+            ref_sequences,
+            contig_tandems,
+            vcfs,
+            flank_length,
+            interval_max_length,
+            min_sv_length,
+            regions,
+            bed_log_path,
+            false);
 
     size_t r = 0;
     path output_path;

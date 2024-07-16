@@ -89,10 +89,6 @@ void construct_windows_from_vcf_and_bed(
         vcf_reader.for_record_in_vcf([&](VcfRecord &r) {
             r.get_samples_with_alt(sample_ids);
 
-            if (sample_ids.empty()) {
-                return;
-            }
-
             r.get_reference_coordinates(use_confidence_intervals, coord);
 
             // Skip large events in the population.
@@ -189,7 +185,16 @@ void construct_windows_from_vcf_and_bed(
 }
 
 
-void construct_windows_from_vcf_and_bed(const unordered_map<string,vector<interval_t> >& contig_tandems, path vcf, int32_t flank_length, int32_t interval_max_length, int32_t min_sv_length, vector<Region>& regions, bool use_confidence_intervals){
+void construct_windows_from_vcf_and_bed(
+        const unordered_map<string,vector<interval_t> >& contig_tandems,
+        path vcf,
+        int32_t flank_length,
+        int32_t interval_max_length,
+        int32_t min_sv_length,
+        vector<Region>& regions,
+        bool use_confidence_intervals
+        ){
+
     vector<path> vcfs = {vcf};
     construct_windows_from_vcf_and_bed(
             contig_tandems,
