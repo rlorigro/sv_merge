@@ -19,8 +19,6 @@ def get_type_index(record: vcfpy.Record):
     else:
         return 4
 
-# no_VG_GL_count = 0
-
 type_names = ["INS","DEL","DUP","NA"]
 
 
@@ -36,7 +34,6 @@ def load_features_from_vcf(
         contigs=None
         ):
 
-    # global no_VG_GL_count # TODO delete
     print(vcf_path)
     reader = vcfpy.Reader.from_path(vcf_path)
 
@@ -48,8 +45,7 @@ def load_features_from_vcf(
 
         if filter_fn is not None:
             if not(filter_fn(record)):
-                # print("skipped", record.INFO["SVLEN"][0]) # maya edit
-                continue # will skip the rest of the loop and move on to the next record
+                continue 
 
         if contigs is not None:
             if record.CHROM not in contigs:
@@ -76,6 +72,7 @@ def load_features_from_vcf(
         #               \  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  /  /
         #             i 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26
         #             [ 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, x]
+        
         if truth_info_name.lower() == "hapestry":
             is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
         elif truth_info_name is not None:
@@ -111,27 +108,13 @@ def load_features_from_vcf(
         
 
         VG_AD = info["VG_AD"] if "VG_AD" in info else [0, 0]
-        
-
         VG_MAD = info["VG_MAD"] if "VG_MAD" in info else 0
-        
-
         VG_DP = info["VG_DP"] if "VG_DP" in info else 0
-        
-
         VG_GL = info["VG_GL"] if "VG_GL" in info else [0, 0, 0]
-        """ if "VG_GL" not in info:
-            print("--------- VG_GL not in", record.ID)
-            no_VG_GL_count = no_VG_GL_count + 1 """
-
         VG_GQ = info["VG_GQ"] if "VG_GQ" in info else 0
         
-
-        if "VG_GP" in info: # could turn into ternary conditional but would be hard to read
+        if "VG_GP" in info: 
             if str(info["VG_GP"]) == 'nan':
-                """ print("gotcha")
-                print(info["VG_GP"])
-                print(type(info["VG_GP"])) """
                 VG_GP = 0
             else:
                 VG_GP = info["VG_GP"]
@@ -214,33 +197,26 @@ def load_features_from_vcf(
                 feature_names.extend(["VG_AD_" + str(i) for i in range(len(VG_AD))])
 
             x[-1].append(VG_MAD)
-            # print(VG_MAD)
             if r == 0:
                 feature_names.append("VG_MAD")
 
             x[-1].append(VG_DP)
-            # print(VG_DP)
             if r == 0:
                 feature_names.append("VG_DP") 
 
             x[-1].extend(VG_GL)
-            # print(VG_GL)
             if r == 0:
                 feature_names.extend(["VG_GL_" + str(i) for i in range(len(VG_GL))])
 
             x[-1].append(VG_GQ)
-            # print(VG_GQ)
             if r == 0:
                 feature_names.append("VG_GQ") 
-            if VG_GP == "nan":
-                print("gotcha")
+            
             x[-1].append(VG_GP)
-            # print(VG_GP)
             if r == 0:
                 feature_names.append("VG_GP")
 
             x[-1].append(VG_XD)
-            # print(VG_XD)
             if r == 0:
                 feature_names.append("VG_XD")
 
@@ -479,17 +455,12 @@ def load_features_from_vcf(
 
         if r == 0:
             if len(feature_names) != len(x[-1]):
-                # print(feature_names)
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
-        r += 1
-
-        # break # maya comment out
-        
+        r += 1        
 
 
 class VcfDataset(Dataset):
-    # global no_VG_GL_count # delete TODO
     def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None):
         x = list()
         y = list()
@@ -514,14 +485,9 @@ class VcfDataset(Dataset):
                 filter_fn=filter_fn,
                 contigs=contigs,
             )
-            
-            # print("--------------------------------------no_VG_GL_count:", no_VG_GL_count) # uncomment for VG features
-
 
             self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
-        # print("------x", x, len(x))
-        # print(x.shape) # maya edit
         x = np.array(x) 
         
         y = np.array(y)
