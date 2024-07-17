@@ -19,6 +19,7 @@ def get_type_index(record: vcfpy.Record):
     else:
         return 4
 
+# no_VG_GL_count = 0
 
 type_names = ["INS","DEL","DUP","NA"]
 
@@ -32,8 +33,10 @@ def load_features_from_vcf(
         truth_info_name: str,
         annotation_name: str,
         filter_fn=None,
-        contigs=None):
+        contigs=None
+        ):
 
+    # global no_VG_GL_count # TODO delete
     print(vcf_path)
     reader = vcfpy.Reader.from_path(vcf_path)
 
@@ -105,17 +108,35 @@ def load_features_from_vcf(
         hapestry_reads_max_CCS = info["HAPESTRY_READS_MAX_CCS"] if "HAPESTRY_READS_MAX_CCS" in info else 0
         hapestry_reads_neighbors_CCS = info["HAPESTRY_READS_NEIGHBORS_CCS"] if "HAPESTRY_READS_NEIGHBORS_CCS" in info else 0
 
+        
+
         VG_AD = info["VG_AD"] if "VG_AD" in info else [0, 0]
+        
+
         VG_MAD = info["VG_MAD"] if "VG_MAD" in info else 0
+        
+
         VG_DP = info["VG_DP"] if "VG_DP" in info else 0
+        
+
         VG_GL = info["VG_GL"] if "VG_GL" in info else [0, 0, 0]
+        """ if "VG_GL" not in info:
+            print("--------- VG_GL not in", record.ID)
+            no_VG_GL_count = no_VG_GL_count + 1 """
+
         VG_GQ = info["VG_GQ"] if "VG_GQ" in info else 0
+        
 
         if "VG_GP" in info: # could turn into ternary conditional but would be hard to read
-            if isinstance(info["VG_GP"], int):
-                VG_GP = info["VG_GP"]
-            else: 
+            if str(info["VG_GP"]) == 'nan':
+                """ print("gotcha")
+                print(info["VG_GP"])
+                print(type(info["VG_GP"])) """
                 VG_GP = 0
+            else:
+                VG_GP = info["VG_GP"]
+        else:
+            VG_GP = 0
 
         VG_XD = info["VG_XD"] if "VG_XD" in info else 0
         
@@ -159,7 +180,7 @@ def load_features_from_vcf(
             max_align_score = info["HAPESTRY_READS_MAX"] # is there a reason this is down here?
 
             # add hapestry features (ONT) OR
-            # add hapestry features (PB) if using vg vcfs
+            # add hapestry features (PB) if using VG vcfs
             x[-1].extend(hapestry_data)
             if r == 0:
                 feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
@@ -185,11 +206,10 @@ def load_features_from_vcf(
             
             x[-1].append(hapestry_reads_neighbors_CCS)
             if r == 0:
-                feature_names.append("happestry_reads_neighbors_CCS") """
-
+                feature_names.append("happestry_reads_neighbors_CCS") 
+ """
             # add vg features (illumina)
             x[-1].extend(VG_AD)
-            # print(VG_AD)
             if r == 0:
                 feature_names.extend(["VG_AD_" + str(i) for i in range(len(VG_AD))])
 
@@ -212,7 +232,8 @@ def load_features_from_vcf(
             # print(VG_GQ)
             if r == 0:
                 feature_names.append("VG_GQ") 
-
+            if VG_GP == "nan":
+                print("gotcha")
             x[-1].append(VG_GP)
             # print(VG_GP)
             if r == 0:
@@ -222,7 +243,6 @@ def load_features_from_vcf(
             # print(VG_XD)
             if r == 0:
                 feature_names.append("VG_XD")
-            # print("____", x)
 
 
         elif annotation_name.lower() == "sniffles":
@@ -463,17 +483,13 @@ def load_features_from_vcf(
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
         r += 1
-        # print(feature_names)
-        # print(x)
-        """ if len(x) != 52:
-            print("_________", len(x))    
-            print(x)
-            break """
 
         # break # maya comment out
+        
 
 
 class VcfDataset(Dataset):
+    # global no_VG_GL_count # delete TODO
     def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None):
         x = list()
         y = list()
@@ -498,19 +514,15 @@ class VcfDataset(Dataset):
                 filter_fn=filter_fn,
                 contigs=contigs,
             )
+            
+            # print("--------------------------------------no_VG_GL_count:", no_VG_GL_count) # uncomment for VG features
+
 
             self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
         # print("------x", x, len(x))
         # print(x.shape) # maya edit
         x = np.array(x) 
-        
-        for ls in x:
-            if len(ls) != 52:
-                print("_________", len(ls))    
-                print(ls)
-            else: 
-                continue    
         
         y = np.array(y)
 
