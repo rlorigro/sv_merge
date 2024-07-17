@@ -144,10 +144,16 @@ task concat_vcfs{
     for archive in ~{sep=' ' sequence_tarballs}; do
         echo "Processing archive: $archive"
 
-        # find the path of the VCF file in the tarball
-        vcf_path=$(tar -tzf "$archive" | grep -oP '.*\merged.vcf$')
+        # find the path of the VCF file in the tarball and don't give error exit code if not found
+        vcf_path=$(tar -tzf "$archive" | grep -oP '.*\merged.vcf$') || true
 
         echo $vcf_path
+
+        # check if 'vcf' in the path
+        if [[ $vcf_path != *"vcf"* ]]; then
+            echo "No VCF file found in archive: $archive"
+            continue
+        fi
 
         # Extract the VCF file
         tar -xzf "$archive" -C "$temp_dir" "$vcf_path"
