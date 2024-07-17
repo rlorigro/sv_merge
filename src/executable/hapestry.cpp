@@ -766,56 +766,56 @@ void hapestry(
                 skip_solve,
                 staging_dir
         );
+
+        auto vcf_prefix = get_vcf_name_prefix(vcf);
+        path out_vcf = output_dir / ("merged.vcf");
+        ofstream out_file(out_vcf);
+
+        if (not (out_file.is_open() and out_file.good())){
+            throw runtime_error("ERROR: could not write file: " + out_vcf.string());
+        }
+
+        ifstream input_vcf(vcf);
+
+        if (not (input_vcf.is_open() and input_vcf.good())){
+            throw runtime_error("ERROR: could not write file: " + vcf.string());
+        }
+
+        // Just copy over the header lines
+        string line;
+        while (getline(input_vcf, line)){
+            if (line.starts_with("##")){
+                out_file << line << '\n';
+            }
+            else{
+                input_vcf.close();
+                break;
+            }
+        }
+
+        // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+        // Will be empty if no regions were processed
+        for (size_t i=0; i<regions.size(); i++){
+            const auto& region = regions[i];
+            path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
+
+            ifstream file(sub_vcf);
+            while (getline(file, line)){
+                if (line.starts_with('#')){
+                    if (not line.starts_with("##fileformat")){
+                        if (i == 0){
+                            out_file << line << '\n';
+                        }
+                    }
+                }
+                else{
+                    out_file << line << '\n';
+                }
+            }
+        }
     }
     else{
         cerr << "WARNING: No regions to process" << '\n';
-    }
-
-    auto vcf_prefix = get_vcf_name_prefix(vcf);
-    path out_vcf = output_dir / ("merged.vcf");
-    ofstream out_file(out_vcf);
-
-    if (not (out_file.is_open() and out_file.good())){
-        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
-    }
-
-    ifstream input_vcf(vcf);
-
-    if (not (input_vcf.is_open() and input_vcf.good())){
-        throw runtime_error("ERROR: could not write file: " + vcf.string());
-    }
-
-    // Just copy over the header lines
-    string line;
-    while (getline(input_vcf, line)){
-        if (line.starts_with("##")){
-            out_file << line << '\n';
-        }
-        else{
-            input_vcf.close();
-            break;
-        }
-    }
-
-    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
-    // Will be empty if no regions were processed
-    for (size_t i=0; i<regions.size(); i++){
-        const auto& region = regions[i];
-        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
-
-        ifstream file(sub_vcf);
-        while (getline(file, line)){
-            if (line.starts_with('#')){
-                if (not line.starts_with("##fileformat")){
-                    if (i == 0){
-                        out_file << line << '\n';
-                    }
-                }
-            }
-            else{
-                out_file << line << '\n';
-            }
-        }
     }
 
     cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
