@@ -89,6 +89,13 @@ task merge {
         find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
         find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
 
+        # if the outputs are empty, create empty placeholders
+        if [ ! -s ~{output_dir}/non_sequence_data.tar.gz ]; then
+            tar -cvzf ~{output_dir}/non_sequence_data.tar.gz --files-from /dev/null
+        fi
+        if [ ! -s ~{output_dir}/sequence_data.tar.gz ]; then
+            tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
+        fi
     >>>
 
     parameter_meta {
