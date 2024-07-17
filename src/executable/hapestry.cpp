@@ -641,130 +641,135 @@ void hapestry(
         load_windows_from_bed(windows_bed, regions);
     }
 
-    // This is only used while loading VCFs to find where each record belongs
-    unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
+    if (not regions.empty()){
+        // This is only used while loading VCFs to find where each record belongs
+        unordered_map <string, interval_tree_t<int32_t> > contig_interval_trees;
 
-    // Log which windows were used
-    path bed_output_path = output_dir / "windows.bed";
-    path bed_flanked_output_path = output_dir / "windows_flanked.bed";
-    ofstream output_bed_file(bed_output_path);
-    ofstream output_bed_flanked_file(bed_flanked_output_path);
+        // Log which windows were used
+        path bed_output_path = output_dir / "windows.bed";
+        path bed_flanked_output_path = output_dir / "windows_flanked.bed";
+        ofstream output_bed_file(bed_output_path);
+        ofstream output_bed_flanked_file(bed_flanked_output_path);
 
-    cerr << t << "Flanking windows and writing BED" << '\n';
+        cerr << t << "Flanking windows and writing BED" << '\n';
 
-    // Add flanks, place the regions in the interval tree, and log the windows
-    for (auto& r: regions) {
-        output_bed_file << r.to_bed() << '\n';
+        // Add flanks, place the regions in the interval tree, and log the windows
+        for (auto& r: regions) {
+            output_bed_file << r.to_bed() << '\n';
 
-        r.start -= flank_length;
-        r.stop += flank_length;
+            r.start -= flank_length;
+            r.stop += flank_length;
 
-        contig_interval_trees[r.name].insert({r.start, r.stop});
-        output_bed_flanked_file << r.to_bed() << '\n';
-    }
-    output_bed_file.close();
-    output_bed_flanked_file.close();
+            contig_interval_trees[r.name].insert({r.start, r.stop});
+            output_bed_flanked_file << r.to_bed() << '\n';
+        }
+        output_bed_file.close();
+        output_bed_flanked_file.close();
 
-    cerr << t << "Fetching reads for all windows" << '\n';
+        cerr << t << "Fetching reads for all windows" << '\n';
 
-    // The container to store all fetched reads and their relationships to samples/paths
-    unordered_map<Region,TransMap> region_transmaps;
+        // The container to store all fetched reads and their relationships to samples/paths
+        unordered_map<Region,TransMap> region_transmaps;
 
-    auto max_length = size_t(float(interval_max_length) * 2.5);
+        auto max_length = size_t(float(interval_max_length) * 2.5);
 
-    if (bam_not_hardclipped){
-        cerr << "Fetching from NON-hardclipped BAMs" << '\n';
-        fetch_reads(
-                t,
-                regions,
-                bam_csv,
-                n_threads,
-                region_transmaps,
-                true,
-                force_unique_reads,
-                true,
-                false,
-                flank_length
-        );
-    }
-    else{
-        cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
-        fetch_reads_from_clipped_bam(
-                t,
-                regions,
-                bam_csv,
-                n_threads,
-                max_length,
-                flank_length,
-                region_transmaps,
-                true,
-                false,
-                false,
-                force_unique_reads,
-                true,
-                flank_length
-        );
-    }
+        if (bam_not_hardclipped){
+            cerr << "Fetching from NON-hardclipped BAMs" << '\n';
+            fetch_reads(
+                    t,
+                    regions,
+                    bam_csv,
+                    n_threads,
+                    region_transmaps,
+                    true,
+                    force_unique_reads,
+                    true,
+                    false,
+                    flank_length
+            );
+        }
+        else{
+            cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+            fetch_reads_from_clipped_bam(
+                    t,
+                    regions,
+                    bam_csv,
+                    n_threads,
+                    max_length,
+                    flank_length,
+                    region_transmaps,
+                    true,
+                    false,
+                    false,
+                    force_unique_reads,
+                    true,
+                    flank_length
+            );
+        }
 
-    cerr << t << "Writing sequences to disk" << '\n';
+        cerr << t << "Writing sequences to disk" << '\n';
 
-    path fasta_filename = "sequences.fasta";
-    path staging_dir = output_dir;
+        path fasta_filename = "sequences.fasta";
+        path staging_dir = output_dir;
 
-    // Dump sequences into each region directory
-    {
-        // Thread-related variables
-        atomic<size_t> job_index = 0;
-        vector<thread> threads;
+        // Dump sequences into each region directory
+        {
+            // Thread-related variables
+            atomic<size_t> job_index = 0;
+            vector<thread> threads;
 
-        threads.reserve(n_threads);
+            threads.reserve(n_threads);
 
-        // Launch threads
-        for (size_t n=0; n<n_threads; n++) {
-            try {
-                cerr << "launching: " << n << '\n';
-                threads.emplace_back(write_region_subsequences_to_file_thread_fn,
-                                     std::cref(region_transmaps),
-                                     std::cref(regions),
-                                     std::cref(staging_dir),
-                                     std::cref(fasta_filename),
-                                     flank_length,
-                                     std::ref(job_index)
-                );
-            } catch (const exception &e) {
-                throw e;
+            // Launch threads
+            for (size_t n=0; n<n_threads; n++) {
+                try {
+                    cerr << "launching: " << n << '\n';
+                    threads.emplace_back(write_region_subsequences_to_file_thread_fn,
+                                         std::cref(region_transmaps),
+                                         std::cref(regions),
+                                         std::cref(staging_dir),
+                                         std::cref(fasta_filename),
+                                         flank_length,
+                                         std::ref(job_index)
+                    );
+                } catch (const exception &e) {
+                    throw e;
+                }
+            }
+
+            // Wait for threads to finish
+            for (auto &n: threads) {
+                n.join();
             }
         }
 
-        // Wait for threads to finish
-        for (auto &n: threads) {
-            n.join();
-        }
+        // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
+        // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
+        // TODO: create option to use /dev/shm/ as staging dir
+        // Absolutely must delete the /dev/shm/ copy or warn the user at termination
+        //
+        cerr << "Generating graph alignments for VCF: " << vcf << '\n';
+
+        merge_variants(
+                contig_interval_trees,
+                contig_tandems,
+                region_transmaps,
+                ref_sequences,
+                regions,
+                vcf,
+                n_threads,
+                flank_length,
+                interval_max_length,
+                min_sv_length,
+                graphaligner_timeout,
+                min_read_hap_identity,
+                skip_solve,
+                staging_dir
+        );
     }
-
-    // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
-    // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
-    // TODO: create option to use /dev/shm/ as staging dir
-    // Absolutely must delete the /dev/shm/ copy or warn the user at termination
-    //
-    cerr << "Generating graph alignments for VCF: " << vcf << '\n';
-
-    merge_variants(
-            contig_interval_trees,
-            contig_tandems,
-            region_transmaps,
-            ref_sequences,
-            regions,
-            vcf,
-            n_threads,
-            flank_length,
-            interval_max_length,
-            min_sv_length,
-            graphaligner_timeout,
-            min_read_hap_identity,
-            skip_solve,
-            staging_dir
-    );
+    else{
+        cerr << "WARNING: No regions to process" << '\n';
+    }
 
     auto vcf_prefix = get_vcf_name_prefix(vcf);
     path out_vcf = output_dir / ("merged.vcf");
@@ -793,6 +798,7 @@ void hapestry(
     }
 
     // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    // Will be empty if no regions were processed
     for (size_t i=0; i<regions.size(); i++){
         const auto& region = regions[i];
         path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
