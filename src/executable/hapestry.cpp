@@ -245,14 +245,6 @@ void write_solution_to_vcf(
         const path& output_path
         ){
 
-    vector <pair <string,int64_t> > samples;
-
-    // Collect all the samples in the window and sort them
-    for (const auto& name: sample_names){
-        auto sample_id = transmap.get_id(name);
-        samples.emplace_back(name, sample_id);
-    }
-
     // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
     // Generate a vector of genotypes for each sample, where the vector indexes correspond to the VariantGraph indexes
     unordered_map <string, vector <array<int8_t,2> > > sample_genotypes;
@@ -261,9 +253,18 @@ void write_solution_to_vcf(
 
     // TODO: find a way to deal with regions for which the transmap was cleared by the optimizer and no calls were made
     // (for now they get 0|0 genotypes)
-    for (const auto& [sample_name, sample_id]: samples){
+    for (const auto& sample_name: sample_names){
         // Initialize the vectors with arrays of {0,0}
         sample_genotypes[sample_name] = vector <array<int8_t,2> >(variant_graph.vcf_records.size(), {0,0});
+
+        // Get the sample ID
+        auto [success,sample_id] = transmap.try_get_id(sample_name);
+
+        // Maybe some info was missing for a given sample, in which case give it 0/0 gt
+        if (not success){
+            cerr << "WARNING: sample not found in transmap: " << sample_name << '\n';
+            continue;
+        }
 
         transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
             // Reconstruct the variant ID from the name
@@ -284,7 +285,7 @@ void write_solution_to_vcf(
     // Write the VCF header
     vcf_file << "##fileformat=VCFv4.2" << '\n';
     vcf_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
-    for (const auto& [sample_name, sample_id]: samples) {
+    for (const auto& sample_name: sample_names){
         vcf_file << '\t' << sample_name;
     }
     vcf_file << '\n';
@@ -296,7 +297,7 @@ void write_solution_to_vcf(
         record.format = "GT";
 
         // Iterate all the samples and accumulate GTs for the variant object
-        for (const auto& [sample_name, sample_id]: samples) {
+        for (const auto& sample_name: sample_names){
             string variant_name = "v" + to_string(v);
 
             // Get the genotype for this sample
