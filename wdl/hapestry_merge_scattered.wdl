@@ -131,7 +131,7 @@ task concat_vcfs{
     }
 
     command <<<
-    set -eou pipefail
+    set -eoxu pipefail
 
     # Temporary directory for extracted VCF files
     temp_dir=$(mktemp -d)
@@ -164,7 +164,7 @@ task concat_vcfs{
         echo "new path: $new_vcf_path"
 
         bcftools view -Oz -o "$new_vcf_path" "$temp_dir/$vcf_path"
-        bcftools index -t "$new_vcf_path"
+        bcftools index -t -f "$new_vcf_path"
 
         # Add the path of the extracted VCF to the array
         vcf_files+=("$new_vcf_path")
@@ -172,7 +172,7 @@ task concat_vcfs{
 
     bcftools concat -a -D -Oz -o concatenated.vcf.gz "${vcf_files[@]}"
     bcftools sort -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
-    bcftools index -t concatenated_sorted.vcf.gz
+    bcftools index -t -f concatenated_sorted.vcf.gz
 
     >>>
 
