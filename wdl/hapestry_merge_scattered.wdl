@@ -140,6 +140,8 @@ task concat_vcfs{
     # Array to hold paths of extracted VCF files
     vcf_files=()
 
+    i=0
+
     # Loop through each tar.gz file provided as an argument
     for archive in ~{sep=' ' sequence_tarballs}; do
         echo "Processing archive: $archive"
@@ -159,20 +161,21 @@ task concat_vcfs{
         tar -xzf "$archive" -C "$temp_dir" "$vcf_path"
 
         # Pick a new name for the extracted VCF file and then rename it to avoid conflicts
-        new_vcf_path="$temp_dir/$(basename $archive .tar.gz)_$(basename $vcf_path).gz"
+        new_vcf_path="$temp_dir/extracted_vcf_${i}.vcf.gz"
 
         echo "new path: $new_vcf_path"
 
         bcftools view -Oz -o "$new_vcf_path" "$temp_dir/$vcf_path"
-        bcftools index -t -f "$new_vcf_path"
+        bcftools index -t "$new_vcf_path"
 
         # Add the path of the extracted VCF to the array
         vcf_files+=("$new_vcf_path")
+        i=$((i+1))
     done
 
     bcftools concat -a -D -Oz -o concatenated.vcf.gz "${vcf_files[@]}"
     bcftools sort -Oz -o concatenated_sorted.vcf.gz concatenated.vcf.gz
-    bcftools index -t -f concatenated_sorted.vcf.gz
+    bcftools index -t concatenated_sorted.vcf.gz
 
     >>>
 
