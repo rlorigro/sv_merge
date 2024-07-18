@@ -19,6 +19,7 @@ def get_type_index(record: vcfpy.Record):
     else:
         return 4
 
+
 type_names = ["INS","DEL","DUP","NA"]
 
 
@@ -31,8 +32,7 @@ def load_features_from_vcf(
         truth_info_name: str,
         annotation_name: str,
         filter_fn=None,
-        contigs=None
-        ):
+        contigs=None):
 
     print(vcf_path)
     reader = vcfpy.Reader.from_path(vcf_path)
@@ -45,7 +45,7 @@ def load_features_from_vcf(
 
         if filter_fn is not None:
             if not(filter_fn(record)):
-                continue 
+                continue
 
         if contigs is not None:
             if record.CHROM not in contigs:
@@ -72,7 +72,6 @@ def load_features_from_vcf(
         #               \  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  /  /
         #             i 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26
         #             [ 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, x]
-        
         if truth_info_name.lower() == "hapestry":
             is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
         elif truth_info_name is not None:
@@ -98,31 +97,7 @@ def load_features_from_vcf(
         caller_support[1] = info["SUPP_PBSV"] if "SUPP_PBSV" in info else 0
         caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
-        hapestry_data = list(map(float,info["HAPESTRY_READS"])) # hapestry_data is HAPESTRY_READS
-        hapestry_data_neighbors = float(info["HAPESTRY_READS_NEIGHBORS"]) # hapestry_data_neighbors is HAPESTRY_READS_NEIGHBORS
-
-        hapestry_reads_CCS = info["HAPESTRY_READS_CCS"] if "HAPESTRY_READS_CCS" in info else [] 
-        hapestry_reads_max_CCS = info["HAPESTRY_READS_MAX_CCS"] if "HAPESTRY_READS_MAX_CCS" in info else 0
-        hapestry_reads_neighbors_CCS = info["HAPESTRY_READS_NEIGHBORS_CCS"] if "HAPESTRY_READS_NEIGHBORS_CCS" in info else 0
-
-        
-
-        VG_AD = info["VG_AD"] if "VG_AD" in info else [0, 0]
-        VG_MAD = info["VG_MAD"] if "VG_MAD" in info else 0
-        VG_DP = info["VG_DP"] if "VG_DP" in info else 0
-        VG_GL = info["VG_GL"] if "VG_GL" in info else [0, 0, 0]
-        VG_GQ = info["VG_GQ"] if "VG_GQ" in info else 0
-        
-        if "VG_GP" in info: 
-            if str(info["VG_GP"]) == 'nan':
-                VG_GP = 0
-            else:
-                VG_GP = info["VG_GP"]
-        else:
-            VG_GP = 0
-
-        VG_XD = info["VG_XD"] if "VG_XD" in info else 0
-        
+        hapestry_data = list(map(float,info["HAPESTRY_READS"]))
 
         y.append(is_true)
         x.append([])
@@ -158,68 +133,17 @@ def load_features_from_vcf(
         x[-1].extend(caller_support)
         if r == 0:
             feature_names.extend(["caller_support_" + str(i) for i in range(len(caller_support))])
-        
-        if annotation_name.lower() == "hapestry":
-            max_align_score = info["HAPESTRY_READS_MAX"] # is there a reason this is down here?
 
-            # add hapestry features (ONT) OR
-            # add hapestry features (PB) if using VG vcfs
+        if annotation_name.lower() == "hapestry":
+            max_align_score = info["HAPESTRY_READS_MAX"]
+
             x[-1].extend(hapestry_data)
             if r == 0:
                 feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
 
-            x[-1].append(hapestry_data_neighbors)
-            if r == 0:
-                feature_names.append("hapestry_data_neighbors")
-
             x[-1].append(max_align_score)
             if r == 0:
-                feature_names.append("max_align_score") 
-            
-            # add hapestry_CCS features (PB CCS)
-            # hapestry_reads_CCS = hapestry_reads_CCS[:-2] # uncomment only if using both ONT and PB features
-
-            """ x[-1].extend(hapestry_reads_CCS)
-            if r == 0:
-                feature_names.extend(["hapestry_reads_CCS_" + str(i) for i in range(len(hapestry_reads_CCS))]) 
-            
-            x[-1].append(hapestry_reads_max_CCS)
-            if r == 0:
-                feature_names.append("hapestry_reads_max_CCS")
-            
-            x[-1].append(hapestry_reads_neighbors_CCS)
-            if r == 0:
-                feature_names.append("happestry_reads_neighbors_CCS") 
- """
-            # add vg features (illumina)
-            x[-1].extend(VG_AD)
-            if r == 0:
-                feature_names.extend(["VG_AD_" + str(i) for i in range(len(VG_AD))])
-
-            x[-1].append(VG_MAD)
-            if r == 0:
-                feature_names.append("VG_MAD")
-
-            x[-1].append(VG_DP)
-            if r == 0:
-                feature_names.append("VG_DP") 
-
-            x[-1].extend(VG_GL)
-            if r == 0:
-                feature_names.extend(["VG_GL_" + str(i) for i in range(len(VG_GL))])
-
-            x[-1].append(VG_GQ)
-            if r == 0:
-                feature_names.append("VG_GQ") 
-            
-            x[-1].append(VG_GP)
-            if r == 0:
-                feature_names.append("VG_GP")
-
-            x[-1].append(VG_XD)
-            if r == 0:
-                feature_names.append("VG_XD")
-
+                feature_names.append("max_align_score")
 
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
@@ -455,9 +379,10 @@ def load_features_from_vcf(
 
         if r == 0:
             if len(feature_names) != len(x[-1]):
+                print(feature_names)
                 print("ERROR: feature names and data length mismatch: names:%d x:%d" % (len(feature_names), len(x[-1])))
 
-        r += 1        
+        r += 1
 
 
 class VcfDataset(Dataset):
@@ -488,8 +413,7 @@ class VcfDataset(Dataset):
 
             self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
-        x = np.array(x) 
-        
+        x = np.array(x)
         y = np.array(y)
 
         x_dtype = torch.FloatTensor
