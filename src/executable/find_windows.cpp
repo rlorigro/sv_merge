@@ -80,7 +80,9 @@ void find_windows(
 
     size_t r = 0;
     path output_path;
+    path output_path_unflanked;
     ofstream file;
+    ofstream file2;
 
     size_t chunk_size = max(1ul,regions.size() / n_chunks);
     size_t n = 0;
@@ -95,11 +97,18 @@ void find_windows(
         // If the number of chunks iterated exceeds the desired chunk size, start a new chunk.
         // Also, if a new contig is reached, start a new chunk.
         if (r % chunk_size == 0){
+            output_path_unflanked = output_dir / ("windows_" + to_string(n) + "_unflanked.bed");
+            file2.close();
+            file2.open(output_path_unflanked);
+
             output_path = output_dir / ("windows_" + to_string(n) + ".bed");
             file.close();
             file.open(output_path);
+
             n++;
         }
+
+        file2 << region.name << '\t' << region.start << '\t' << region.stop << '\n';
 
         region.start -= flank_length;
         region.stop += flank_length;
