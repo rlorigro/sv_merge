@@ -158,13 +158,16 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             }
 
             // Can be >1 because indels can be greater than the length of the smaller sequence
-            float scaled_score = float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
+            float indel_portion = float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
 
 //            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
 
-            if ((1.0f - scaled_score) > min_read_hap_identity) {
+            if ((1.0f - indel_portion) > min_read_hap_identity) {
+                // Store the permil score as a rounded int
+                auto int_score = int64_t(round(indel_portion*1000));
+
                 // Avoid adding while iterating
-                edges_to_add.emplace_back(id, transmap.get_id(path_name), n_indels);
+                edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
             }
         }
     });
@@ -296,6 +299,8 @@ void write_solution_to_vcf(
         record.genotypes.clear();
         record.format = "GT";
 
+        bool has_nonzero_gt = false;
+
         // Iterate all the samples and accumulate GTs for the variant object
         for (const auto& sample_name: sample_names){
             string variant_name = "v" + to_string(v);
@@ -305,11 +310,17 @@ void write_solution_to_vcf(
 
             // Update the record genotypes
             record.genotypes.emplace_back(to_string(int(genotype[0])) + "|" + to_string(int(genotype[1])));
+
+            if (genotype[0] != 0 or genotype[1] != 0){
+                has_nonzero_gt = true;
+            }
         }
 
         // Write the record to the VCF
-        record.print(vcf_file);
-        vcf_file << '\n';
+        if (has_nonzero_gt){
+            record.print(vcf_file);
+            vcf_file << '\n';
+        }
     }
 }
 
