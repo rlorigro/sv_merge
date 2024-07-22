@@ -399,44 +399,38 @@ void TransMap::for_each_phased_variant_of_sample(const string& sample_name, cons
 
 
 void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id, bool phase)>& f) const{
-    array<int64_t, 2> path_ids = {-1,-1};
+    set<int64_t> path_ids;
 
     // First find an arbitrary assignment of phases, which is sorted by path id
     for_each_path_of_sample(sample_id, [&](const string& path_name, int64_t p){
-        if (path_ids[0] == -1){
-            path_ids[0] = p;
-        }
-        else if (path_ids[1] == -1){
-            path_ids[1] = p;
-        }
-        else{
-            string s = "'" + graph.get_node(path_ids[0]).name + "' '" + graph.get_node(path_ids[1]).name + "' '" + path_name + "'";
-            throw runtime_error("ERROR: more than two paths found for sample " + get_node(sample_id).name + ": " + s);
-        }
+        path_ids.emplace(p);
     });
 
-    // If only one haplotype was found then it must be homozygous
-    // TODO: implement some kind of genotyping that is aware of coverage distributions?
-    if (path_ids[1] == -1){
-        path_ids[1] = path_ids[0];
+    if (path_ids.empty()){
+        cerr << "WARNING: no paths found for sample " << get_node(sample_id).name << '\n';
+        return;
     }
 
-    if (path_ids[0] > path_ids[1]){
-        std::swap(path_ids[0], path_ids[1]);
-    }
+    if (path_ids.size() > 2){
+        string s;
 
-    // Iterate the variants transitively through the paths
-    for (size_t i = 0; i < 2; ++i){
-        auto path_id = path_ids[i];
-
-        if (path_id == -1){
-            continue;
+        for (auto p: path_ids){
+            s += graph.get_node(p).name + " ";
         }
 
-        graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t v) {
-            f(graph.get_node(v).name, v, i);
-        });
+        throw runtime_error("ERROR: more than two paths found for sample " + get_node(sample_id).name + ": " + s);
     }
+
+    // Use begin and rbegin to return first and last element, which may be the same element if homozygous
+    auto p = path_ids.begin();
+    graph.for_each_neighbor_of_type(*p, 'V', [&](int64_t v) {
+        f(graph.get_node(v).name, v, 0);
+    });
+
+    auto p2 = path_ids.rbegin();
+    graph.for_each_neighbor_of_type(*p2, 'V', [&](int64_t v) {
+        f(graph.get_node(v).name, v, 1);
+    });
 }
 
 
