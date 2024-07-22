@@ -407,7 +407,7 @@ void TransMap::for_each_phased_variant_of_sample(int64_t sample_id, const functi
     });
 
     if (path_ids.empty()){
-        cerr << "WARNING: no paths found for sample " << get_node(sample_id).name << '\n';
+//        cerr << "WARNING: no paths found for sample " << get_node(sample_id).name << '\n';
         return;
     }
 

@@ -86,8 +86,6 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 //                // WFA creates negative scores for "distance", we make it positive again and rescale it as a percent
                 size_t scaled_score = 100 - (100*size_t(-score)) / min(seq_a.size(), seq_b.size());
 
-//                int64_t scaled_score = score > -100 ? 1 : -1;
-
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(a,b,scaled_score);
 
@@ -143,6 +141,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
             // TODO: switch to using mismatches if we ever put small vars in the graph
             int64_t n_indels = 0;
+            int64_t n = 0;
 
             for (auto c: cigar){
                 if (isalpha(c) or c == '='){
@@ -150,6 +149,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                         n_indels += stoll(length_token);
                     }
 
+                    n += stoll(length_token);
                     length_token.clear();
                 }
                 else{
@@ -157,10 +157,9 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 }
             }
 
-            // Can be >1 because indels can be greater than the length of the smaller sequence
-            float indel_portion = float(n_indels) / float(min(read_sequence.size(), path_sequence.size()));
+            float indel_portion = float(n_indels) / float(n);
 
-//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << scaled_score << "\tn_indels: "  << n_indels << "\tread_sequence: "  << read_sequence.size() << "\tpath_sequence: "  << path_sequence.size() << '\n';
+//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
 
             if ((1.0f - indel_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int
@@ -340,7 +339,7 @@ void merge_thread_fn(
         atomic<size_t>& job_index
 ) {
     // TODO: make this a parameter
-    int64_t min_path_coverage = 2;
+    int64_t min_path_coverage = 1;
 
     unordered_map<string, interval_tree_t<int32_t> > contig_interval_trees;
 
