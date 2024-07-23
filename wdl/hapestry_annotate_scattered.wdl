@@ -89,6 +89,12 @@ task chunk_vcf {
         # use each of the generated BEDs to subset the VCF
         for file in ~{output_dir}/run/*; do
             [ -e "$file" ] || continue
+
+            # if the file is not of the format windows_[numeric].bed, using regex to identify the pattern, skip it
+            if [[ ! $(basename ${file}) =~ ^windows_[0-9]+\.bed$ ]]; then
+                continue
+            fi
+
             echo "processing ${file}"
             bcftools view -T ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
