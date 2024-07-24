@@ -538,7 +538,7 @@ def plot_multi_stratified_auc_bar(axes, records, y_true, y_predict, truth_info_n
 
     return axes
 
-def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs):
+def write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, aucs):
     with open(os.path.join(output_dir, "train_vcfs.txt"), "w") as f:
         for path in train_vcfs:
             f.write(path + "\n")
@@ -574,28 +574,8 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # ONT and PB (use this for Union)
-    path_to_data = "/data/mmau/data/intro/ONT_PB_annotated_vcfs/"
-    name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz"
 
     train_vcfs = [
-        path_to_data + "HG00621" + name_of_file,
-        path_to_data + "HG01928" + name_of_file,
-        path_to_data + "HG02572" + name_of_file,
-        path_to_data + "HG03098" + name_of_file,
-        path_to_data + "HG03492" + name_of_file,
-    ]
-
-    test_vcfs = [
-        path_to_data + "HG00673" + name_of_file,
-        path_to_data + "HG00733" + name_of_file,
-    ]
-
-    eval_vcfs = [
-        path_to_data + "HG03516" + name_of_file,
-    ]
-
-    """ train_vcfs = [
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00621_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG01928_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG02572_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
@@ -610,7 +590,7 @@ def main():
 
     eval_vcfs = [
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG03516_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
-    ] """
+    ]
 
     train_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
     test_contigs = {"chr1", "chr2", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr21", "chr22", "chrX"}
@@ -648,7 +628,6 @@ def main():
     length_axes = dict()
 
     n_processes = len(truth_info_names) * len(annotation_names)
-    n_processes = 1 # delete
 
     args = list()
 
@@ -689,7 +668,7 @@ def main():
 
                     color = cmap(float(index-12)/(len(feature_indexes)-12))
 
-                    axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
+                    axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=y, y_predict=y_trivial, axes=axes, color=color, label=name, style=':')
 
         tandem_axes, tandem_labels = plot_tandem_stratified_roc_curves(tandem_axes, records, y_true, y_predict, truth_info_name, annotation_name)
         length_axis, length_labels = plot_length_stratified_roc_curves(length_axis, records, y_true, y_predict, truth_info_name, annotation_name, tandem_only=True)
@@ -709,7 +688,7 @@ def main():
         print('y_predict y')
         print(y_predict[0], y_true[0])
 
-        axes, fpr, tpr, thresholds = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
+        axes, fpr, tpr, thresholds, labels = plot_roc_curve(y_true=y_true, y_predict=y_predict, axes=axes, label=label, use_text=True)
         labels_with_auc.extend(labels) 
 
         roc_data[label] = (fpr, tpr, thresholds)
@@ -752,7 +731,7 @@ def main():
     # pyplot.close()
 
     # Write a bunch of config files for record keeping
-    write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs)
+    write_vcf_config(output_dir, train_vcfs, test_vcfs, eval_vcfs, train_contigs, test_contigs, eval_contigs, labels_with_auc)
 
 
 if __name__ == "__main__":
