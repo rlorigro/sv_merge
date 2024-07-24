@@ -42,6 +42,7 @@ def load_features_from_vcf(
     r = 0
     for record in reader:
         info = record.INFO
+        call = record.calls[0]
 
         if filter_fn is not None:
             if not(filter_fn(record)):
@@ -98,6 +99,80 @@ def load_features_from_vcf(
         caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
         hapestry_data = list(map(float,info["HAPESTRY_READS"]))
+        hapestry_data_neighbors = float(info["HAPESTRY_READS_NEIGHBORS"])
+
+        hapestry_reads_CCS = info["HAPESTRY_READS_CCS"] if "HAPESTRY_READS_CCS" in info else [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        hapestry_reads_max_CCS = info["HAPESTRY_READS_MAX_CCS"] if "HAPESTRY_READS_MAX_CCS" in info else 0
+        hapestry_reads_neighbors_CCS = info["HAPESTRY_READS_NEIGHBORS_CCS"] if "HAPESTRY_READS_NEIGHBORS_CCS" in info else 0
+
+        VG_AD = info["VG_AD"] if "VG_AD" in info else [0, 0]
+        VG_MAD = info["VG_MAD"] if "VG_MAD" in info else 0
+        VG_DP = info["VG_DP"] if "VG_DP" in info else 0
+        VG_GL = info["VG_GL"] if "VG_GL" in info else [0, 0, 0]
+        VG_GQ = info["VG_GQ"] if "VG_GQ" in info else 0
+        if "VG_GP" in info: 
+            if str(info["VG_GP"]) == 'nan':
+                VG_GP = 0
+            else:
+                VG_GP = info["VG_GP"]
+        else:
+            VG_GP = 0
+        VG_XD = info["VG_XD"] if "VG_XD" in info else 0
+
+        if 'GT' in call.data:
+            if call.data["GT"] != None:
+                GT = list(map(float,call.data["GT"].replace('.','0').split("/"))) if '/' in call.data["GT"] else [0,0]
+            else:
+                GT = [0,0]
+        else:
+            GT = [0,0]
+
+        if 'OLD_GT' in call.data:
+            if call.data["OLD_GT"] != None:
+                OLD_GT = list(map(float,call.data["OLD_GT"].replace('.','0').split("/"))) if '/' in call.data["OLD_GT"] else [0,0]
+            else:
+                OLD_GT = [0,0]
+        else:
+            OLD_GT = [0,0]
+
+        if "FT" in call.data: # one-hot encoding
+            if call.data["FT"] != None:
+                if call.data['FT'] == ["PASS"]:
+                    FT = [1,0,0]
+                elif call.data['FT'] == ['CONFLICT']:
+                    FT = [0,1,0]
+                elif call.data['FT'] == ['GQ']:
+                    FT = [0,0,1]
+                else:
+                    FT = [0,0,0]
+            else:
+                    FT = [0,0,0]
+        else:
+                    FT = [0,0,0]
+        
+        if "ADF" in call.data:
+            if call.data['ADF'] != None:
+                ADF = call.data['ADF']
+            else:
+                ADF = [0,0]
+        else:
+            ADF = [0,0]
+
+        if "ADR" in call.data:
+            if call.data['ADR'] != None:
+                ADR = call.data['ADR']
+            else:
+                ADR = [0,0]
+        else:
+            ADR = [0,0]
+
+        if "PL" in call.data:
+            if call.data['PL'] != None:
+                PL = call.data['PL']
+            else:
+                PL = [0,0,0]
+        else:
+            PL = [0,0,0]
 
         y.append(is_true)
         x.append([])
@@ -134,35 +209,113 @@ def load_features_from_vcf(
         if r == 0:
             feature_names.extend(["caller_support_" + str(i) for i in range(len(caller_support))])
 
+        # add vg features (illumina)
+        """ x[-1].extend(VG_AD)
+        if r == 0:
+            feature_names.extend(["VG_AD_" + str(i) for i in range(len(VG_AD))])
+
+        x[-1].append(VG_MAD)
+        if r == 0:
+            feature_names.append("VG_MAD")
+
+        x[-1].append(VG_DP)
+        if r == 0:
+            feature_names.append("VG_DP") 
+
+        x[-1].extend(VG_GL)
+        if r == 0:
+            feature_names.extend(["VG_GL_" + str(i) for i in range(len(VG_GL))])
+
+        x[-1].append(VG_GQ)
+        if r == 0:
+            feature_names.append("VG_GQ") 
+            
+        x[-1].append(VG_GP)
+        if r == 0:
+            feature_names.append("VG_GP")
+
+        x[-1].append(VG_XD)
+        if r == 0:
+            feature_names.append("VG_XD") """
+
+        # add paragraph features (illumina)
+        """ x[-1].extend(GT)
+        if r == 0:
+            feature_names.extend(["GT_" + str(i) for i in range(len(GT))])
+
+        x[-1].extend(OLD_GT)
+        if r == 0:
+            feature_names.extend(["OLD_GT_" + str(i) for i in range(len(OLD_GT))])
+        
+        x[-1].extend(FT)
+        if r == 0:
+            feature_names.extend(["FT_" + str(i) for i in range(len(FT))])
+
+        x[-1].extend(ADF)
+        if r == 0:
+            feature_names.extend(["ADF_" + str(i) for i in range(len(ADF))])
+
+        x[-1].extend(ADR)
+        if r == 0:
+            feature_names.extend(["ADR_" + str(i) for i in range(len(ADR))])
+        
+        x[-1].extend(PL)
+        if r == 0:
+            feature_names.extend(["PL_" + str(i) for i in range(len(PL))]) """
+
         if annotation_name.lower() == "hapestry":
             max_align_score = info["HAPESTRY_READS_MAX"]
 
+            # add hapestry features (ONT) OR
+            # add hapestry features (PB) if using VG vcfs
             x[-1].extend(hapestry_data)
             if r == 0:
                 feature_names.extend(["hapestry_data_" + str(i) for i in range(len(hapestry_data))])
+
+            x[-1].append(hapestry_data_neighbors)
+            if r == 0:
+                feature_names.append("hapestry_data_neighbors")
 
             x[-1].append(max_align_score)
             if r == 0:
                 feature_names.append("max_align_score")
 
+            # add hapestry_CCS features (PB CCS)
+            # hapestry_reads_CCS = hapestry_reads_CCS[:-2] # uncomment only if using both ONT and PB features
+
+            """ x[-1].extend(hapestry_reads_CCS)
+            if r == 0:
+                feature_names.extend(["hapestry_reads_CCS_" + str(i) for i in range(len(hapestry_reads_CCS))]) 
+            
+            x[-1].append(hapestry_reads_max_CCS)
+            if r == 0:
+                feature_names.append("hapestry_reads_max_CCS")
+            
+            x[-1].append(hapestry_reads_neighbors_CCS)
+            if r == 0:
+                feature_names.append("happestry_reads_neighbors_CCS")  """
+
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
 
-            gt = list(map(float,call.data["GT"].replace('.','0').split("/"))) if '/' in call.data["GT"] else [0,0]
-
+            if 'GT' in call.data and call.data['GT'] != None:
+                gt = list(map(float,call.data["GT"].replace('.','0').split("/"))) if '/' in call.data["GT"] else [0,0]
+            else:
+                gt = [0,0]
+            
             x[-1].extend(gt)
             if r == 0:
                 feature_names.extend(["GT_" + str(i) for i in range(len(gt))])
 
-            x[-1].append(call.data["GQ"])
+            x[-1].append(call.data["GQ"] if call.data["GQ"] != None else 0)
             if r == 0:
                 feature_names.append("GQ")
 
-            x[-1].append(call.data["DR"])
+            x[-1].append(call.data["DR"] if call.data["DR"] != None else 0)
             if r == 0:
                 feature_names.append("DR")
 
-            x[-1].append(call.data["DV"])
+            x[-1].append(call.data["DV"] if call.data["DV"] != None else 0)
             if r == 0:
                 feature_names.append("DV")
 
