@@ -574,6 +574,27 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # ONT and PB (use this for Union)
+    path_to_data = "/data/mmau/data/intro/ONT_PB_annotated_vcfs/"
+    name_of_file = "_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz"
+
+    train_vcfs = [
+        path_to_data + "HG00621" + name_of_file,
+        path_to_data + "HG01928" + name_of_file,
+        path_to_data + "HG02572" + name_of_file,
+        path_to_data + "HG03098" + name_of_file,
+        path_to_data + "HG03492" + name_of_file,
+    ]
+
+    test_vcfs = [
+        path_to_data + "HG00673" + name_of_file,
+        path_to_data + "HG00733" + name_of_file,
+    ]
+
+    eval_vcfs = [
+        path_to_data + "HG03516" + name_of_file,
+    ]
+
     """ train_vcfs = [
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG00621_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
         "/Users/rlorigro/data/test_hapestry/vcf/filter_paper/8x/joint/HG01928_joint_calls_multiannotated_by_single_sample_8x_asm10_20bp.vcf.gz",
@@ -627,6 +648,7 @@ def main():
     length_axes = dict()
 
     n_processes = len(truth_info_names) * len(annotation_names)
+    n_processes = 1 # delete
 
     args = list()
 
