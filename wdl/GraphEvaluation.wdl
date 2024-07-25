@@ -6,7 +6,7 @@ version 1.0
 workflow GraphEvaluation {
     input {
         Array[String] vcf_id
-        String truth_vcf_id = ""
+        String? truth_vcf_id
         Array[File] vcf_gz
         Array[File] vcf_tbi
         Int interval_max_length
@@ -68,7 +68,7 @@ workflow GraphEvaluation {
 task EvaluateChromosome {
     input {
         Array[String] vcf_id
-        String truth_vcf_id
+        String? truth_vcf_id
         Array[File] vcf_gz
         Array[File] vcf_tbi
         Int interval_max_length
@@ -159,7 +159,8 @@ task EvaluateChromosome {
         ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
         ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
 
-        if [ -n ~{truth_vcf_id} ]; then
+        if ~{defined(truth_vcf_id)}
+        then
             TRUTH_ID_FLAG="--truth_id ~{truth_vcf_id}"
         else
             TRUTH_ID_FLAG=""
