@@ -292,6 +292,15 @@ bool point_is_contained(int32_t p, const Region& r, bool or_equal){
 
 // Taken from:
 // https://stackoverflow.com/a/58467162
+//
+// WARNING: This function is not thread-safe!
+//       ^
+//      / \
+//     /   \
+//    /  !  \
+//   /_______\
+//
+//
 string get_uuid() {
     static random_device dev;
     static mt19937 rng(dev());

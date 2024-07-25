@@ -1,5 +1,7 @@
+#include <string>
 #include <iostream>
 #include <stdexcept>
+#include <unordered_map>
 
 using std::runtime_error;
 using std::cerr;
@@ -110,10 +112,7 @@ void for_each_row_in_csv(path csv_path, const function<void(const vector<string>
 }
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint){
-    // Make tmp dir
-    path output_dir = "/tmp/" + get_uuid();
-
+void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, path output_dir){
     if (not exists(output_dir)){
         create_directories(output_dir);
     }
@@ -193,13 +192,13 @@ size_t solve_from_csv(
         transmap.remove_edge(edge.first, edge.second);
     }
 
-    try {
-        optimize(transmap, solver_type, 1, use_ploidy_constraint);
-    }
-    catch (const exception& e) {
-        cerr << e.what() << '\n';
-        cerr << "ERROR caught at " << csv.string() << '\n';
-    }
+    // Construct a random seed that is based on the csv file
+    auto h = std::hash<std::string>{}(csv.string());
+
+    // Make tmp dir
+    path output_dir = "/tmp/" + to_string(h);
+
+    optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir);
 
     return i-1;
 }
@@ -221,7 +220,17 @@ void thread_fn(
 
     while (i < jobs.size()){
         Timer t;
-        auto n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
+        size_t n_vars = 0;
+        bool success = true;
+
+        try {
+            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
+        }
+        catch (const exception& e) {
+            cerr << e.what() << '\n';
+            cerr << "ERROR caught at " << jobs[i].string() << '\n';
+            success = false;
+        }
 
         io_mutex.lock();
         ofstream log(log_path, std::ios_base::app);
@@ -229,7 +238,7 @@ void thread_fn(
         // get directory name of job (excluding non-leaf dirs)
         string job_dir = jobs[i].parent_path().filename();
 
-        log << job_dir << "," << n_vars << ',' << t.to_csv() << "\n";
+        log << job_dir << "," << n_vars << ',' << success << ',' << t.to_csv() << "\n";
         log.close();
 
         io_mutex.unlock();
@@ -275,7 +284,7 @@ void solve_from_directory(
 
     // Write header to log csv
     ofstream log(output_dir / "log.csv");
-    log << "name,n_path_to_read_vars,h,m,s,ms\n";
+    log << "name,n_path_to_read_vars,success,h,m,s,ms\n";
     log.close();
 
     for (size_t i = 0; i < n_threads; i++){
