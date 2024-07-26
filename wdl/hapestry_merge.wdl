@@ -25,6 +25,7 @@ task merge {
         Int flank_length = 200
         Int graphaligner_timeout = 120
         Float min_read_hap_identity = 0.5
+        Float d_weight = 1.0
         Int n_threads
         File tandems_bed
         File reference_fa
@@ -80,6 +81,7 @@ task merge {
         --flank_length ~{flank_length} \
         --graphaligner_timeout ~{graphaligner_timeout} \
         --min_read_hap_identity ~{min_read_hap_identity} \
+        --d_weight ~{d_weight} \
         --n_threads ~{n_threads} \
         ~{if force_unique_reads then "--force_unique_reads" else ""} \
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
@@ -107,6 +109,7 @@ task merge {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        d_weight: "Scaling factor for the D term in the optimizer, greater than 1.0 will prioritize minimizing edit distance"
         min_sv_length: "Minimum length of SVs to consider"
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
@@ -144,6 +147,7 @@ workflow hapestry_merge {
         Int min_sv_length = 20
         Int graphaligner_timeout = 120
         Float min_read_hap_identity = 0.5
+        Float d_weight = 1.0
         Int n_threads
         File tandems_bed
         File reference_fa
@@ -167,6 +171,7 @@ workflow hapestry_merge {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        d_weight: "Scaling factor for the D term in the optimizer, greater than 1.0 will prioritize minimizing edit distance"
         min_sv_length: "Minimum length of SVs to consider"
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
@@ -185,6 +190,7 @@ workflow hapestry_merge {
             min_sv_length = min_sv_length,
             graphaligner_timeout = graphaligner_timeout,
             min_read_hap_identity = min_read_hap_identity,
+            d_weight = d_weight,
             n_threads = n_threads,
             tandems_bed = tandems_bed,
             reference_fa = reference_fa,

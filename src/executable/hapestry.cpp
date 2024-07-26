@@ -269,6 +269,8 @@ void write_solution_to_vcf(
         }
 
         transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
+            cerr << "sample: " << sample_name << " var: " << var_name << " phase: " << phase << '\n';
+
             // Reconstruct the variant ID from the name
             size_t v = stoull(var_name.substr(1));
 
@@ -335,6 +337,7 @@ void merge_thread_fn(
         int32_t flank_length,
         int32_t graphaligner_timeout,
         float min_read_hap_identity,
+        float d_weight,
         bool skip_solve,
         atomic<size_t>& job_index
 ) {
@@ -382,6 +385,23 @@ void merge_thread_fn(
 
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
         variant_graph.to_gfa(gfa_path);
+
+        // Write a simple csv for viewing in Bandage
+        path nodes_csv = subdir / "nodes.csv";
+
+        ofstream nodes_file(nodes_csv);
+
+        nodes_file << "name,is_ref,color\n";
+        variant_graph.graph.for_each_handle([&](const handle_t& h){
+            nid_t id = variant_graph.graph.get_id(h);
+            bool is_ref = variant_graph.is_reference_node(id);
+
+            string color = is_ref ? "#6495ED" : "#BEBEBE";
+
+            nodes_file << id << ',' << is_ref << ',' << color << '\n';
+        });
+
+        nodes_file.close();
 
         path gaf_path = subdir / "alignments.gaf";
 
@@ -436,7 +456,7 @@ void merge_thread_fn(
             try {
                 // Optimize
                 SolverType solver_type = SolverType::kGscip;
-                optimize_reads_with_d_and_n(transmap, 1, 1, 1, subdir, solver_type);
+                optimize_reads_with_d_and_n(transmap, d_weight, 1, 1, subdir, solver_type);
 
                 // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
                 // not conflict with existing names
@@ -454,6 +474,8 @@ void merge_thread_fn(
                     variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
                         string var_name = "v" + to_string(id);
                         transmap.add_edge(var_name, path_name);
+
+                        cerr << "Adding edge: " << var_name << ',' << record.id << ',' << path_name << '\n';
                     });
                 });
 
@@ -486,6 +508,7 @@ void merge_variants(
         int32_t min_sv_length,
         int32_t graphaligner_timeout,
         float min_read_hap_identity,
+        float d_weight,
         bool skip_solve,
         const path& output_dir
 ){
@@ -570,6 +593,7 @@ void merge_variants(
                                      flank_length,
                                      graphaligner_timeout,
                                      min_read_hap_identity,
+                                     d_weight,
                                      skip_solve,
                                      std::ref(job_index)
                 );
@@ -599,6 +623,7 @@ void hapestry(
         int32_t n_threads,
         int32_t graphaligner_timeout,
         float min_read_hap_identity,
+        float d_weight,
         bool skip_solve,
         bool debug,
         bool force_unique_reads,
@@ -774,6 +799,7 @@ void hapestry(
                 min_sv_length,
                 graphaligner_timeout,
                 min_read_hap_identity,
+                d_weight,
                 skip_solve,
                 staging_dir
         );
@@ -847,6 +873,7 @@ int main (int argc, char* argv[]){
     int32_t n_threads = 1;
     int32_t graphaligner_timeout = 90;
     float min_read_hap_identity = 0.85;
+    float d_weight = 1.0;
     bool skip_solve = false;
     bool debug = false;
     bool force_unique_reads = false;
@@ -926,6 +953,12 @@ int main (int argc, char* argv[]){
             "Minimum alignment identity to consider a read-hap assignment in the optimization step")
             ->required();
 
+    app.add_option(
+            "--d_weight",
+            d_weight,
+            "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term")
+            ->required();
+
     app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
@@ -954,6 +987,7 @@ int main (int argc, char* argv[]){
             n_threads,
             graphaligner_timeout,
             min_read_hap_identity,
+            d_weight,
             skip_solve,
             debug,
             force_unique_reads,

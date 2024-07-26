@@ -215,6 +215,7 @@ workflow hapestry_merge_scattered {
         Int min_sv_length = 20
         Int graphaligner_timeout = 120
         Float min_read_hap_identity = 0.5
+        Float d_weight = 1.0
         Int n_threads
         Int n_chunks
         File tandems_bed
@@ -238,6 +239,7 @@ workflow hapestry_merge_scattered {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        d_weight: "Scaling factor for the distance term in the objective function, larger than 1.0 gives greater priority to minimizing edit distance"
         min_sv_length: "Minimum SV length to consider"
         n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
         n_threads: "Maximum number of threads to use"
@@ -273,6 +275,7 @@ workflow hapestry_merge_scattered {
                 min_sv_length = min_sv_length,
                 graphaligner_timeout = graphaligner_timeout,
                 min_read_hap_identity = min_read_hap_identity,
+                d_weight = d_weight,
                 n_threads = n_threads,
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
