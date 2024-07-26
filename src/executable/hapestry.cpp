@@ -269,8 +269,6 @@ void write_solution_to_vcf(
         }
 
         transmap.for_each_phased_variant_of_sample(sample_id, [&](const string& var_name, int64_t _, bool phase){
-            cerr << "sample: " << sample_name << " var: " << var_name << " phase: " << phase << '\n';
-
             // Reconstruct the variant ID from the name
             size_t v = stoull(var_name.substr(1));
 
@@ -474,8 +472,6 @@ void merge_thread_fn(
                     variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
                         string var_name = "v" + to_string(id);
                         transmap.add_edge(var_name, path_name);
-
-                        cerr << "Adding edge: " << var_name << ',' << record.id << ',' << path_name << '\n';
                     });
                 });
 
