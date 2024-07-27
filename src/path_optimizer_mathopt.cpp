@@ -767,7 +767,7 @@ void optimize_reads_with_d_and_n(
     n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
 
     // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
-    n_max += 1;
+//    n_max += 1;
 
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
@@ -777,7 +777,7 @@ void optimize_reads_with_d_and_n(
 
     // Put a pseudo count into d_max to try to guard against haploid cases being reduced to diploid
     // TODO: remove this or modify it when switching to non-integer distance costs
-    d_max += 5;
+//    d_max += 5;
 
     cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
 
@@ -789,11 +789,12 @@ void optimize_reads_with_d_and_n(
     n_range = (n_range == 0 ? 1 : n_range);
     d_range = (d_range == 0 ? 1 : d_range);
 
-    Variable d_norm = model.AddContinuousVariable(0,1,"d");
-    Variable n_norm = model.AddContinuousVariable(0,1,"n");
+    Variable d_norm = model.AddContinuousVariable(0,2,"d");
+    Variable n_norm = model.AddContinuousVariable(0,2,"n");
 
-    model.AddLinearConstraint(d_norm == (vars.cost_d - d_min)/d_range);
-    model.AddLinearConstraint(n_norm == (vars.cost_n - n_min)/n_range);
+    // Normalize the costs and add 1 to ensure that squaring the normalized values does not make them smaller in the minimization
+    model.AddLinearConstraint(d_norm == 1 + (vars.cost_d - d_min)/d_range);
+    model.AddLinearConstraint(n_norm == 1 + (vars.cost_n - n_min)/n_range);
 
     model.Minimize(d_norm*d_norm*d_weight + n_norm*n_norm*n_weight);
 

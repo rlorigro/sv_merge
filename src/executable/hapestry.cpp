@@ -952,8 +952,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--d_weight",
             d_weight,
-            "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term")
-            ->required();
+            "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term");
 
     app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
