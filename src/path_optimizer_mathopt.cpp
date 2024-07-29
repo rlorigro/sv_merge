@@ -799,7 +799,95 @@ void optimize_reads_with_d_and_n(
     model.Minimize(d_norm*d_norm*d_weight + n_norm*n_norm*n_weight);
 
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
-    const auto result_n_d = response_n_d.value();
+    const auto& result_n_d = response_n_d.value();
+
+    // Write a log containing the solutioninfo and responsestats
+    path out_path = output_dir/"log_optimizer.txt";
+    ofstream file(out_path);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        return;
+    }
+
+    file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';
+    file << result_n_d << '\n';
+
+    // Check if the final solution is feasible
+    if (result_n_d.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    // Infer the optimal n and d values of the joint solution
+    n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    d = vars.cost_d.Evaluate(result_n_d.variable_values());
+
+    cerr << "n: " << n << "\td: " << d << '\n';
+
+    if (integral) {
+        parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    }
+    else{
+        cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
+        transmap = {};
+    }
+}
+
+
+
+/**
+ * This reproduces the function from hapslap
+ */
+void optimize_reads_with_d_plus_n(
+        TransMap& transmap,
+        double d_weight,
+        double n_weight,
+        size_t n_threads,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint
+        ){
+
+    Model model;
+    SolveArguments args;
+    PathVariables vars;
+
+    args.parameters.threads = n_threads;
+
+    double n_max = -1;
+    double d_min = -1;
+    double n = -1;
+    double d = -1;
+
+    bool integral = true;
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+        integral = false;
+    }
+
+    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
+
+    // First find one extreme of the pareto set (D_MIN)
+    d_min = round(optimize_d(model, vars, solver_type, n_threads));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
+
+    // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
+//    n_max += 1;
+
+    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
+
+    Variable d_norm = model.AddContinuousVariable(0,2,"d");
+    Variable n_norm = model.AddContinuousVariable(0,2,"n");
+
+    // Normalize the costs and add 1 to ensure that squaring the normalized values does not make them smaller in the minimization
+    model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
+    model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+
+    model.Minimize(d_norm*d_weight + n_norm*n_weight);
+
+    const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
+    const auto& result_n_d = response_n_d.value();
 
     // Write a log containing the solutioninfo and responsestats
     path out_path = output_dir/"log_optimizer.txt";

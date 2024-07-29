@@ -159,7 +159,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
             float indel_portion = float(n_indels) / float(n);
 
-//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
+            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
 
             if ((1.0f - indel_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int
@@ -167,6 +167,8 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+
+                cerr << "adding edge: " << name << ',' << path_name << ' ' << indel_portion << ' ' << int_score << '\n';
             }
         }
     });
@@ -228,6 +230,8 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
         auto l = variant_graph.is_dangling_node(id_front);
         auto r = variant_graph.is_dangling_node(id_back);
         bool is_spanning = l and r;
+
+        cerr << alignment.get_path_string() << ' ' << is_spanning << '\n';
 
         if (not is_spanning){
             return;
@@ -441,6 +445,9 @@ void merge_thread_fn(
             if (coverage >= min_path_coverage){
                 transmap.add_path(path_name);
             }
+            else{
+                cerr << "WARNING: skipping path with low coverage: " << path_name << '\n';
+            }
         }
 
         // Align all reads to all candidate paths and update transmap
@@ -454,7 +461,7 @@ void merge_thread_fn(
             try {
                 // Optimize
                 SolverType solver_type = SolverType::kGscip;
-                optimize_reads_with_d_and_n(transmap, d_weight, 1, 1, subdir, solver_type);
+                optimize_reads_with_d_plus_n(transmap, d_weight, 1, 1, subdir, solver_type);
 
                 // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
                 // not conflict with existing names

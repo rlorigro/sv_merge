@@ -86,6 +86,16 @@ void optimize_reads_with_d_and_n(
         bool use_ploidy_constraint = true
         );
 
+void optimize_reads_with_d_plus_n(
+        TransMap& transmap,
+        double d_weight,
+        double n_weight,
+        size_t n_threads,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint = true
+        );
+
 void optimize_reads_with_d_and_n_using_golden_search(
         TransMap& transmap,
         double d_weight,
