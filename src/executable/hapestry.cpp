@@ -89,7 +89,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(a,b,scaled_score);
 
-                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << ' ' << scaled_score << '\n';
+//                cerr << transmap.get_node(a).name << ',' << transmap.get_node(b).name << ' ' << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << ' ' << score << ' ' << scaled_score << '\n';
             }
         });
     });
@@ -159,7 +159,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
             float indel_portion = float(n_indels) / float(n);
 
-            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
+//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
 
             if ((1.0f - indel_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int
@@ -168,7 +168,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
 
-                cerr << "adding edge: " << name << ',' << path_name << ' ' << indel_portion << ' ' << int_score << '\n';
+//                cerr << "adding edge: " << name << ',' << path_name << ' ' << indel_portion << ' ' << int_score << '\n';
             }
         }
     });
@@ -231,7 +231,7 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
         auto r = variant_graph.is_dangling_node(id_back);
         bool is_spanning = l and r;
 
-        cerr << alignment.get_path_string() << ' ' << is_spanning << '\n';
+//        cerr << alignment.get_path_string() << ' ' << is_spanning << '\n';
 
         if (not is_spanning){
             return;
