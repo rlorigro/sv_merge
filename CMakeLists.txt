@@ -43,8 +43,8 @@ if (debug)
 
     if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
 #        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
@@ -603,8 +603,9 @@ set(EXECUTABLES
         analyze_evaluation
         annotate
         evaluate
-        find_windows
         extract_reads_from_windows
+        find_windows
+        make_local_hapestry_test_set
         solve_from_csv
         solve_from_directory
 )
@@ -666,4 +667,3 @@ message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
-
