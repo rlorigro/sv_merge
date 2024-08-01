@@ -748,7 +748,13 @@ void optimize_reads_with_d_and_n(
     PathVariables vars;
 
     args.parameters.threads = n_threads;
-    args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+
+    if (time_limit_seconds > 0){
+        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    }
+    else{
+        args.parameters.time_limit = absl::InfiniteDuration();
+    }
 
     double n_max = -1;
     double d_min = -1;
@@ -858,7 +864,13 @@ void optimize_reads_with_d_plus_n(
     PathVariables vars;
 
     args.parameters.threads = n_threads;
-    args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+
+    if (time_limit_seconds > 0){
+        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    }
+    else{
+        args.parameters.time_limit = absl::InfiniteDuration();
+    }
 
     double n_max = -1;
     double d_min = -1;

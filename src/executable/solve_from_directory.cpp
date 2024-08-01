@@ -74,7 +74,7 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
         throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
-    optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
+    optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
 }
 
 

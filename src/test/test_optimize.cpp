@@ -102,15 +102,15 @@ void test_optimization(){
 
         try {
             TransMap transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir/"conventional", t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, 60, output_dir/"conventional", t);
             cerr << '\n';
 
             transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, output_dir/"conventional", t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 10, 1, 60, output_dir/"conventional", t);
             cerr << '\n';
 
             transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, output_dir/"conventional", t);
+            optimize_reads_with_d_and_n(transmap_copy, 10, 1, 1, 60, output_dir/"conventional", t);
             cerr << '\n';
         }
         catch (const exception& e){
@@ -212,7 +212,7 @@ void test_infeasible_by_ploidy(){
 
         try {
             TransMap transmap_copy = transmap;
-            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, output_dir, t);
+            optimize_reads_with_d_and_n(transmap_copy, 1, 1, 1, 60, output_dir, t);
         }
         catch (const exception& e){
             cerr << "ERROR: " << e.what() << '\n';
