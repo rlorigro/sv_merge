@@ -337,7 +337,8 @@ void merge_thread_fn(
         const VcfReader& vcf_reader,
         const path& output_dir,
         int32_t flank_length,
-        int32_t graphaligner_timeout,
+        size_t graphaligner_timeout,
+        size_t solver_timeout,
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
@@ -461,10 +462,10 @@ void merge_thread_fn(
             try {
                 // Optimize
                 SolverType solver_type = SolverType::kGscip;
-                optimize_reads_with_d_plus_n(transmap, d_weight, 1, 1, subdir, solver_type);
+                optimize_reads_with_d_plus_n(transmap, d_weight, 1, 1, solver_timeout, subdir, solver_type);
 
-                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which likely does
-                // not conflict with existing names
+                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
+                // likely does not conflict with existing names
                 for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
                     transmap.add_variant("v" + to_string(v));
                 }
@@ -509,7 +510,8 @@ void merge_variants(
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t min_sv_length,
-        int32_t graphaligner_timeout,
+        size_t graphaligner_timeout,
+        size_t solver_timeout,
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
@@ -573,7 +575,7 @@ void merge_variants(
         }
     }
 
-    // Convert VCFs to graphs and run graph aligner
+    // Convert VCFs to graphs and run graph aligner and build/solve the model for each region
     {
         // Thread-related variables
         atomic<size_t> job_index = 0;
@@ -595,6 +597,7 @@ void merge_variants(
                                      std::cref(output_dir),
                                      flank_length,
                                      graphaligner_timeout,
+                                     solver_timeout,
                                      min_read_hap_identity,
                                      d_weight,
                                      skip_solve,
@@ -624,7 +627,8 @@ void hapestry(
         int32_t interval_max_length,
         int32_t min_sv_length,
         int32_t n_threads,
-        int32_t graphaligner_timeout,
+        size_t graphaligner_timeout,
+        size_t solver_timeout,
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
@@ -801,6 +805,7 @@ void hapestry(
                 interval_max_length,
                 min_sv_length,
                 graphaligner_timeout,
+                solver_timeout,
                 min_read_hap_identity,
                 d_weight,
                 skip_solve,
@@ -874,7 +879,8 @@ int main (int argc, char* argv[]){
     int32_t interval_max_length = 15000;
     int32_t min_sv_length = 20;
     int32_t n_threads = 1;
-    int32_t graphaligner_timeout = 90;
+    size_t graphaligner_timeout = 90;
+    size_t solver_timeout = 30*60;
     float min_read_hap_identity = 0.85;
     float d_weight = 1.0;
     bool skip_solve = false;
@@ -883,10 +889,6 @@ int main (int argc, char* argv[]){
     bool bam_not_hardclipped = false;
 
     CLI::App app{"App description"};
-
-    // TODO: add skip_solve arg
-    // TODO: add graphaligner timeout arg
-    // TODO: break out transmap edge filtering and add edge weight parameter
 
     app.add_option(
             "--n_threads",
@@ -951,6 +953,12 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
+            "--solver_timeout",
+            solver_timeout,
+            "Abort the optimizer after this many seconds, (potentially returning the best solution so far, depending on the solver)")
+            ->required();
+
+    app.add_option(
             "--min_read_hap_identity",
             min_read_hap_identity,
             "Minimum alignment identity to consider a read-hap assignment in the optimization step")
@@ -988,6 +996,7 @@ int main (int argc, char* argv[]){
             min_sv_length,
             n_threads,
             graphaligner_timeout,
+            solver_timeout,
             min_read_hap_identity,
             d_weight,
             skip_solve,

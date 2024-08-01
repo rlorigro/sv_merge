@@ -65,6 +65,9 @@ void write_region_subsequences_to_file(
         const path& output_dir,
         vector<path>& result_paths
 ){
+    // Read IDs might not be unique (e.g. if a read spans multiple windows), so we will add an integer ID to all of them
+    size_t i = 0;
+
     for (auto& region: regions){
         const auto& t = region_transmaps.at(region);
 
@@ -88,8 +91,9 @@ void write_region_subsequences_to_file(
                     return;
                 }
 
-                file << '>' << t.get_node(read_id).name << '\n';
+                file << '>' << t.get_node(read_id).name << "_" << i << '\n';
                 file << t.get_sequence(read_id) << '\n';
+                i++;
             });
         });
     }
@@ -109,7 +113,7 @@ void align_sequences_to_reference_thread_fn(
         path fasta_path = fasta_paths[i];
         path sam_path = fasta_path.parent_path() / (fasta_path.stem().string() + ".sam");
 
-        string command = "minimap2 -a -x asm20 --eqx -L -t 1 " + ref_fasta.string() + " " + fasta_path.string();
+        string command = "minimap2 -a -x map-hifi --eqx -L -t 1 " + ref_fasta.string() + " " + fasta_path.string();
         run_command(command, sam_path);
 
         // Sort and output as BAM format
@@ -157,7 +161,6 @@ void make_local_test_set(
 
     cerr << t << "Initializing" << '\n';
 
-    vector <pair <string,path> > bam_paths;
     unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
@@ -183,16 +186,40 @@ void make_local_test_set(
 
         cerr << t << "Flanking windows and writing BED" << '\n';
 
-        // Add flanks, place the regions in the interval tree, and log the windows
+        vector<Region> regions_merged;
+
+        // Add flanks and merge overlapping windows
+        // In this particular context, it's not ok if the flanks are overlapping, whereas in Hapestry it is.
+        // We only want to fetch the sequences once
         for (auto& r: regions) {
             output_bed_file << r.to_bed() << '\n';
 
             r.start -= flank_length;
             r.stop += flank_length;
 
+            auto& r_prev = regions_merged.back();
+
+            if (regions_merged.empty()){
+                regions_merged.emplace_back(r);
+            }
+            else{
+                if (r_prev.name == r.name and r_prev.stop > r.start){
+                    regions_merged.back().stop = r.stop;
+                }
+                else{
+                    regions_merged.emplace_back(r);
+                }
+            }
+        }
+
+        // Place the regions in the interval tree, and log the windows
+        for (auto& r: regions_merged) {
+            output_bed_file << r.to_bed() << '\n';
+
             contig_interval_trees[r.name].insert({r.start, r.stop});
             output_bed_flanked_file << r.to_bed() << '\n';
         }
+
         output_bed_file.close();
         output_bed_flanked_file.close();
 
@@ -203,6 +230,7 @@ void make_local_test_set(
 
         auto max_length = size_t(float(interval_max_length) * 2.5);
 
+        // Fetch the sequences with minimal transformation/requirements to attempt to recreate the BAM locally
         if (bam_not_hardclipped){
             cerr << "Fetching from NON-hardclipped BAMs" << '\n';
             fetch_reads(
@@ -211,9 +239,9 @@ void make_local_test_set(
                     bam_csv,
                     n_threads,
                     region_transmaps,
-                    true,
+                    false,
                     force_unique_reads,
-                    true,
+                    false,
                     false,
                     0
             );
@@ -228,11 +256,11 @@ void make_local_test_set(
                     max_length,
                     flank_length,
                     region_transmaps,
-                    true,
+                    false,
                     false,
                     false,
                     force_unique_reads,
-                    true,
+                    false,
                     0
             );
         }
@@ -267,6 +295,21 @@ void make_local_test_set(
                 n.join();
             }
         }
+
+        // Construct a bams.csv file for the aligned BAMs and put it in the output_dir
+        // Format is the same as the input bams.csv: sample,path
+        path extracted_bams_csv = output_dir / "extracted_bams.csv";
+
+        ofstream file(extracted_bams_csv);
+
+        if (not (file.is_open() and file.good())){
+            throw runtime_error("ERROR: could not write file: " + extracted_bams_csv.string());
+        }
+
+        for_each_row_in_csv(bam_csv, [&](const vector<string>& items){
+            const auto& sample = items[0];
+            file << sample << ',' << (output_dir / sample / (sample + ".bam")).string() << '\n';
+        });
 
         cerr << t << "Writing VCF records to disk" << '\n';
 

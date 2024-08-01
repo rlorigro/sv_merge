@@ -737,6 +737,7 @@ void optimize_reads_with_d_and_n(
         double d_weight,
         double n_weight,
         size_t n_threads,
+        size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
         bool use_ploidy_constraint
@@ -747,6 +748,7 @@ void optimize_reads_with_d_and_n(
     PathVariables vars;
 
     args.parameters.threads = n_threads;
+    args.parameters.time_limit = absl::Seconds(time_limit_seconds);
 
     double n_max = -1;
     double d_min = -1;
@@ -845,6 +847,7 @@ void optimize_reads_with_d_plus_n(
         double d_weight,
         double n_weight,
         size_t n_threads,
+        size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
         bool use_ploidy_constraint
@@ -855,6 +858,7 @@ void optimize_reads_with_d_plus_n(
     PathVariables vars;
 
     args.parameters.threads = n_threads;
+    args.parameters.time_limit = absl::Seconds(time_limit_seconds);
 
     double n_max = -1;
     double d_min = -1;

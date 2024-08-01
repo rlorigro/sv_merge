@@ -7,6 +7,7 @@
 #include <array>
 #include <stdexcept>
 #include <random>
+#include <vector>
 
 using std::random_device;
 using std::uniform_int_distribution;
@@ -19,6 +20,7 @@ using std::to_string;
 using std::ofstream;
 using std::ifstream;
 using std::string;
+using std::vector;
 using std::cerr;
 using std::cout;
 
@@ -319,6 +321,53 @@ string get_uuid() {
     }
     return res;
 }
+
+
+void for_each_row_in_csv(path csv_path, const function<void(const vector<string>& items)>& f){
+    if (not (csv_path.extension() == ".csv")){
+        throw runtime_error("ERROR: file does not have compatible csv extension: " + csv_path.string());
+    }
+
+    ifstream file(csv_path);
+
+    if (not (file.is_open() and file.good())){
+        throw runtime_error("ERROR: could not read file: " + csv_path.string());
+    }
+
+    char c;
+    vector<string> items = {""};
+
+    int64_t n_char_in_line = 0;
+    char delimiter = ',';
+
+    while (file.get(c)){
+        if (c == delimiter){
+            items.emplace_back();
+            continue;
+        }
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + csv_path.string());
+        }
+
+        if (c == '\n'){
+            if (n_char_in_line == 0){
+                continue;
+            }
+
+            f(items);
+
+            items.resize(1);
+            items[0].clear();
+            n_char_in_line = 0;
+            continue;
+        }
+
+        items.back() += c;
+
+        n_char_in_line++;
+    }
+}
+
 
 
 }

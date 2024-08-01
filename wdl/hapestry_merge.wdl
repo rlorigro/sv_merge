@@ -24,6 +24,7 @@ task merge {
         Int min_sv_length = 20
         Int flank_length = 200
         Int graphaligner_timeout = 120
+        Int solver_timeout = 30*60
         Float min_read_hap_identity = 0.5
         Float d_weight = 1.0
         Int n_threads
@@ -80,6 +81,7 @@ task merge {
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
         --graphaligner_timeout ~{graphaligner_timeout} \
+        --solver_timeout ~{solver_timeout} \
         --min_read_hap_identity ~{min_read_hap_identity} \
         --d_weight ~{d_weight} \
         --n_threads ~{n_threads} \
@@ -106,6 +108,7 @@ task merge {
         flank_length: "Length of flanking sequence to include in each window"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         graphaligner_timeout: "Timeout for graphaligner in seconds"
+        solver_timeout: "Timeout for solver in seconds"
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
@@ -146,6 +149,7 @@ workflow hapestry_merge {
         Int flank_length = 200
         Int min_sv_length = 20
         Int graphaligner_timeout = 120
+        Int solver_timeout = 30*60
         Float min_read_hap_identity = 0.5
         Float d_weight = 1.0
         Int n_threads
@@ -168,6 +172,7 @@ workflow hapestry_merge {
         flank_length: "Length of flanking sequence to include in each window"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
         graphaligner_timeout: "Timeout for graphaligner in seconds"
+        solver_timeout: "Timeout for solver in seconds"
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
@@ -189,6 +194,7 @@ workflow hapestry_merge {
             flank_length = flank_length,
             min_sv_length = min_sv_length,
             graphaligner_timeout = graphaligner_timeout,
+            solver_timeout = solver_timeout,
             min_read_hap_identity = min_read_hap_identity,
             d_weight = d_weight,
             n_threads = n_threads,

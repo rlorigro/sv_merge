@@ -4,6 +4,7 @@
 #include <set>
 #include <utility>
 #include <chrono>
+#include <vector>
 #include <string>
 #include <array>
 #include <limits>
@@ -12,6 +13,7 @@ using std::chrono::system_clock;
 using std::numeric_limits;
 using std::unordered_set;
 using std::set;
+using std::vector;
 using std::string;
 using std::array;
 using std::pair;
@@ -75,5 +77,7 @@ bool point_is_contained(int32_t p, const coord_t& i, bool or_equal);
 bool point_is_contained(int32_t p, const Region& r, bool or_equal);
 
 string get_uuid();
+
+void for_each_row_in_csv(path csv_path, const function<void(const vector<string>& items)>& f);
 
 }
