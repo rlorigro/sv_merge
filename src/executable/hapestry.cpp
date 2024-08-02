@@ -949,14 +949,12 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--graphaligner_timeout",
             graphaligner_timeout,
-            "Abort graphaligner after this many seconds, and do not compute the remaining steps for that window")
-            ->required();
+            "Abort graphaligner after this many seconds, and do not compute the remaining steps for that window");
 
     app.add_option(
             "--solver_timeout",
             solver_timeout,
-            "Abort the optimizer after this many seconds, (potentially returning the best solution so far, depending on the solver)")
-            ->required();
+            "Abort the optimizer after this many seconds, use 0 for no limit");
 
     app.add_option(
             "--min_read_hap_identity",

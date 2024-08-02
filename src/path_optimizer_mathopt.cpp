@@ -154,18 +154,15 @@ double optimize_d_given_n(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
+        const SolveArguments& args,
         unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
         int64_t n,
-        size_t n_threads,
         path output_dir
         ){
 
     cerr << "Optimizing d for n: " << n << '\n';
 
     result_read_path_edges.clear();
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     auto constraint = model.AddLinearConstraint(vars.cost_n == n);
     model.Minimize(vars.cost_d);
@@ -233,18 +230,15 @@ double optimize_n_given_d(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
+        const SolveArguments& args,
         unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
         double d,
-        size_t n_threads,
         path output_dir
         ){
 
     cerr << "Optimizing n for d: " << d << '\n';
 
     result_read_path_edges.clear();
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     auto constraint = model.AddLinearConstraint(vars.cost_d == d);
     model.Minimize(vars.cost_n);
@@ -310,12 +304,9 @@ double optimize_d_given_n(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        int64_t n,
-        size_t n_threads
+        const SolveArguments& args,
+        int64_t n
         ){
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     auto constraint = model.AddLinearConstraint(vars.cost_n == n);
     model.Minimize(vars.cost_d);
@@ -357,12 +348,9 @@ double optimize_n_given_d(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        int64_t d,
-        size_t n_threads
+        const SolveArguments& args,
+        int64_t d
         ){
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     auto constraint = model.AddLinearConstraint(vars.cost_d == d);
     model.Minimize(vars.cost_n);
@@ -404,11 +392,8 @@ double optimize_n(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        size_t n_threads
+        const SolveArguments& args
         ){
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     model.Minimize(vars.cost_n);
 
@@ -446,11 +431,8 @@ double optimize_d(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        size_t n_threads
+        const SolveArguments& args
         ){
-
-    SolveArguments args;
-    args.parameters.threads = n_threads;
 
     model.Minimize(vars.cost_d);
 
@@ -517,6 +499,10 @@ void optimize_with_golden_search(
         size_t n_threads,
         path output_dir
 ){
+
+    SolveArguments args;
+    args.parameters.threads = n_threads;
+
     unordered_map<int64_t, double> results;
     unordered_map<int64_t, unordered_set <pair <int64_t,int64_t> > > result_edges_cache;
 
@@ -529,12 +515,12 @@ void optimize_with_golden_search(
 
     // First find one extreme of the pareto set (D_MIN)
     unordered_set <pair <int64_t,int64_t> > n_max_result_edges;
-    d_min = round(optimize_d(model, vars, solver_type, n_threads));
+    d_min = round(optimize_d(model, vars, solver_type, args));
 
     cerr << t << '\n';
     t.reset();
 
-    n_max = round(optimize_n_given_d(model, vars, solver_type, n_max_result_edges, d_min, n_threads, output_dir));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, n_max_result_edges, d_min, output_dir));
 
     // Need to manually add the result edges to the cache (chicken and egg problem)
     result_edges_cache.emplace(n_max, n_max_result_edges);
@@ -545,12 +531,12 @@ void optimize_with_golden_search(
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
-    n_min = round(optimize_n(model, vars, solver_type, n_threads));
+    n_min = round(optimize_n(model, vars, solver_type, args));
 
     cerr << t << '\n';
     t.reset();
 
-    d_max = round(optimize_d_given_n(model, vars, solver_type, result_edges_cache[n_min], n_min, n_threads, output_dir));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, args, result_edges_cache[n_min], n_min, output_dir));
 
     cerr << t << '\n';
     t.reset();
@@ -596,7 +582,7 @@ void optimize_with_golden_search(
 
         auto c_result = results.find(c_i);
         if (c_result == results.end()){
-            double c = optimize_d_given_n(model, vars, solver_type, result_edges_cache[c_i], c_i, n_threads, output_dir);
+            double c = optimize_d_given_n(model, vars, solver_type, args, result_edges_cache[c_i], c_i, output_dir);
             c_distance = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(c_i, c_distance);
             cerr << t << '\n';
@@ -608,7 +594,7 @@ void optimize_with_golden_search(
 
         auto d_result = results.find(d_i);
         if (d_result == results.end()){
-            double d = optimize_d_given_n(model, vars, solver_type, result_edges_cache[d_i], d_i, n_threads, output_dir);
+            double d = optimize_d_given_n(model, vars, solver_type, args, result_edges_cache[d_i], d_i, output_dir);
             d_distance = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(d_i, d_distance);
             cerr << t << '\n';
@@ -771,8 +757,8 @@ void optimize_reads_with_d_and_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, n_threads));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
+    d_min = round(optimize_d(model, vars, solver_type, args));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min));
 
     // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
 //    n_max += 1;
@@ -780,8 +766,8 @@ void optimize_reads_with_d_and_n(
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
-    n_min = round(optimize_n(model, vars, solver_type, n_threads));
-    d_max = round(optimize_d_given_n(model, vars, solver_type, n_min, n_threads));
+    n_min = round(optimize_n(model, vars, solver_type, args));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, args, n_min));
 
     // Put a pseudo count into d_max to try to guard against haploid cases being reduced to diploid
     // TODO: remove this or modify it when switching to non-integer distance costs
@@ -885,8 +871,8 @@ void optimize_reads_with_d_plus_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, n_threads));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, d_min, n_threads));
+    d_min = round(optimize_d(model, vars, solver_type, args));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min));
 
     // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
 //    n_max += 1;
