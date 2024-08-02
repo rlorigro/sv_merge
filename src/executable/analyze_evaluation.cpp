@@ -498,7 +498,9 @@ public:
         print_measures_impl_pair(nonref_node_length_vs_coverage,28,out);
         print_measures_impl_basic(sv_length_supported,29,out);
         print_measures_impl_basic(sv_length_unsupported,30,out);
-        print_measures_impl_normalized(truth_tool,recall_numerator,recall_denominator,windows_to_print,31,out);
+        if (truth_tool!=-1) {
+            print_measures_impl_normalized(truth_tool, recall_numerator, recall_denominator, windows_to_print, 31, out);
+        }
     }
 
 

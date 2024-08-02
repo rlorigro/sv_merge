@@ -388,7 +388,7 @@ void compute_graph_evaluation(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = 1;
+    vcf_reader.min_sv_length = min_sv_length;
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
@@ -672,9 +672,9 @@ int main (int argc, char* argv[]){
     path ref_fasta;
     path cluster_by;
     string vcfs_string;
-    int32_t flank_length = 150;
+    int32_t flank_length = 250;
     int32_t interval_max_length = 15000;
-    int32_t min_sv_length = 20;
+    int32_t min_sv_length = 1;
     int32_t n_threads = 1;
     bool debug = false;
     bool force_unique_reads = false;
@@ -743,8 +743,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--min_sv_length",
             min_sv_length,
-            "Skip all variants less than this length (bp)")
-            ->required();
+            "Skip all variants less than this length (bp)");
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
