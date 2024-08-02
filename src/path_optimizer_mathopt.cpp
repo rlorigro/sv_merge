@@ -879,7 +879,9 @@ void optimize_reads_with_d_plus_n(
 
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
-    Variable d_norm = model.AddContinuousVariable(0,2,"d");
+    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
+    // using an arbitrary factor of 32. For n it is extremely unlikely that we ever see a sum greater than 2x the pareto
+    Variable d_norm = model.AddContinuousVariable(0,32,"d");
     Variable n_norm = model.AddContinuousVariable(0,2,"n");
 
     // Normalize the costs and add 1 to ensure that squaring the normalized values does not make them smaller in the minimization
