@@ -63,6 +63,7 @@ public:
     void add_edge(int64_t id_a, int64_t id_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
     void remove_edge(int64_t id_a, int64_t id_b);
+    void remove_node(int64_t id);
 
     /// Accessing
     int64_t name_to_id(const string& name) const;
@@ -93,6 +94,7 @@ public:
 
     /// Local iterators
     void for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const;
+    void for_each_neighbor(int64_t n, const function<void(const T& neighbor, int64_t id)>& f) const;
     void for_each_neighbor_of_type(const string& name, char type, const function<void(const T& neighbor, int64_t id)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const;
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const;
@@ -291,6 +293,21 @@ template<class T> void HeteroGraph<T>::remove_edge(const string& name_a, const s
 }
 
 
+template<class T> void HeteroGraph<T>::remove_node(int64_t id){
+    vector <pair <int64_t, int64_t> > edges_to_remove;
+
+    for_each_neighbor(id, [&](const T& neighbor, int64_t id_b){
+        edges_to_remove.emplace_back(id, id_b);
+    });
+
+    for (const auto& edge: edges_to_remove){
+        remove_edge(edge.first, edge.second);
+    }
+
+    nodes.erase(id);
+}
+
+
 template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
     auto result_a = edges.find(id_a);
 
@@ -350,6 +367,16 @@ template<class T> void HeteroGraph<T>::for_each_neighbor(const string& name, con
     if (result == edges.end()){
         return;
     }
+
+    // Iterate all types indiscriminately
+    for (const auto& [id_b,w]: result->second) {
+        f(nodes.at(id_b), id_b);
+    }
+}
+
+
+template<class T> void HeteroGraph<T>::for_each_neighbor(int64_t n, const function<void(const T& neighbor, int64_t id)>& f) const{
+    auto result = edges.find(n);
 
     // Iterate all types indiscriminately
     for (const auto& [id_b,w]: result->second) {

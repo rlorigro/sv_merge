@@ -223,6 +223,11 @@ void TransMap::remove_edge(int64_t a, int64_t b){
 }
 
 
+void TransMap::remove_node(int64_t id){
+    return graph.remove_node(id);
+}
+
+
 void TransMap::add_edge(const string& a, const string& b, float weight){
     graph.add_edge(a,b,weight);
 }

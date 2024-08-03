@@ -43,8 +43,8 @@ if (debug)
 
     if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
-#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
 #        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
@@ -539,6 +539,7 @@ set(TESTS
         test_graph
         test_graphaligner
         test_heterograph
+        test_vector_heterograph     # non-alpha because is variant of test_heterograph
         test_htslib
         test_hts_gcp
         test_hts_gcp_speed

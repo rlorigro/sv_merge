@@ -59,6 +59,7 @@ public:
     void add_edge(const string& a, const string& b, float weight);
 
     void remove_edge(int64_t a, int64_t b);
+    void remove_node(int64_t id);
 
     /// Accessing
     bool empty() const;

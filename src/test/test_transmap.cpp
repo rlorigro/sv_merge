@@ -249,4 +249,43 @@ int main(){
     });
 
     cerr << "PASS" << '\n';
+
+    // test removal of read nodes and verify that the remaining set of nodes/edges is correct
+
+    auto id = transmap.get_id("read_01");
+    transmap.remove_node(id);
+
+    cerr << "TESTING: removal of read_01" << '\n';
+
+    // first iterate nodes and verify that read_01 is not present
+    bool read_found = false;
+    transmap.for_each_read([&](const string& name, int64_t id){
+        if (name == "read_01"){
+            read_found = true;
+        }
+
+        cerr << name << '\n';
+    });
+
+    if (read_found){
+        throw runtime_error("FAIL: read_01 was not removed");
+    }
+
+    read_found = false;
+
+    // Then iterate all samples and verify that read_01 is not connected to any of them
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            if (transmap.get_node(read_id).name == "read_01"){
+                read_found = true;
+            }
+
+            cerr << sample_name << ',' << transmap.get_node(read_id).name << '\n';
+        });
+    });
+
+    if (read_found){
+        throw runtime_error("FAIL: read_01 was not removed");
+    }
+
 }
