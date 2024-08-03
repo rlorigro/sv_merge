@@ -88,6 +88,80 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 }
 
 
+/**
+ * Construct a model such that each read must be assigned to exactly one path and each sample must have at most 2 paths.
+ * For the sake of modularity, no explicit call to CpModelBuilder::Minimize(vars.cost_n + vars.cost_d) is made here, it
+ * must be made after constructing the model.
+ * @param transmap - TransMap representing the relationship between samples, paths, and reads
+ * @param model - model to be constructed
+ * @param vars - container to hold ORTools objects which are filled in and queried later after solving
+ */
+void construct_r_model(const TransMap& transmap, Model& model, ReadVariables& vars, bool integral){
+    // DEFINE: hap vars
+    transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
+        string name = "h" + std::to_string(hap_id);
+        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+    });
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
+                string hap_name = transmap.get_node(hap_id).name;
+                string read_name = transmap.get_node(read_id).name;
+
+                // DEFINE: read-hap vars
+                string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
+                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
+                auto& r_h = result.first->second;
+
+                // DEFINE: flow
+                vars.read_flow[read_id] += r_h;
+
+                auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
+                if (not success){
+                    throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                }
+
+                // Do only once for each unique pair of sample-hap
+                if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
+                    // DEFINE: sample-hap vars
+                    string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
+                    auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
+                    auto& s_h = result2.first->second;
+
+                    // DEFINE: ploidy
+                    vars.ploidy[sample_id] += s_h;
+
+                    // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
+                    model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
+                }
+
+                // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
+                model.AddLinearConstraint(r_h <= vars.sample_hap.at({sample_id, hap_id}));
+            });
+        });
+    });
+
+    // CONSTRAINT: read assignment (flow)
+    for (const auto& [read_id,f]: vars.read_flow){
+        auto result = vars.reads.emplace(read_id, model.AddVariable(0,1,integral,"r" + std::to_string(read_id) + "_removed"));
+        auto& r = result.first->second;
+
+        // If this read is "on" then the sum of its read-hap variables must be 1, otherwise they are 0
+        model.AddLinearConstraint(f == r);
+
+        // OBJECTIVE: accumulate r cost sum
+        // This will be maximized to retain the most reads while maintaining feasibility
+        vars.cost_r += r;
+    }
+
+    // CONSTRAINT: ploidy (the point of this model)
+    for (const auto& [sample_id,p]: vars.ploidy){
+        model.AddLinearConstraint(p <= 2);
+    }
+}
+
+
 void parse_read_model_solution(const SolveResult& result_n_d, const PathVariables& vars, TransMap& transmap, path output_dir){
     // Open a file
     path out_path = output_dir/"solution.csv";
@@ -129,6 +203,56 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
 
         for (const auto& [read_id, path_id]: to_be_removed){
             transmap.remove_edge(read_id, path_id);
+        }
+    }
+    else{
+        cerr << "WARNING: cannot update transmap for non-optimal solution" << '\n';
+        transmap = {};
+    }
+}
+
+
+void parse_read_feasibility_solution(const SolveResult& result, const ReadVariables& vars, TransMap& transmap, path output_dir){
+    // Open a file
+    path out_path = output_dir/"solution.csv";
+    ofstream file(out_path);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+    }
+
+    // Write header
+    file << "sample,read,path" << '\n';
+
+    unordered_set <int64_t> to_be_removed;
+
+    // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
+    if (result.termination.reason == TerminationReason::kOptimal) {
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                    const Variable& var = vars.reads.at(read_id);
+
+                    if (var.is_integer()){
+                        auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+
+                        if (is_assigned){
+                            file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
+                        }
+                        else{
+                            // Delete all the edges that are not assigned (to simplify iteration later)
+                            to_be_removed.emplace(read_id);
+                        }
+                    }
+                    else{
+                        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+                    }
+                });
+            });
+        });
+
+        for (const auto& read_id: to_be_removed){
+            transmap.remove_node(read_id);
         }
     }
     else{
@@ -920,6 +1044,78 @@ void optimize_reads_with_d_plus_n(
 
     if (integral) {
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    }
+    else{
+        cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
+        transmap = {};
+    }
+}
+
+
+/**
+ * This reproduces the function from hapslap
+ */
+void optimize_read_feasibility(
+        TransMap& transmap,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type
+        ){
+
+    Model model;
+    SolveArguments args;
+    ReadVariables vars;
+
+    args.parameters.threads = n_threads;
+
+    if (time_limit_seconds > 0){
+        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    }
+    else{
+        args.parameters.time_limit = absl::InfiniteDuration();
+    }
+
+    double r = -1;
+
+    bool integral = true;
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+        integral = false;
+    }
+
+    construct_r_model(transmap, model, vars, integral);
+
+    model.Maximize(vars.cost_r);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+    const auto& result = response.value();
+
+    // Write a log containing the solutioninfo and responsestats
+    path out_path = output_dir/"log_optimizer.txt";
+    ofstream file(out_path);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        return;
+    }
+
+    file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';
+    file << result << '\n';
+
+    // Check if the final solution is feasible
+    if (result.termination.reason != TerminationReason::kOptimal){
+        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    // Infer the optimal n and d values of the joint solution
+    r = vars.cost_r.Evaluate(result.variable_values());
+
+    cerr << "n: " << r << '\n';
+
+    if (integral) {
+        parse_read_feasibility_solution(result, vars, transmap, output_dir);
     }
     else{
         cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';

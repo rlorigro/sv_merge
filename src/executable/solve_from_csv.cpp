@@ -62,7 +62,7 @@ using std::ref;
 using namespace sv_merge;
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search){
+void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search, bool use_read_model = false){
     // Make tmp dir
     path output_dir = "/tmp/" + get_uuid();
 
@@ -73,12 +73,25 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
         throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
+    if (use_read_model){
+        cerr << "Using read model" << '\n';
+
+        optimize_read_feasibility(
+                transmap,
+                n_threads,
+                0,
+                output_dir,
+                solver_type
+        );
+    }
+
     if (use_golden_search){
         cerr << "Using golden search...\n";
         optimize_reads_with_d_and_n_using_golden_search(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
     }
     else {
         cerr << "NOT using golden search...\n";
+        cerr << n_threads << " threads\n";
         optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
     }
 }
@@ -141,7 +154,7 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
 }
 
 
-void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search = false){
+void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search = false, bool use_read_model = false){
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -172,7 +185,9 @@ void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n
 
         if (sample != prev_sample and not sample_data.empty()){
             cerr << prev_sample << '\n';
-            optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
+
+            cerr << n_threads << " threads\n";
+            optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
             if (transmap.empty()){
                 cerr << "WARNING: no result for sample: " << prev_sample << '\n';
                 for (const auto& item: sample_data){
@@ -208,7 +223,8 @@ void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n
         prev_sample = sample;
     });
 
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
+    cerr << n_threads << " threads\n";
+    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
 }
 
 
@@ -221,6 +237,7 @@ int main(int argc, char** argv){
     bool samplewise = false;
     bool use_ploidy_constraint = true;
     bool use_golden_search = false;
+    bool use_read_model = false;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
     size_t n_threads = 1;
 
@@ -229,6 +246,7 @@ int main(int argc, char** argv){
     app.add_flag("-s,--samplewise", samplewise, "Optimize each sample separately (default: optimize all samples together)");
     app.add_flag("!--no_ploidy", use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
     app.add_flag("-g,--use_golden_search", use_golden_search, "If invoked, use explicit n-centric optimization with golden search to find joint minimum instead of encoding joint objective in the solver.");
+    app.add_flag("-r,--use_read_model", use_read_model, "If invoked, use read removal model to resolve infeasibility on the sample level before optimizing. Compatible with both default and samplewise solver");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
 
@@ -255,15 +273,23 @@ int main(int argc, char** argv){
     }
 
     if (samplewise){
-        solve_from_csv_samplewise(input_csv, solver_type, use_ploidy_constraint, use_golden_search);
+        solve_from_csv_samplewise(
+                input_csv,
+                solver_type,
+                n_threads,
+                use_ploidy_constraint,
+                use_golden_search,
+                use_read_model
+        );
     }
     else{
-        solve_from_csv(input_csv,
-            solver_type,
-            max_reads_per_sample,
-            n_threads,
-            use_ploidy_constraint,
-            use_golden_search
+        solve_from_csv(
+                input_csv,
+                solver_type,
+                max_reads_per_sample,
+                n_threads,
+                use_ploidy_constraint,
+                use_golden_search
         );
     }
 }

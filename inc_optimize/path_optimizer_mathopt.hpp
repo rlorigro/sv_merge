@@ -50,6 +50,22 @@ public:
     LinearExpression cost_n;
 };
 
+
+/// Data class to contain the variables of the ILP, int64_t IDs intended to be reused from the TransMap
+class ReadVariables{
+public:
+    unordered_map <pair<int64_t,int64_t>, Variable> sample_hap;
+    unordered_map <pair<int64_t,int64_t>, Variable> read_hap;
+
+    unordered_map <int64_t, LinearExpression> read_flow;
+    unordered_map <int64_t, LinearExpression> ploidy;
+    unordered_map <int64_t, Variable> haps;
+    unordered_map <int64_t, Variable> reads;
+
+    LinearExpression cost_r;
+};
+
+
 /**
  * Construct a model such that each read must be assigned to exactly one path and each sample must have at most 2 paths.
  * For the sake of modularity, no explicit call to CpModelBuilder::Minimize(vars.cost_d) is made here, it must be made
@@ -107,5 +123,13 @@ void optimize_reads_with_d_and_n_using_golden_search(
         const SolverType& solver_type,
         bool use_ploidy_constraint = true
         );
+
+void optimize_read_feasibility(
+        TransMap& transmap,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type
+);
 
 }
