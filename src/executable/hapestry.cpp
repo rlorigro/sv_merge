@@ -462,6 +462,11 @@ void merge_thread_fn(
             try {
                 // Optimize
                 SolverType solver_type = SolverType::kGscip;
+
+                // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
+                optimize_read_feasibility(transmap, 1, solver_timeout, subdir, solver_type);
+
+                // Then optimize the reads with the joint model
                 optimize_reads_with_d_plus_n(transmap, d_weight, 1, 1, solver_timeout, subdir, solver_type);
 
                 // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which

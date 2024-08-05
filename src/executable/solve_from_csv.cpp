@@ -5,6 +5,7 @@ using std::runtime_error;
 using std::cerr;
 
 #include "path_optimizer_mathopt.hpp"
+//#include "gurobi_manager.hpp"
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
@@ -76,6 +77,16 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
     if (use_read_model){
         cerr << "Using read model" << '\n';
 
+        // Print the read to path edges
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+            cerr << "Sample: " << sample_name << '\n';
+            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                    cerr << read_id << " -> " << path_id << '\n';
+                });
+            });
+        });
+
         optimize_read_feasibility(
                 transmap,
                 n_threads,
@@ -83,6 +94,16 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
                 output_dir,
                 solver_type
         );
+
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+            cerr << "Sample: " << sample_name << '\n';
+            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                    cerr << read_id << " -> " << path_id << '\n';
+                });
+            });
+        });
+
     }
 
     if (use_golden_search){
@@ -97,7 +118,7 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
 }
 
 
-void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search){
+void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search, bool use_read_model){
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -150,7 +171,7 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
         transmap.remove_edge(edge.first, edge.second);
     }
 
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search);
+    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
 }
 
 
@@ -184,9 +205,7 @@ void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n
         float weight = stof(items[3]);
 
         if (sample != prev_sample and not sample_data.empty()){
-            cerr << prev_sample << '\n';
-
-            cerr << n_threads << " threads\n";
+            cerr << "Sample: " << prev_sample << '\n';
             optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
             if (transmap.empty()){
                 cerr << "WARNING: no result for sample: " << prev_sample << '\n';
@@ -261,6 +280,9 @@ int main(int argc, char** argv){
     else if (solver == "pdlp"){
         solver_type = SolverType::kPdlp;
     }
+    else if (solver == "gurobi"){
+        solver_type = SolverType::kGurobi;
+    }
     else{
         throw runtime_error("ERROR: unknown solver: " + solver);
     }
@@ -289,7 +311,8 @@ int main(int argc, char** argv){
                 max_reads_per_sample,
                 n_threads,
                 use_ploidy_constraint,
-                use_golden_search
+                use_golden_search,
+                use_read_model
         );
     }
 }

@@ -1,8 +1,10 @@
-#include "path_optimizer_mathopt.hpp"
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
+#include "path_optimizer_mathopt.hpp"
+//#include "gurobi_manager.hpp"
 #include "Timer.hpp"
 
 #include <fstream>
+#include <thread>
 #include <map>
 
 using std::map;
@@ -1112,7 +1114,7 @@ void optimize_read_feasibility(
     // Infer the optimal n and d values of the joint solution
     r = vars.cost_r.Evaluate(result.variable_values());
 
-    cerr << "n: " << r << '\n';
+    cerr << "r: " << r << '\n';
 
     if (integral) {
         parse_read_feasibility_solution(result, vars, transmap, output_dir);

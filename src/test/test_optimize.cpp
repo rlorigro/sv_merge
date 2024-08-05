@@ -86,7 +86,7 @@ void test_optimization(){
 
     vector <pair <SolverType,string> > solver_type = {
             {SolverType::kGscip,"kGscip"},
-//            {SolverType::kGurobi,"kGurobi"},
+            {SolverType::kGurobi,"kGurobi"},
 //            {SolverType::kGlop,"kGlop"},
             {SolverType::kCpSat,"kCpSat"},
             {SolverType::kPdlp,"kPdlp"},
