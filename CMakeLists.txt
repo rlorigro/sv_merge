@@ -95,6 +95,7 @@ set(SOURCES
 #        src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
+        src/SimpleAlignment.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
         src/VcfReader.cpp
@@ -548,6 +549,7 @@ set(TESTS
 #        test_minimap2_no_io
         test_shared_memory
         test_signal_handler
+        test_simple_alignment
 #        test_unordered_dense
         test_transmap
         test_wfa2

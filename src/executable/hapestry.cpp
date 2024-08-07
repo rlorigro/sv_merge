@@ -1,4 +1,5 @@
 #include "path_optimizer_mathopt.hpp"
+#include "SimpleAlignment.hpp"
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
@@ -106,6 +107,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
     // First extract the sequences of the paths
     unordered_map<string,string> path_sequences;
+    unordered_map<string,pair<int32_t,int32_t> > path_flank_coords;
 
     transmap.for_each_path([&](const string& name, int64_t id){
         vector <pair <string,bool> > path;
@@ -113,16 +115,33 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
         string& sequence = path_sequences[name];
 
-        // Get the corresponding bdsg handles from the bdsg handlegraph for each step in the path and fetch + concatenate their sequences
+        size_t i = 0;
+        int32_t total_length = 0;
+        int32_t buffer_size = 30;
+
+        // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
         for (const auto& [node_name, reversal]: path){
             nid_t n = stoll(node_name);
             auto h = variant_graph.graph.get_handle(n, reversal);
+            auto l = int32_t(variant_graph.graph.get_length(h));
+
+            if (i == 0 and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].first = max(0, l - buffer_size);
+            }
+
+            if (i == path.size()-1 and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].second = total_length + min(buffer_size, l);
+            }
 
             sequence += variant_graph.graph.get_sequence(h);
+
+            total_length += l;
+            i++;
         }
     });
 
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
+    vector<interval_t> empty_intervals;
 
     transmap.for_each_read([&](const string& name, int64_t id){
         auto& read_sequence = transmap.get_sequence(id);
@@ -133,7 +152,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             }
 
             // TODO: Add length cutoff before aligning
-            aligner.alignEnd2End(read_sequence, path_sequence);
+            aligner.alignEnd2End(path_sequence, read_sequence);
 
             // Extract indel edit distance from cigar
             string cigar = aligner.getCIGAR(false);
@@ -143,27 +162,37 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             int64_t n_indels = 0;
             int64_t n = 0;
 
-            for (auto c: cigar){
-                if (isalpha(c) or c == '='){
-                    if (c == 'I' or c == 'D'){
-                        n_indels += stoll(length_token);
+            SimpleAlignment alignment(path_sequence, read_sequence, cigar);
+
+            auto [a,b] = path_flank_coords[path_name];
+            vector<interval_t> ref_intervals = {{a,b}};
+
+//            cerr << path_name << ' ' << name << ' ' << a << ' ' << b << '\n';
+
+            // Accumulate indels and total length for non-flanking path intervals. We don't want to keep track of indels
+            // in the flanking regions. However, sometimes the aligner squishes them into the flanking regions, so we
+            // have a small buffer inside the flanks to catch these.
+            for_cigar_interval_in_alignment(false, alignment, ref_intervals, empty_intervals,
+                [&](const CigarInterval& intersection, const interval_t& interval) {
+                    // Count indels
+                    if (intersection.code == cigar_char_to_code['I'] or intersection.code == cigar_char_to_code['D']){
+                        n_indels += intersection.length;
                     }
 
-                    n += stoll(length_token);
-                    length_token.clear();
-                }
-                else{
-                    length_token += c;
-                }
-            }
+                    n += intersection.length;
+
+//                    cerr << "R: " << interval.first << " " << interval.second << ' ' << cigar_code_to_char[intersection.code] << " " << intersection.length << '\n';
+                },
+
+                // Do nothing for query intervals
+                [&](const CigarInterval& intersection, const interval_t& interval){return;}
+            );
 
             float indel_portion = float(n_indels) / float(n);
 
-//            cerr << "\tname: " << name << "\tpath_name: "  << path_name << "\tscaled_score: "  << indel_portion << "\tn_indels: "  << n_indels << "\tn: "  << n << '\n';
-
             if ((1.0f - indel_portion) > min_read_hap_identity) {
-                // Store the permil score as a rounded int
-                auto int_score = int64_t(round(indel_portion*1000));
+                // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
+                auto int_score = int64_t(round(indel_portion*1000)) + 1;
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
