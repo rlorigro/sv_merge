@@ -210,7 +210,7 @@ void align_read_to_path(
         WFAlignerGapAffine& aligner,
         interval_t path_evaluation_window,
         string& cigar_result,
-        float& indel_portion_result
+        float& non_match_portion_result
         ){
 
     // TODO: Add length cutoff before aligning
@@ -221,8 +221,7 @@ void align_read_to_path(
     cigar_result = aligner.getCIGAR(false);
     string length_token;
 
-    // TODO: switch to using mismatches if we ever put small vars in the graph
-    int64_t n_indels = 0;
+    int64_t n_non_match = 0;
     int64_t n = 0;
 
     SimpleAlignment alignment(path_sequence, read_sequence, cigar_result);
@@ -239,8 +238,8 @@ void align_read_to_path(
             auto l = intersection.get_op_length();
 
             // Count indels
-            if (intersection.code == cigar_char_to_code['I'] or intersection.code == cigar_char_to_code['D']){
-                n_indels += l;
+            if (intersection.code != cigar_char_to_code['M']){
+                n_non_match += l;
             }
 
             n += l;
@@ -251,18 +250,19 @@ void align_read_to_path(
         [&](const CigarInterval& intersection, const interval_t& interval){return;}
     );
 
-    indel_portion_result = float(n_indels) / float(n);
+    non_match_portion_result = float(n_non_match) / float(n);
 }
 
 
 void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity, int32_t flank_length, path output_dir=""){
-    // TODO: test these params?? why is gap extension greater than mismatch cost?
+    // TODO: test these params??
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
     // First extract the sequences of the paths
     unordered_map<string,string> path_sequences;
     unordered_map<string,pair<int32_t,int32_t> > path_flank_coords;
 
+    // Find the windows that will be evaluated (exclude most of the flanks)
     transmap.for_each_path([&](const string& name, int64_t id){
         vector <pair <string,bool> > path;
         GafAlignment::parse_string_as_path(name, path);
@@ -270,7 +270,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         string& sequence = path_sequences[name];
 
         int32_t total_length = 0;
-        int32_t buffer_size = 30;
+        int32_t buffer_size = 60;
 
         path_flank_coords[name] = {-1,-1};
 
@@ -297,7 +297,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             path_flank_coords[name].first = 0;
         }
         if (path_flank_coords[name].second == -1){
-            path_flank_coords[name].second = total_length;
+            path_flank_coords[name].second = sequence.size();
         }
     });
 
@@ -310,7 +310,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector<interval_t> empty_intervals;
-    float indel_portion;
+    float non_match_portion;
     string cigar;
 
     transmap.for_each_read([&](const string& read_name, int64_t id){
@@ -323,11 +323,11 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
             auto path_evaluation_window = path_flank_coords[path_name];
 
-            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, indel_portion);
+            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, non_match_portion);
 
-            if ((1.0f - indel_portion) > min_read_hap_identity) {
+            if ((1.0f - non_match_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
-                auto int_score = int64_t(round(indel_portion*1000)) + 1;
+                auto int_score = int64_t(round(non_match_portion*1000)) + 1;
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
@@ -345,7 +345,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                         read_sequence,
                         cigar,
                         path_evaluation_window,
-                        indel_portion,
+                        non_match_portion,
                         output_dir
                     );
             }
