@@ -69,6 +69,9 @@ void SimpleAlignment::for_each_cigar_tuple(const function<void(const CigarTuple&
 void SimpleAlignment::for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f){
     CigarInterval c;
 
+    // SimpleAlignment does not support reverse alignments
+    c.is_reverse = false;
+
     // Initialize the cigar interval
     c.query_start = get_query_start();
     c.ref_start = get_ref_start();

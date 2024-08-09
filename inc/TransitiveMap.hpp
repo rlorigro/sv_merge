@@ -94,7 +94,9 @@ public:
     void for_each_read_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read_of_sample(int64_t sample_id, const function<void(int64_t read_id)>& f) const;
     void for_each_read_of_path(int64_t path_id, const function<void(int64_t id)>& f) const;
+    void for_each_variant_of_path(int64_t path_id, const function<void(int64_t id)>& f) const;
 
+    string get_sample_of_read(const string& read_name) const;
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
 

@@ -19,25 +19,33 @@ using std::cout;
 
 void test_simple_alignment() {
     // Define test sequences
-    // ref_seq:   ACGTACGTACGT
-    // query_seq: ACGT-TG-ACGT
-    string ref_seq = "ACGTACGTACGT";
-    string query_seq = "ACGTTGACGT";
+    string ref_seq = "agactacataggttcaagtctccactccagcatcactagctgattgctcaacatccagctactgagcctgtttcctaggagtacaatgaaaatataaggtgctttgtatagtgcctggtacacagcaagtgctccataagtgtttgctgctcttgggtttgGAGGACAATAATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAAttcatgggccgggcgcggtggctcacacctgcaatcccagcactttgggaggccgaggcgggcggatcacgaggtcaggagatagagaccatcctggctaacacggtgaaaccccgtctctactaaaaatacaaaaaattagcttggcgaggtggcgggcgcctgtagtcccagctacttgggaggctgaggcaggagaatggcgtgaaccccagggggcggagcctgcagtgagccgagatcacgccactgcactccagcctgggcgacagcgagactccgtctcaaaaaacaaacaaacaaacaaacaaacaaaaagccaattcatgctgggtgcagtggctcacacctataatcccagcactttgggaggctgaggtgggaggattgctttgagctcaggagagagcagcctgggcaacagggcaaaaacccatctctacaaaaaaaaaatacaaaaaattagccaggtatggtggcgtggtggctcacatctgtggttccagctactcaagaggctgaggcaggggaattacttgaacccaggaggtggaggttgccgtgagccgagattgcaccactgtacttcagcctgggtgacagagtgagaccctgtctcagaaaaaaaaaaaaaaaaaaaaaaaaaaaggccaattcAACAGCCATCTCCTGCAAGTTCTGTGATGCCAGGCcctcaccacaaccctgtgtggtaggtagcactgttcccatttgacagatgaggagactgaggctcagagaggtgacatggccaccttgaggccagaccgcCCCTTCCAGGCCAGGCTCACTAGGCTCCCCTGATGTGGAGCTGCAGGAAAGCACGTGAGGCCCAAG";
+    string query_seq = "AGACTACATAGGTTCAAGTCTCCACTCCAGCATCACTAGCTGATTGCTCAACATCCAGCTACTGAGCCTGTTTCCTAGGAGTACAATGAAAATATAAGGTGCTTTGTATAGTGCCTGGTACACAGCAAGTGCTCCATAAGTGTTTGCTGCTCTTGGGTTTGGAGGACAATAATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCCTGACCCAGTGTAGACAAAGCTGAAGAGGGTGTGTCTCCTCCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAATTCATGGGCCGGGCGCGGTGGCTCACACCTGCAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATAGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCTTGGCGAGGTGGCGGGCGCCTGTAGTCCCAGCTACTTGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCCAGGGGCGGAGCCTGCAGTGAGCCGAGATCACGCCACTGCACTCCAGCCTGGGCGACAGCGAGACTCCGTCTCAAAAAACAAACAAACAAACAAACAAACAAAAAGCCAATTCATGCTGGGTGCAGTGGCTCACACCTATAATCCCAGCACTTTGGGAGGCTGAGGTGGGAGGATTGCTTTGAGCTCAGGAGAGAGCAGCCTGGGCAACAGGGCAAAACCCATCTCTACAAAAAAAAAATACAAAAAATTAGCCAGGTATGGTGGCGTGGTGGCTCACATCTGTGGTTCCAGCTACTCAAGAGGCTGAGGCAGGGGAATTACTTGAACCCAGGAGGTGGAGGTTGCCGTGAGCCGAGATTGCACCACTGTACTTCAGCCTGGGTGACAGAGTGAGACCCTGTCTCAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAGGCCAATTCAACAGCCATCTCCTGCAAGTTCTGTGATGCCAGGCCCTCACCACAACCCTGTGTGGTAGGTAGCACTGTTCCCATTTGACAGATGAGGAGACTGAGGCTCAGAGAGGTGACATGGCCACCTTGAGGCCAGACCGCCCCTTCCAGGCCAGGCTCACTAGGCTCCCCTGATGTGGAGCTGCAGGAAAGCATGTGAGGCCCAAG";
 
     // Use WFA2 to generate the CIGAR string
-    WFAlignerGapAffine aligner(4,2,2,WFAligner::Alignment,WFAligner::MemoryHigh);
+//    WFAlignerGapAffine aligner(4,2,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
-    aligner.alignEnd2End(ref_seq, query_seq);
+//    aligner.alignEnd2End(ref_seq, query_seq);
 
     // Extract indel edit distance from cigar
-    string cigar = aligner.getCIGAR(false);
+//    string cigar = aligner.getCIGAR(false);
+
+    string cigar = "1X235M42I125M1D857M";
 
     // Construct SimpleAlignment
     SimpleAlignment alignment(ref_seq, query_seq, cigar);
 
     // Define ref intervals to be iterated
-    std::vector<interval_t> ref_intervals = {{0, 2}, {3, 8}};
+//    std::vector<interval_t> ref_intervals = {{0,ref_seq.size()}};
+    std::vector<interval_t> ref_intervals = {{170,1049}};
     std::vector<interval_t> query_intervals = {};
+
+    string a;
+    string a_all;
+    string x;
+    string x_all;
+    string b;
+    string b_all;
 
     // Test this function:
     /**
@@ -59,13 +67,31 @@ void test_simple_alignment() {
             ref_intervals,
             query_intervals,
             [&](const CigarInterval& intersection, const interval_t& interval) {
-                cerr << "Ref interval: " << interval.first << " " << interval.second << '\n';
-                cerr << "Intersection: " << cigar_code_to_char[intersection.code] << " " << intersection.length << '\n';
+                cerr << "R: " << intersection.ref_start << " " << intersection.ref_stop << " " << cigar_code_to_char[intersection.code] << " " << intersection.get_op_length() << '\n';
+
+                // use the cigars to construct a formatted alignment
+                get_formatted_sequence_of_cigar_interval(
+                        intersection,
+                        ref_seq,
+                        query_seq,
+                        a,
+                        x,
+                        b
+                );
+
+                a_all += a;
+                x_all += x;
+                b_all += b;
+
             },
             [&](const CigarInterval& intersection, const interval_t& interval) {
                 return;
             }
     );
+
+    cerr << a_all << '\n';
+    cerr << x_all << '\n';
+    cerr << b_all << '\n';
 
     cout << "PASS: SimpleAlignment test" << std::endl;
 }

@@ -147,6 +147,7 @@ public:
     interval_t get_forward_query_interval() const;
     int32_t get_ref_length() const;
     int32_t get_query_length() const;
+    int32_t get_op_length() const;
     void set_ref_interval_forward();
     void set_query_interval_forward();
     void set_ref_interval_reverse();

@@ -1006,11 +1006,11 @@ void optimize_reads_with_d_plus_n(
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
-    // using an arbitrary factor of 32. For n it is extremely unlikely that we ever see a sum greater than 2x the pareto
+    // using an arbitrary factor of 32.
     Variable d_norm = model.AddContinuousVariable(0,32,"d");
-    Variable n_norm = model.AddContinuousVariable(0,2,"n");
+    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
 
-    // Normalize the costs and add 1 to ensure that squaring the normalized values does not make them smaller in the minimization
+    // Normalize the costs
     model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
     model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
 
@@ -1025,7 +1025,6 @@ void optimize_reads_with_d_plus_n(
 
     if (not file.is_open() or not file.good()){
         throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-        return;
     }
 
     file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';

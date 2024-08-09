@@ -353,6 +353,28 @@ void TransMap::for_each_sample_of_read(const string& read_name, const function<v
 }
 
 
+void TransMap::for_each_variant_of_path(int64_t path_id, const function<void(int64_t id)>& f) const{
+    graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t id){
+        f(id);
+    });
+}
+
+
+string TransMap::get_sample_of_read(const string& read_name) const{
+    string result;
+    size_t i=0;
+    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
+        if (i > 0){
+            throw runtime_error("ERROR: multiple samples found for read: " + read_name);
+        }
+        result = neighbor.name;
+        i++;
+    });
+
+    return result;
+}
+
+
 void TransMap::for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const{
     unordered_set<int64_t> visited;
 

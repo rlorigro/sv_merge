@@ -3,6 +3,7 @@
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
 #include "VariantGraph.hpp"
+#include "debug_mode.hpp"
 #include "VcfReader.hpp"
 #include "fasta.hpp"
 #include "Timer.hpp"
@@ -55,6 +56,7 @@ using std::ref;
 
 using namespace sv_merge;
 
+bool HAPESTRY_DEBUG = false;
 
 #include "bindings/cpp/WFAligner.hpp"
 using namespace wfa;
@@ -101,7 +103,159 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
 }
 
 
-void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity){
+void write_alignment_debug_info(
+        const VariantGraph& variant_graph,
+        const string& sample_name,
+        const string& read_name,
+        const string& path_name,
+        const string& path_sequence,
+        const string& read_sequence,
+        const string& cigar,
+        const interval_t& path_evaluation_window,
+        float indel_portion,
+        path output_dir
+        ){
+
+    vector <pair <string,bool> > p;
+    GafAlignment::parse_string_as_path(path_name, p);
+
+    vector<interval_t> ref_intervals;
+    vector<interval_t> empty_intervals;
+
+    // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
+    for (const auto& [node_name, reversal]: p){
+        nid_t n = stoll(node_name);
+        auto h = variant_graph.graph.get_handle(n, reversal);
+        auto l = int32_t(variant_graph.graph.get_length(h));
+
+        if (ref_intervals.empty()){
+            ref_intervals.push_back({0,l});
+        }
+        else{
+            ref_intervals.push_back({ref_intervals.back().second, ref_intervals.back().second + l});
+        }
+    }
+
+    path out_path = output_dir / (sample_name + ".txt");
+
+    if (not exists(output_dir)) {
+        create_directories(output_dir);
+    }
+
+    ofstream file(out_path, ofstream::app);
+
+    string r;
+    string r_all;
+    string x;
+    string x_all;
+    string q;
+    string q_all;
+    string bounds;
+
+    SimpleAlignment alignment(path_sequence, read_sequence, cigar);
+
+    auto [a,b] = path_evaluation_window;
+
+    file << read_name << " " << path_name << ' ' << '\n';
+    file << cigar << '\n';
+
+    interval_t prev_interval = {-1,-1};
+    for_cigar_interval_in_alignment(false, alignment, ref_intervals, empty_intervals,
+        [&](const CigarInterval &intersection, const interval_t &interval) {
+            // use the cigars to construct a formatted alignment
+            get_formatted_sequence_of_cigar_interval(
+                    intersection,
+                    path_sequence,
+                    read_sequence,
+                    r,
+                    q,
+                    x
+            );
+
+            file << cigar_code_to_char[intersection.code] << ' ' << intersection.get_op_length() << '\n';
+
+            r_all += r;
+            x_all += x;
+            q_all += q;
+
+            if (prev_interval.first != -1){
+                if (interval != prev_interval){
+                    bounds.back() = '|';
+                }
+            }
+
+            bounds += string(x.size(), ' ');
+
+            prev_interval = interval;
+        },
+        [&](const CigarInterval &intersection, const interval_t &interval) {
+            return;
+        }
+    );
+
+    file << "path length: " << path_sequence.size() << '\n';
+    file << "read length: " << read_sequence.size() << '\n';
+    file << "indel portion: " << indel_portion << '\n';
+    file << bounds << '\n';
+    file << r_all << '\n';
+    file << x_all << '\n';
+    file << q_all << '\n';
+    file << '\n';
+}
+
+
+void align_read_to_path(
+        const string& read_sequence,
+        const string& path_sequence,
+        WFAlignerGapAffine& aligner,
+        interval_t path_evaluation_window,
+        string& cigar_result,
+        float& indel_portion_result
+        ){
+
+    // TODO: Add length cutoff before aligning
+    aligner.alignEnd2End(path_sequence, read_sequence);
+
+    // Extract indel edit distance from cigar
+    cigar_result.clear();
+    cigar_result = aligner.getCIGAR(false);
+    string length_token;
+
+    // TODO: switch to using mismatches if we ever put small vars in the graph
+    int64_t n_indels = 0;
+    int64_t n = 0;
+
+    SimpleAlignment alignment(path_sequence, read_sequence, cigar_result);
+
+    auto [a,b] = path_evaluation_window;
+    vector<interval_t> ref_intervals = {{a,b}};
+    vector<interval_t> empty_intervals;
+
+    // Accumulate indels and total length for non-flanking path intervals.
+    // We don't want to keep track of indels in the flanking regions. However, sometimes the aligner squishes
+    // them into the flanking regions, so we have a small buffer inside the flanks to catch these.
+    for_cigar_interval_in_alignment(false, alignment, ref_intervals, empty_intervals,
+        [&](const CigarInterval& intersection, const interval_t& interval) {
+            auto l = intersection.get_op_length();
+
+            // Count indels
+            if (intersection.code == cigar_char_to_code['I'] or intersection.code == cigar_char_to_code['D']){
+                n_indels += l;
+            }
+
+            n += l;
+
+        },
+
+        // Do nothing for query intervals
+        [&](const CigarInterval& intersection, const interval_t& interval){return;}
+    );
+
+    indel_portion_result = float(n_indels) / float(n);
+}
+
+
+void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity, int32_t flank_length, path output_dir=""){
     // TODO: test these params?? why is gap extension greater than mismatch cost?
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -115,9 +269,10 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
         string& sequence = path_sequences[name];
 
-        size_t i = 0;
         int32_t total_length = 0;
         int32_t buffer_size = 30;
+
+        path_flank_coords[name] = {-1,-1};
 
         // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
         for (const auto& [node_name, reversal]: path){
@@ -125,25 +280,40 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
             auto h = variant_graph.graph.get_handle(n, reversal);
             auto l = int32_t(variant_graph.graph.get_length(h));
 
-            if (i == 0 and variant_graph.is_dangling_node(n)){
-                path_flank_coords[name].first = max(0, l - buffer_size);
+            if (node_name == path.front().first and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].first = min(l, flank_length - buffer_size);
             }
 
-            if (i == path.size()-1 and variant_graph.is_dangling_node(n)){
-                path_flank_coords[name].second = total_length + min(buffer_size, l);
+            if (node_name == path.back().first and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].second = total_length + l - min(l, flank_length - buffer_size);
             }
 
             sequence += variant_graph.graph.get_sequence(h);
 
             total_length += l;
-            i++;
+        }
+
+        if (path_flank_coords[name].first == -1){
+            path_flank_coords[name].first = 0;
+        }
+        if (path_flank_coords[name].second == -1){
+            path_flank_coords[name].second = total_length;
         }
     });
 
+    // Force all path sequences to uppercase
+    for (auto& [name, seq]: path_sequences){
+        for (size_t i=0; i<seq.size(); i++){
+            seq[i] = toupper(seq[i]);
+        }
+    }
+
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector<interval_t> empty_intervals;
+    float indel_portion;
+    string cigar;
 
-    transmap.for_each_read([&](const string& name, int64_t id){
+    transmap.for_each_read([&](const string& read_name, int64_t id){
         auto& read_sequence = transmap.get_sequence(id);
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
@@ -151,44 +321,9 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 continue;
             }
 
-            // TODO: Add length cutoff before aligning
-            aligner.alignEnd2End(path_sequence, read_sequence);
+            auto path_evaluation_window = path_flank_coords[path_name];
 
-            // Extract indel edit distance from cigar
-            string cigar = aligner.getCIGAR(false);
-            string length_token;
-
-            // TODO: switch to using mismatches if we ever put small vars in the graph
-            int64_t n_indels = 0;
-            int64_t n = 0;
-
-            SimpleAlignment alignment(path_sequence, read_sequence, cigar);
-
-            auto [a,b] = path_flank_coords[path_name];
-            vector<interval_t> ref_intervals = {{a,b}};
-
-//            cerr << path_name << ' ' << name << ' ' << a << ' ' << b << '\n';
-
-            // Accumulate indels and total length for non-flanking path intervals. We don't want to keep track of indels
-            // in the flanking regions. However, sometimes the aligner squishes them into the flanking regions, so we
-            // have a small buffer inside the flanks to catch these.
-            for_cigar_interval_in_alignment(false, alignment, ref_intervals, empty_intervals,
-                [&](const CigarInterval& intersection, const interval_t& interval) {
-                    // Count indels
-                    if (intersection.code == cigar_char_to_code['I'] or intersection.code == cigar_char_to_code['D']){
-                        n_indels += intersection.length;
-                    }
-
-                    n += intersection.length;
-
-//                    cerr << "R: " << interval.first << " " << interval.second << ' ' << cigar_code_to_char[intersection.code] << " " << intersection.length << '\n';
-                },
-
-                // Do nothing for query intervals
-                [&](const CigarInterval& intersection, const interval_t& interval){return;}
-            );
-
-            float indel_portion = float(n_indels) / float(n);
+            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, indel_portion);
 
             if ((1.0f - indel_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
@@ -196,10 +331,124 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+            }
 
-//                cerr << "adding edge: " << name << ',' << path_name << ' ' << indel_portion << ' ' << int_score << '\n';
+            // Write out the full alignments for debugging
+            if (HAPESTRY_DEBUG) {
+                string sample_name = transmap.get_sample_of_read(read_name);
+                write_alignment_debug_info(
+                        variant_graph,
+                        sample_name,
+                        read_name,
+                        path_name,
+                        path_sequence,
+                        read_sequence,
+                        cigar,
+                        path_evaluation_window,
+                        indel_portion,
+                        output_dir
+                    );
             }
         }
+    });
+
+    for (const auto& [a,b,score]: edges_to_add){
+        transmap.add_edge(a,b,score);
+    }
+}
+
+
+void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity, int32_t flank_length, path output_dir=""){
+    // TODO: test these params?? why is gap extension greater than mismatch cost?
+    WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
+
+    // First extract the sequences of the paths
+    unordered_map<string,string> path_sequences;
+    unordered_map<string,pair<int32_t,int32_t> > path_flank_coords;
+
+    transmap.for_each_path([&](const string& name, int64_t id){
+        vector <pair <string,bool> > path;
+        GafAlignment::parse_string_as_path(name, path);
+
+        string& sequence = path_sequences[name];
+
+        int32_t total_length = 0;
+        int32_t buffer_size = 30;
+
+        path_flank_coords[name] = {-1,-1};
+
+        // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
+        for (const auto& [node_name, reversal]: path){
+            nid_t n = stoll(node_name);
+            auto h = variant_graph.graph.get_handle(n, reversal);
+            auto l = int32_t(variant_graph.graph.get_length(h));
+
+            if (node_name == path.front().first and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].first = min(l, flank_length - buffer_size);
+            }
+
+            if (node_name == path.back().first and variant_graph.is_dangling_node(n)){
+                path_flank_coords[name].second = total_length + l - min(l, flank_length - buffer_size);
+            }
+
+            sequence += variant_graph.graph.get_sequence(h);
+
+            total_length += l;
+        }
+
+        if (path_flank_coords[name].first == -1){
+            path_flank_coords[name].first = 0;
+        }
+        if (path_flank_coords[name].second == -1){
+            path_flank_coords[name].second = total_length;
+        }
+    });
+
+    vector <tuple <int64_t,int64_t,float> > edges_to_add;
+    vector<interval_t> empty_intervals;
+    float indel_portion;
+    string cigar;
+
+    transmap.for_each_read([&](const string& read_name, int64_t id){
+        auto& read_sequence = transmap.get_sequence(id);
+
+        transmap.for_each_path_of_read(id, [&](int64_t path_id){
+            string path_name = transmap.get_node(path_id).name;
+            auto& path_sequence = path_sequences[path_name];
+
+            if (read_sequence.empty() or path_sequence.empty()){
+                return;
+            }
+
+            auto path_evaluation_window = path_flank_coords[path_name];
+
+            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, indel_portion);
+
+            if ((1.0f - indel_portion) > min_read_hap_identity) {
+                // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
+                auto int_score = int64_t(round(indel_portion*1000)) + 1;
+
+                // Avoid adding while iterating
+                edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+            }
+
+            // Write out the full alignments for debugging
+            if (HAPESTRY_DEBUG) {
+                string sample_name = transmap.get_sample_of_read(read_name);
+                write_alignment_debug_info(
+                        variant_graph,
+                        sample_name,
+                        read_name,
+                        path_name,
+                        path_sequence,
+                        read_sequence,
+                        cigar,
+                        path_evaluation_window,
+                        indel_portion,
+                        output_dir
+                    );
+            }
+        });
     });
 
     for (const auto& [a,b,score]: edges_to_add){
@@ -357,6 +606,44 @@ void write_solution_to_vcf(
 }
 
 
+void write_sample_path_divergence(VariantGraph& variant_graph, const TransMap& transmap, path output_dir){
+    unordered_map <int64_t, unordered_map <int64_t, vector<float> > > sample_path_divergence;
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                auto [_, score] = transmap.try_get_edge_weight(path_id,read_id);
+                sample_path_divergence[sample_id][path_id].push_back(score);
+            });
+        });
+    });
+
+    path divergence_path = output_dir / "sample_path_divergence.csv";
+    ofstream divergence_file(divergence_path);
+
+    divergence_file << "sample,path,avg_score,variant_ids\n";
+    for (const auto& [sample_id, path_scores]: sample_path_divergence){
+        for (const auto& [path_id, scores]: path_scores){
+            float avg = 0;
+            for (const auto& score: scores){
+                avg += score;
+            }
+            avg /= scores.size();
+
+            string var_ids;
+
+            transmap.for_each_variant_of_path(path_id, [&](int64_t variant_id){
+                string var_name = transmap.get_node(variant_id).name;
+                size_t v = stoull(var_name.substr(1));
+                var_ids += variant_graph.vcf_records.at(v).id + ' ';
+            });
+
+            divergence_file << transmap.get_node(sample_id).name << ',' << transmap.get_node(path_id).name << ',' << avg << ',' << var_ids << '\n';
+        }
+    }
+}
+
+
 void merge_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -481,7 +768,7 @@ void merge_thread_fn(
         }
 
         // Align all reads to all candidate paths and update transmap
-        align_reads_vs_paths(transmap, variant_graph, min_read_hap_identity);
+        align_reads_vs_paths(transmap, variant_graph, min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
         // Write the full transmap to CSV (in the form of annotated edges)
         path output_csv = subdir / "reads_to_paths.csv";
@@ -526,6 +813,11 @@ void merge_thread_fn(
                 cerr << e.what() << '\n';
                 cerr << "ERROR caught at " << region.to_string() << '\n';
             }
+        }
+
+        if (HAPESTRY_DEBUG){
+            write_sample_path_divergence(variant_graph, transmap, subdir);
+            align_read_path_edges_of_transmap(transmap, variant_graph, min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
         }
 
         i = job_index.fetch_add(1);
@@ -666,7 +958,6 @@ void hapestry(
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
-        bool debug,
         bool force_unique_reads,
         bool bam_not_hardclipped
 ){
@@ -918,7 +1209,6 @@ int main (int argc, char* argv[]){
     float min_read_hap_identity = 0.85;
     float d_weight = 1.0;
     bool skip_solve = false;
-    bool debug = false;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
@@ -1003,7 +1293,7 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
-    app.add_flag("--debug", debug, "Invoke this to add more logging and output");
+    app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
@@ -1014,6 +1304,10 @@ int main (int argc, char* argv[]){
     }
     catch (const CLI::ParseError &e) {
         return app.exit(e);
+    }
+
+    if (HAPESTRY_DEBUG){
+        cerr << DEBUG_BANNER;
     }
 
     hapestry(
@@ -1032,7 +1326,6 @@ int main (int argc, char* argv[]){
             min_read_hap_identity,
             d_weight,
             skip_solve,
-            debug,
             force_unique_reads,
             bam_not_hardclipped
     );

@@ -37,12 +37,18 @@ interval_t CigarInterval::get_forward_ref_interval() const{
 
 
 int32_t CigarInterval::get_ref_length() const{
-    return labs(ref_stop-ref_start);
+    return abs(ref_stop-ref_start);
 }
 
 
 int32_t CigarInterval::get_query_length() const{
-    return labs(query_stop-query_start);
+    return abs(query_stop-query_start);
+}
+
+
+int32_t CigarInterval::get_op_length() const{
+    // Return the maximum of the two lengths, since the cigar interval could be a deletion or insertion
+    return max(abs(ref_stop-ref_start), abs(query_stop-query_start));
 }
 
 
