@@ -334,6 +334,7 @@ void compute_graph_evaluation_thread_fn(
 
         // Do the bulk of the Gaf parsing work here
         GafSummary gaf_summary(variant_graph, transmap, true);
+        gaf_summary.flank_buffer = 60;
         gaf_summary.compute(gaf_path);
 
         // Write out all the alignment dependent results for this region
@@ -511,6 +512,9 @@ void evaluate(
     }
 
     if (std::find(vcfs.begin(), vcfs.end(), cluster_by) == vcfs.end()){
+        for (const auto& v: vcfs){
+            cerr << v << '\n';
+        }
         throw runtime_error("ERROR: --cluster_by parameter must match one of the paths provided by --vcfs");
     }
 

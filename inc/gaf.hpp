@@ -139,6 +139,7 @@ public:
     // Transmap holds all sequence-related data (lengths, flanks)
     const TransMap& transmap;
     bool apply_flanks;
+    int32_t flank_buffer = 0;
 
     /**
      * For testing purposes only, does not properly initialize

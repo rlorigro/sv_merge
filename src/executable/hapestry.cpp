@@ -302,6 +302,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     });
 
     // Force all path sequences to uppercase
+    // TODO: remove when VariantGraph supports uppercasing
     for (auto& [name, seq]: path_sequences){
         for (size_t i=0; i<seq.size(); i++){
             seq[i] = toupper(seq[i]);
@@ -352,7 +353,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         }
     });
 
-    for (const auto& [a,b,score]: edges_to_add){
+    for (auto [a,b,score]: edges_to_add){
         transmap.add_edge(a,b,score);
     }
 }

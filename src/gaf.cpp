@@ -7,6 +7,8 @@
 using std::unordered_map;
 using std::function;
 using std::cerr;
+using std::max;
+using std::min;
 
 
 namespace sv_merge {
@@ -686,7 +688,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
     transmap.for_each_read([&](const string& name, int64_t id){
         if (apply_flanks){
             coord_t c = transmap.get_flank_coord(id);
-            length = c.second - c.first;
+            length = c.second - c.first + flank_buffer*2;
         }
         else {
             length = int32_t(transmap.get_sequence(id).size());
@@ -977,8 +979,14 @@ void GafSummary::compute_with_flanks(const path& gaf_path){
 
         query_paths[name].emplace_back(alignment.get_path());
 
-        // The query intervals for each alignment is just the inner flank bounds
-        vector<interval_t> query_intervals_i = {transmap.get_flank_coord(name)};
+        // The query intervals for each alignment is just the inner flank bounds +- the flank buffer.
+        // The flank buffer is unfortunately needed when non-match cigar ops get squished into the flanks,
+        // causing them to be missed by the evaluation
+        interval_t query_interval = transmap.get_flank_coord(name);
+        query_interval.first = max(0,int32_t(query_interval.first-flank_buffer));
+        query_interval.second = min(int32_t(transmap.get_sequence(name).size()),int32_t(query_interval.second+flank_buffer));
+
+        vector<interval_t> query_intervals_i = {query_interval};
 
         // The ref and query iterators both have a cache where they can store previously computed info for the path
         // (to avoid using unordered_map.at() for every cigar)
