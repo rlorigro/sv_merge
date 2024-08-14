@@ -228,7 +228,7 @@ task EvaluateChromosome {
         File monitor_log = work_dir + "/" + chromosome + "_monitor.log"
     }
     runtime {
-        docker: "fcunial/hapestry"
+        docker: "fcunial/hapestry:evaluate"
         cpu: 32
         memory: "128GB"
         disks: "local-disk 128 HDD"
