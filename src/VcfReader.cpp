@@ -62,6 +62,7 @@ const uint8_t VcfReader::TYPE_DUPLICATION = 4;
 const uint8_t VcfReader::TYPE_BREAKEND = 5;
 const uint8_t VcfReader::TYPE_REPLACEMENT = 6;
 const uint8_t VcfReader::TYPE_CNV = 7;
+const uint8_t VcfReader::TYPE_SNP = 8;
 
 const string VcfReader::DEL_STR = "DEL";
 const string VcfReader::DEL_ME_STR = "DEL:ME";
@@ -297,7 +298,7 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         set_sv_length(tmp_buffer);
         const auto alt_length = (int32_t)alt.length();
         if (sv_type==VcfReader::TYPE_INSERTION && !is_symbolic && sv_length!=alt_length-1) sv_length=alt_length-1;
-        if (sv_type==-1 || sv_length<min_sv_length || sv_length>max_sv_length || sv_length==0) {
+        if (sv_type==-1 || sv_length<min_sv_length || sv_length>max_sv_length) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -332,12 +333,13 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
     if (found) sv_type=string_to_svtype_info(tmp_buffer);
     else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
-    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR)) {
+    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) sv_type=VcfReader::TYPE_INSERTION;
         else if (alt_length==1 && ref_length>alt_length) sv_type=VcfReader::TYPE_DELETION;
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
+        else if (ref_length==1 && alt_length==1) sv_type=VcfReader::TYPE_SNP;
         else sv_type=-1;
     }
     else sv_type=-1;
@@ -358,13 +360,16 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
     }
     if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=INT32_MAX;
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_length=INT32_MAX;
-    else {
+    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) sv_length=(int32_t)(alt_length-1);  // INS
         else if (alt_length==1 && ref_length>alt_length) sv_length=(int32_t)(ref_length-1);  // DEL
-        else sv_length=(int32_t)(ref_length-1);  // Replacement
+        else if (ref_length==1 && alt_length==1) sv_length=1;  // SNP
+        else if (ref_length>1) sv_length=(int32_t)(ref_length-1);  // Replacement
+        else sv_length=INT32_MAX;
     }
+    else sv_length=INT32_MAX;
 }
 
 
@@ -766,6 +771,10 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t
     else if (sv_type==VcfReader::TYPE_REPLACEMENT) {
         out.first=pos;
         out.second=pos+sv_length;
+    }
+    else if (sv_type==VcfReader::TYPE_SNP) {
+        out.first=pos-1;
+        out.second=pos;
     }
     else { out.first=INT32_MAX; out.second=INT32_MAX; }
 }

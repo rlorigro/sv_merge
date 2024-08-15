@@ -56,8 +56,10 @@ public:
      * A chromosome might not appear in the map. A chromosome might appear in the map and its list of intervals might be
      * empty. The tandem track is used for adding flanking regions with enough non-tandem sequence to the graph, which
      * is useful for seeding graph alignments: see `build()` for more details.
+     * @param min_variant_length variants that involve less than this number of basepairs are used to build the graph,
+     * but they are not associated with nodes and edges.
      */
-    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {}, bool force_uppercase = false, bool silent = true);
+    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {}, int32_t min_variant_length = 1, bool force_uppercase = false, bool silent = true);
 
     /**
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
@@ -110,7 +112,7 @@ public:
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
 
     /**
-     * Adds a new handle to `graph`.
+     * Adds a new handle to `graph`. Just a simple wrapper of `HashGraph.create_handle()`.
      *
      * @param tmp_buffer temporary space.
      */
@@ -383,6 +385,7 @@ private:
     const unordered_map<string,string>& chromosomes;
     const uint8_t n_chromosomes;
     const unordered_map<string,vector<interval_t>>& tandem_track;
+    int32_t min_variant_length;
     bool force_uppercase;
     bool silent;
     size_t n_vcf_records;
@@ -442,6 +445,8 @@ private:
     /**
      * Adds `(from,to)` to `graph` if not already present, and connects `record_id` to the edge in `edge_to_vcf_record`
      * and `vcf_record_to_edge`.
+     *
+     * @param record_id if `SIZE_MAX`, the record is not associated with the edge.
      */
     void add_nonreference_edge(const handle_t& from, const handle_t& to, size_t record_id);
 
