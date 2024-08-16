@@ -14,6 +14,7 @@ workflow GraphEvaluation {
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
+        File? confident_bed
         Float? small_overlap
         Array[File]? evaluation_bed_small_overlap
         Float? large_overlap
@@ -47,6 +48,7 @@ workflow GraphEvaluation {
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
                 haps_vs_chm13_csv = haps_vs_chm13_csv,
+                confident_bed = confident_bed,
                 small_overlap = small_overlap,
                 evaluation_bed_small_overlap = evaluation_bed_small_overlap,
                 large_overlap = large_overlap,
@@ -76,6 +78,7 @@ task EvaluateChromosome {
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
+        File? confident_bed
         Float? small_overlap
         Array[File]? evaluation_bed_small_overlap
         Float? large_overlap
@@ -95,6 +98,20 @@ task EvaluateChromosome {
         set -euxo pipefail
         mkdir -p ~{work_dir}
         cd ~{work_dir}
+
+        if ~{defined(confident_bed)}
+        then
+            for vcf in ~{sep=" " vcf_gz}; do
+                # use bcftools to subset the vcf by the confident bed
+                bcftools view -T ~{confident_bed} ${vcf} -Ov -o confident.vcf
+
+                # convert to bgzipped vcf and overwrite the input VCF
+                bcftools view -Oz -o ${vcf} confident.vcf
+
+                # index the vcf
+                bcftools index -t ${vcf}
+            done
+        fi
 
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
