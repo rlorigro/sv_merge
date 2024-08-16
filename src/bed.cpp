@@ -35,6 +35,8 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
     int64_t n_delimiters = 0;
     char delimiter = '\t';
 
+    bool carriage_return_found = false;
+
     while (file.get(c)){
 //        cerr << ((c == delimiter) ? string(1,c) : "[tab]") << ' ' << region_name << ' ' << start_token << ' ' << stop_token << '\n';
 
@@ -43,8 +45,10 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
             continue;
         }
 
-        if (c == '\r'){
-            throw runtime_error("ERROR: carriage return not supported: " + bed_path.string());
+        if (c == '\r' and not carriage_return_found){
+            cerr << ("WARNING: carriage return not supported: " + bed_path.string());
+            carriage_return_found = true;
+            continue;
         }
 
         if (c == '\n'){
