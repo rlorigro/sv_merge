@@ -52,6 +52,12 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
         }
 
         if (c == '\n'){
+            // Skip empty lines
+            if (region_name.empty() and start_token.empty() and stop_token.empty()){
+                cerr << "WARNING: skipping empty line found in bed file: " << bed_path.string() << '\n';
+                continue;
+            }
+
             int64_t start = stoll(start_token);
             int64_t stop = stoll(stop_token);
             f(Region(region_name, start, stop));
