@@ -113,7 +113,7 @@ void align_sequences_to_reference_thread_fn(
         path fasta_path = fasta_paths[i];
         path sam_path = fasta_path.parent_path() / (fasta_path.stem().string() + ".sam");
 
-        string command = "minimap2 -a -x map-hifi --eqx -L -t 1 " + ref_fasta.string() + " " + fasta_path.string();
+        string command = "minimap2 -a -x map-hifi --eqx -L -Y -t 1 " + ref_fasta.string() + " " + fasta_path.string();
         run_command(command, sam_path);
 
         // Sort and output as BAM format
