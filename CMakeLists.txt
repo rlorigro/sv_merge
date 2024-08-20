@@ -89,6 +89,7 @@ set(SOURCES
         src/fetch.cpp
         src/gaf.cpp
         src/Graph.cpp
+        src/HalfInterval.cpp
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
