@@ -1,5 +1,10 @@
+#include "HalfInterval.hpp"
 #include "fetch.hpp"
 #include <span>
+
+#include "interval_tree.hpp"
+
+using lib_interval_tree::interval_tree_t;
 
 namespace sv_merge{
 
@@ -97,20 +102,24 @@ void update_coord(
             if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_start = cigar.ref_start;
+                cerr << "new start: " << cigar.ref_start << '\n';
             }
             if (start < coord.query_start){
                 coord.query_start = start;
                 coord.ref_stop = cigar.ref_stop;
+                cerr << "new stop: " << cigar.ref_stop << '\n';
             }
         }
         else{
             if (start < coord.query_start){
                 coord.query_start = start;
                 coord.ref_start = cigar.ref_start;
+                cerr << "new start: " << cigar.ref_start << '\n';
             }
             if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_stop = cigar.ref_stop;
+                cerr << "new stop: " << cigar.ref_stop << '\n';
             }
         }
     }
@@ -187,10 +196,16 @@ void extract_subregions_from_sample_contig(
                 string name;
                 alignment.get_query_name(name);
 
+                cerr << name << '\n';
+
                 // The region of interest is defined in reference coordinate space
                 // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
+
+                cerr << "overlapping regions\n";
                 for (auto& r: overlapping_regions){
+                    cerr << r.start << ',' << r.stop << '\n';
+
                     ref_intervals.emplace_back(r.start, r.stop);
 
                     // Find/or create coord for this region
@@ -232,10 +247,17 @@ void extract_subregions_from_sample_contig(
                     }
                 }
 
-                // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-                for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
-                    [&](const CigarInterval& intersection, const interval_t& interval) {
+                // Occasionally the flanks of a window will overlap with a prev/next window, so the cigar iterator's
+                // assumption will not hold. For this reason, we de-overlap the ref_intervals first and then iterate
+                // the cigars
+                vector<interval_t> non_overlapping_ref_intervals;
+                unordered_map<interval_t, size_t> mapping;
 
+                deoverlap_intervals(ref_intervals, non_overlapping_ref_intervals, mapping);
+
+                // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
+                for_cigar_interval_in_alignment(unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
+                    [&](const CigarInterval& intersection, const interval_t& interval) {
                         // This will not catch every instance of a hardclip, but if there is one in the window it will throw
                         if (intersection.is_hardclip()){
                             throw runtime_error("ERROR: query-oriented direct-from-alignment read fetching cannot be accomplished"
@@ -248,7 +270,7 @@ void extract_subregions_from_sample_contig(
                             return;
                         }
 
-    //                cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
@@ -263,6 +285,8 @@ void extract_subregions_from_sample_contig(
 
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
     for (auto& [region, query_coords]: query_coords_per_region){
+        cerr << region.to_string() << '\n';
+
         for (auto& [name, coords]: query_coords){
             bool spanning = (coords.ref_start == region.start and coords.ref_stop == region.stop);
 
@@ -302,7 +326,7 @@ void extract_subregions_from_sample_contig(
             auto i = coords.query_start;
             auto l = coords.query_stop - coords.query_start;
 
-//                cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
+            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
             auto& result = sample_to_region_reads.at(sample_name).at(region);
 
@@ -505,8 +529,16 @@ void extract_subregion_coords_from_sample(
                     }
                 }
 
+                // Occasionally the flanks of a window will overlap with a prev/next window, so the cigar iterator's
+                // assumption will not hold. For this reason, we de-overlap the ref_intervals first and then iterate
+                // the cigars
+                vector<interval_t> non_overlapping_ref_intervals;
+                unordered_map<interval_t, size_t> mapping;
+
+                deoverlap_intervals(ref_intervals, non_overlapping_ref_intervals, mapping);
+
                 // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-                for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+                for_cigar_interval_in_alignment(unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
                     [&](const CigarInterval& intersection, const interval_t& interval) {
                         // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
                         // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
@@ -655,8 +687,16 @@ void extract_flanked_subregion_coords_from_sample_contig(
                     }
                 }
 
+                // Occasionally the flanks of a window will overlap with a prev/next window, so the cigar iterator's
+                // assumption will not hold. For this reason, we de-overlap the ref_intervals first and then iterate
+                // the cigars
+                vector<interval_t> non_overlapping_ref_intervals;
+                unordered_map<interval_t, size_t> mapping;
+
+                deoverlap_intervals(ref_intervals, non_overlapping_ref_intervals, mapping);
+
                 // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-                for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+                for_cigar_interval_in_alignment(unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
                     [&](const CigarInterval& intersection, const interval_t& interval) {
                         // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
                         // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.

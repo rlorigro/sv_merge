@@ -1,3 +1,4 @@
+#include "HalfInterval.hpp"
 #include "gaf.hpp"
 
 #include <unordered_map>
@@ -708,13 +709,6 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
         f(name, length, identity_and_coverage.first, identity_and_coverage.second);
     });
 }
-
-
-HalfInterval::HalfInterval(size_t id, int32_t position, bool is_start):
-        id(id),
-        position(position),
-        is_start(is_start)
-{}
 
 
 /**
