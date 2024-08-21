@@ -226,6 +226,10 @@ void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse
 }
 
 
+/**
+ * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
+ * graph.
+ */
 void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -233,6 +237,7 @@ void compute_graph_evaluation_thread_fn(
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
+        int32_t min_sv_length,
         const string& label,
         const path& output_dir,
         int32_t flank_length,
@@ -260,7 +265,7 @@ void compute_graph_evaluation_thread_fn(
         create_directories(subdir);
         path gfa_path = subdir / "graph.gfa";
         path fasta_filename = subdir / "haplotypes.fasta";
-        VariantGraph variant_graph(ref_sequences, contig_tandems);
+        VariantGraph variant_graph(ref_sequences, contig_tandems, min_sv_length);
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)){
@@ -431,6 +436,10 @@ void compute_graph_evaluation_thread_fn(
 }
 
 
+/**
+ * @param min_sv_length only variants that affect at least this number of bps are annotated; shorter variants are used
+ * to build graphs, but they are not annotated or printed in output.
+ */
 void compute_graph_evaluation(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -452,7 +461,7 @@ void compute_graph_evaluation(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = min_sv_length;
+    vcf_reader.min_sv_length = 1;
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
@@ -515,6 +524,7 @@ void compute_graph_evaluation(
                                      std::cref(ref_sequences),
                                      std::cref(regions),
                                      std::cref(vcf_reader),
+                                     min_sv_length,
                                      std::cref(label),
                                      std::cref(output_dir),
                                      flank_length,
@@ -853,7 +863,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--min_sv_length",
             min_sv_length,
-            "Skip all variants less than this length (bp)")
+            "Only variants that affect at least this number of bps are annotated. Shorter variants are used to build graphs, but they are not annotated or printed in output.")
             ->required();
 
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");

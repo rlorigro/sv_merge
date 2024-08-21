@@ -82,6 +82,7 @@ workflow multiannotate {
             confident_bed = confident_bed,
             bam_not_hardclipped = false,
             interval_max_length = max_length,
+            min_sv_length = min_length,
             flank_length = flank_length,
             n_threads = n_threads,
             tandems_bed = tandems_bed,

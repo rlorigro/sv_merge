@@ -645,6 +645,10 @@ void write_sample_path_divergence(VariantGraph& variant_graph, const TransMap& t
 }
 
 
+/**
+ * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
+ * graph.
+ */
 void merge_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -653,6 +657,7 @@ void merge_thread_fn(
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
         const path& output_dir,
+        int32_t min_sv_length,
         int32_t flank_length,
         size_t graphaligner_timeout,
         size_t solver_timeout,
@@ -692,7 +697,7 @@ void merge_thread_fn(
         path gfa_path = subdir / "graph.gfa";
         path fasta_filename = subdir / "sequences.fasta";
 
-        VariantGraph variant_graph(ref_sequences, contig_tandems);
+        VariantGraph variant_graph(ref_sequences, contig_tandems, min_sv_length);
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
         if (variant_graph.would_graph_be_nontrivial(records)) {
@@ -826,6 +831,10 @@ void merge_thread_fn(
 }
 
 
+/**
+ * @param min_sv_length only variants that affect at least this number of bps are merged; shorter variants are used to
+ * build graphs and haplotypes, but they are not merged or printed in output.
+ */
 void merge_variants(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -851,7 +860,7 @@ void merge_variants(
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
     vcf_reader.min_qual = numeric_limits<float>::min();
-    vcf_reader.min_sv_length = min_sv_length;
+    vcf_reader.min_sv_length = 1;  // Every record is loaded and used to build the graph, including SNPs/small indels.
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
@@ -922,6 +931,7 @@ void merge_variants(
                                      std::cref(regions),
                                      std::cref(vcf_reader),
                                      std::cref(output_dir),
+                                     min_sv_length,  // Only SVs are associated with graph edges
                                      flank_length,
                                      graphaligner_timeout,
                                      solver_timeout,
@@ -1268,7 +1278,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--min_sv_length",
             min_sv_length,
-            "Skip all variants less than this length (bp)")
+            "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output.")
             ->required();
 
     app.add_option(

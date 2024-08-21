@@ -431,7 +431,7 @@ public:
         const size_t N_WINDOWS = windows_to_print.size();
         const string SUFFIX = ".txt";
         size_t i, j;
-        size_t truth_tool;
+        int32_t truth_tool;
         vector<size_t> tmp_vector_1;
         vector<double> tmp_vector_2;
         vector<vector<ofstream>> out;
