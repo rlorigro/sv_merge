@@ -192,11 +192,12 @@ void extract_subregions_from_sample_contig(
                 string name;
                 alignment.get_query_name(name);
 
+//                cerr << name << '\n';
+
                 // The region of interest is defined in reference coordinate space
                 // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
 
-                cerr << "overlapping regions\n";
                 for (auto& r: overlapping_regions){
                     ref_intervals.emplace_back(r.start, r.stop);
 

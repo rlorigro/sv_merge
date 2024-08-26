@@ -1164,18 +1164,26 @@ void hapestry(
             }
         }
 
+        bool found_header = false;
+
         // Copy over the mutable parts of the header and then the main contents of the filtered VCF
         // Will be empty if no regions were processed
         for (size_t i=0; i<regions.size(); i++){
             const auto& region = regions[i];
             path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
 
+            // Skip if the file does not exist
+            if (not exists(sub_vcf)){
+                continue;
+            }
+
             ifstream file(sub_vcf);
             while (getline(file, line)){
                 if (line.starts_with('#')){
                     if (not line.starts_with("##fileformat")){
-                        if (i == 0){
+                        if (not found_header){
                             out_file << line << '\n';
+                            found_header = true;
                         }
                     }
                 }
