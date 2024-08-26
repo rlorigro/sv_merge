@@ -540,6 +540,7 @@ set(TESTS
         test_gaf_summary
         test_graph
         test_graphaligner
+        test_halfinterval
         test_heterograph
         test_vector_heterograph     # non-alpha because is variant of test_heterograph
         test_htslib

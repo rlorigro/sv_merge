@@ -13,6 +13,10 @@ HalfInterval::HalfInterval(size_t id, int32_t position, bool is_start) :
 
 void deoverlap_intervals(const vector<interval_t>& intervals, vector<interval_t>& result_intervals, unordered_map<interval_t, size_t>& result_mapping){
     if (intervals.size() <= 1){
+        result_intervals = intervals;
+        for (size_t i=0; i<intervals.size(); i++){
+            result_mapping[intervals[i]] = i;
+        }
         return;
     }
 
@@ -46,7 +50,7 @@ void deoverlap_intervals(const vector<interval_t>& intervals, vector<interval_t>
     for (size_t i=1; i<half_intervals.size(); i++){
         const auto& h = half_intervals[i];
 
-//        cerr << "-- " << h.position << ',' << (h.is_start ? '[' : ')') << ',' << h.id << '\n';
+//        std::cerr << "-- " << h.position << ',' << (h.is_start ? '[' : ')') << ',' << h.id << '\n';
 
         // Every time an element is added or removed, update the vector of intersected_intervals:
         //  1. Extend the previous interval
