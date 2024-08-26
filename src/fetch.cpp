@@ -102,24 +102,20 @@ void update_coord(
             if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_start = cigar.ref_start;
-                cerr << "new start: " << cigar.ref_start << '\n';
             }
             if (start < coord.query_start){
                 coord.query_start = start;
                 coord.ref_stop = cigar.ref_stop;
-                cerr << "new stop: " << cigar.ref_stop << '\n';
             }
         }
         else{
             if (start < coord.query_start){
                 coord.query_start = start;
                 coord.ref_start = cigar.ref_start;
-                cerr << "new start: " << cigar.ref_start << '\n';
             }
             if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_stop = cigar.ref_stop;
-                cerr << "new stop: " << cigar.ref_stop << '\n';
             }
         }
     }
@@ -196,16 +192,12 @@ void extract_subregions_from_sample_contig(
                 string name;
                 alignment.get_query_name(name);
 
-                cerr << name << '\n';
-
                 // The region of interest is defined in reference coordinate space
                 // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
 
                 cerr << "overlapping regions\n";
                 for (auto& r: overlapping_regions){
-                    cerr << r.start << ',' << r.stop << '\n';
-
                     ref_intervals.emplace_back(r.start, r.stop);
 
                     // Find/or create coord for this region
@@ -270,8 +262,6 @@ void extract_subregions_from_sample_contig(
                             return;
                         }
 
-                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
-
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
                             auto& coord = query_coords_per_region.at(region).at(name);
@@ -285,8 +275,6 @@ void extract_subregions_from_sample_contig(
 
     // Finally trim the sequences and insert the subsequences into a map which has keys pre-filled
     for (auto& [region, query_coords]: query_coords_per_region){
-        cerr << region.to_string() << '\n';
-
         for (auto& [name, coords]: query_coords){
             bool spanning = (coords.ref_start == region.start and coords.ref_stop == region.stop);
 
@@ -325,8 +313,6 @@ void extract_subregions_from_sample_contig(
 
             auto i = coords.query_start;
             auto l = coords.query_stop - coords.query_start;
-
-            cerr << name << ' ' << coords.is_reverse << ' ' << l << ' ' << coords.query_start << ',' << coords.query_stop << '\n';
 
             auto& result = sample_to_region_reads.at(sample_name).at(region);
 
