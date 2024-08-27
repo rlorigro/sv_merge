@@ -267,6 +267,7 @@ void compute_graph_evaluation_thread_fn(
         const VcfReader& vcf_reader,
         const path& output_dir,
         int32_t flank_length,
+        size_t graphaligner_timeout,
         bool cluster,
         atomic<size_t>& job_index
 ){
@@ -320,7 +321,7 @@ void compute_graph_evaluation_thread_fn(
 
         // Run GraphAligner and check how long it takes, if it times out
         Timer t;
-        bool success = run_command(command, false, 90);
+        bool success = run_command(command, false, graphaligner_timeout);
         string time_csv = t.to_csv();
 
         write_graphaligner_time_log(input_subdir, vcf_name_prefix, time_csv, success);
@@ -379,6 +380,7 @@ void compute_graph_evaluation(
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t min_sv_length,
+        size_t graphaligner_timeout,
         bool cluster,
         const path& output_dir
         ){
@@ -461,6 +463,7 @@ void compute_graph_evaluation(
                                      std::cref(vcf_reader),
                                      std::cref(output_dir),
                                      flank_length,
+                                     graphaligner_timeout,
                                      cluster,
                                      std::ref(job_index)
                 );
@@ -489,6 +492,7 @@ void evaluate(
         int32_t interval_max_length,
         int32_t min_sv_length,
         int32_t n_threads,
+        size_t graphaligner_timeout,
         bool debug,
         bool force_unique_reads
 ){
@@ -658,6 +662,7 @@ void evaluate(
                 flank_length,
                 interval_max_length,
                 min_sv_length,
+                graphaligner_timeout,
                 cluster,
                 staging_dir
         );
@@ -680,6 +685,7 @@ int main (int argc, char* argv[]){
     int32_t interval_max_length = 15000;
     int32_t min_sv_length = 1;
     int32_t n_threads = 1;
+    size_t graphaligner_timeout = 120;
     bool debug = false;
     bool force_unique_reads = false;
 
@@ -749,6 +755,11 @@ int main (int argc, char* argv[]){
             min_sv_length,
             "Skip all variants less than this length (bp)");
 
+    app.add_option(
+            "--graphaligner_timeout",
+            graphaligner_timeout,
+            "Maximum time to spend on GraphAligner (seconds)");
+
     app.add_flag("--debug", debug, "Invoke this to add more logging and output");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
@@ -769,6 +780,7 @@ int main (int argc, char* argv[]){
         interval_max_length,
         min_sv_length,
         n_threads,
+        graphaligner_timeout,
         debug,
         force_unique_reads
     );

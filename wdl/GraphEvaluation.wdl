@@ -11,6 +11,7 @@ workflow GraphEvaluation {
         Array[File] vcf_tbi
         Int interval_max_length
         Int flank_length
+        Int graphaligner_timeout = 120
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
@@ -34,6 +35,7 @@ workflow GraphEvaluation {
         evaluation_bed_large_overlap: "For every BED file in this list: use only windows with at least `large_overlap` fraction of bases covered by intervals in the BED."
         chromosomes: "Use only these chromosomes. Each chromosome is processed in parallel and produces separate evaluation files."
         force_unique_reads: "Intended for resolving collisions in identically named sequences across samples. If true, then force sequence names to have a suffix _[sample_name] where sample_name is the unique name provided in the BAM CSV for each BAM"
+        graphaligner_timeout: "Maximum time in seconds to allow for graph alignment step"
     }
 
     scatter(chromosome in chromosomes) {
@@ -45,6 +47,7 @@ workflow GraphEvaluation {
                 vcf_tbi = vcf_tbi,
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,
+                graphaligner_timeout = graphaligner_timeout,
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
                 haps_vs_chm13_csv = haps_vs_chm13_csv,
@@ -75,6 +78,7 @@ task EvaluateChromosome {
         Array[File] vcf_tbi
         Int interval_max_length
         Int flank_length
+        Int graphaligner_timeout
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
@@ -162,6 +166,7 @@ task EvaluateChromosome {
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length} \
+        --graphaligner_timeout ~{graphaligner_timeout} \
         --debug ~{if force_unique_reads then "--force_unique_reads" else ""}
 
         # Ensure write buffers are flushed to disk
