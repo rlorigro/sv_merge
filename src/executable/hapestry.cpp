@@ -495,6 +495,13 @@ void write_region_subsequences_to_file_thread_fn(
 
 
 void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unordered_map<string,int64_t>& path_coverage){
+    // Despite removing duplicate variants, it is still possible for a duplicate path sequence to exist with a different
+    // combination of variants. In this case, we reassign any duplicates arbitrarily to the first path iterated
+
+    // This object stores path_sequence -> path_name, and is used to reassign paths to the first path with the same
+    // sequence
+    unordered_map<string,string> path_reassignment;
+
     // Accumulate coverage of spanning paths in the GAF
     for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
         auto& path = alignment.get_path();
@@ -518,7 +525,29 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 
         auto path_name = alignment.get_path_string();
 
-        path_coverage[path_name]++;
+        string sequence;
+
+        // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
+        for (const auto& [node_name, reversal]: path) {
+            nid_t n = stoll(node_name);
+            auto h = variant_graph.graph.get_handle(n, reversal);
+            sequence += variant_graph.graph.get_sequence(h);
+        }
+
+        // Check if this path has been seen before
+        auto result = path_reassignment.find(sequence);
+        bool is_new = (result == path_reassignment.end());
+
+        if (is_new){
+            // Add the path to the reassignment map and increment its coverage
+            path_reassignment.emplace(sequence, alignment.get_path_string());
+            path_coverage[path_name]++;
+        }
+        else{
+            // Arbitrarily reassign the path to the first path with the same sequence
+            path_coverage[result->second]++;
+        }
+
     });
 }
 
