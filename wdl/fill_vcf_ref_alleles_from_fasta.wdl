@@ -38,7 +38,7 @@ task FillFromFasta {
     }
 
     runtime {
-        docker: "staphpb/bcftools:latest"
+        docker: "staphb/bcftools:latest"
         memory: "4G"
         cpu: 1
     }
