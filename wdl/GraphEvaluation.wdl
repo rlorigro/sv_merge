@@ -20,6 +20,7 @@ workflow GraphEvaluation {
         Array[File]? evaluation_bed_large_overlap
         Boolean force_unique_reads
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
+        String docker
     }
     parameter_meta {
         vcf_id: "Distinct name assigned to each VCF to be evaluated"
@@ -52,7 +53,8 @@ workflow GraphEvaluation {
                 large_overlap = large_overlap,
                 evaluation_bed_large_overlap = evaluation_bed_large_overlap,
                 chromosome = chromosome,
-                force_unique_reads = force_unique_reads
+                force_unique_reads = force_unique_reads,
+                docker = docker
         }
     }
 
@@ -82,6 +84,7 @@ task EvaluateChromosome {
         Array[File]? evaluation_bed_large_overlap
         String chromosome
         Boolean force_unique_reads
+        String docker
     }
     parameter_meta {
     }
@@ -228,7 +231,7 @@ task EvaluateChromosome {
         File monitor_log = work_dir + "/" + chromosome + "_monitor.log"
     }
     runtime {
-        docker: "fcunial/hapestry:evaluate"
+        docker: docker
         cpu: 32
         memory: "128GB"
         disks: "local-disk 128 HDD"
