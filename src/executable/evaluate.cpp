@@ -334,7 +334,7 @@ void compute_graph_evaluation_thread_fn(
 
         // Do the bulk of the Gaf parsing work here
         GafSummary gaf_summary(variant_graph, transmap, true);
-        gaf_summary.flank_buffer = 60;
+        gaf_summary.flank_buffer = 40;
         gaf_summary.compute(gaf_path);
 
         // Write out all the alignment dependent results for this region
