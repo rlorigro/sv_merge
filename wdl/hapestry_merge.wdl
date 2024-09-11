@@ -42,7 +42,7 @@ task merge {
     }
 
     String docker_dir = "/hapestry"
-    String output_dir = "output/"
+    String output_dir = "output"
 
     command <<<
         git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
@@ -91,10 +91,15 @@ task merge {
 
        # Ensure write buffers are flushed to disk
        sync
+       tree ~{output_dir}/ > files.txt
 
-        # tarball only the csv files in the output subdirectories
-        find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
-        find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
+       # tarball only the csv files in the output subdirectories
+       find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
+       tar -cvzf ~{output_dir}/non_sequence_data.tar.gz -T list.txt
+       rm -f list.txt
+       find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) > list.txt
+       tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
+       rm -f list.txt
 
        # Ensure write buffers are flushed to disk
        sync
@@ -139,6 +144,7 @@ task merge {
     output {
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
+        File files_list = "files.txt"
         File? monitoring_log = "monitoring.log"
     }
 }
