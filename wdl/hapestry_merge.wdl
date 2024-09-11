@@ -89,9 +89,15 @@ task merge {
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
         ~{if skip_solve then "--skip_solve" else ""}
 
+       # Ensure write buffers are flushed to disk
+       sync
+
         # tarball only the csv files in the output subdirectories
         find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
         find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
+
+       # Ensure write buffers are flushed to disk
+       sync
 
         # if the outputs are empty, create empty placeholders
         if [ ! -s ~{output_dir}/non_sequence_data.tar.gz ]; then
