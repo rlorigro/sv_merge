@@ -146,6 +146,15 @@ task EvaluateChromosome {
         # Evaluating all VCFS
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
+
+        function monitorBED() {
+            while true; do
+                head -n 100 ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed
+                sleep 10
+            done
+        }
+        monitorBED &
+
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
             --n_threads ${N_THREADS} \
             --output_dir ~{work_dir}/${EVALUATION_NAME} \
