@@ -102,7 +102,8 @@ task EvaluateChromosome {
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
         N_CORES_PER_SOCKET="$(lscpu | grep '^Core(s) per socket:' | awk '{print $NF}')"
-        N_THREADS=$(( ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
+        N_THREADS="8"
+        #$(( ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
 
         # Downloading all the calls in $chromosome$.
         export GCS_OAUTH_TOKEN=$(gcloud auth print-access-token)
