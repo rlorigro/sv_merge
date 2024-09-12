@@ -85,6 +85,7 @@ task EvaluateChromosome {
         String chromosome
         Boolean force_unique_reads
         String docker
+        File? force_windows_bed
     }
     parameter_meta {
     }
@@ -136,20 +137,27 @@ task EvaluateChromosome {
         bash ~{docker_dir}/vm_local_monitoring_script.sh &> ${MONITOR_FILE} &
         MONITOR_JOB=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
 
+        if ~{defined(force_windows_bed)} ; then
+            FORCE_WINDOWS_FLAG="--windows ~{force_windows_bed}"
+        else
+            FORCE_WINDOWS_FLAG=""
+        fi
+
         # Evaluating all VCFS
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
-        --n_threads ${N_THREADS} \
-        --output_dir ~{work_dir}/${EVALUATION_NAME} \
-        --bam_csv ~{haps_vs_chm13_csv} \
-        --vcfs ${VCFS} \
-        --cluster_by ${CLUSTER_BY} \
-        --tandems ~{tandems_bed} \
-        --ref ~{reference_fa} \
-        --interval_max_length ~{interval_max_length} \
-        --flank_length ~{flank_length} \
-        --debug ~{if force_unique_reads then "--force_unique_reads" else ""}
+            --n_threads ${N_THREADS} \
+            --output_dir ~{work_dir}/${EVALUATION_NAME} \
+            --bam_csv ~{haps_vs_chm13_csv} \
+            --vcfs ${VCFS} \
+            --cluster_by ${CLUSTER_BY} \
+            --tandems ~{tandems_bed} \
+            --ref ~{reference_fa} \
+            --interval_max_length ~{interval_max_length} \
+            --flank_length ~{flank_length} \
+            --debug ~{if force_unique_reads then "--force_unique_reads" else ""} \
+            ${FORCE_WINDOWS_FLAG}
 
         # Ensure write buffers are flushed to disk
         sync
