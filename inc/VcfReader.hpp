@@ -79,7 +79,7 @@ public:
     /**
      * Properties that are already known after the first scan of a VCF line
      */
-    bool is_high_quality, is_pass, is_symbolic;
+    bool is_high_quality, is_pass, is_symbolic, missing_alt;
     int8_t sv_type;  // -1 = unsupported type
     int32_t sv_length;  // Always >0. MAX = the length of the SV could not be inferred.
     int32_t n_alts;  // >1 iff the site is multiallelic
@@ -179,6 +179,8 @@ public:
     void get_samples_with_alt(set<int32_t>& out);
 
     bool is_alt_symbolic() const;
+
+    bool is_alt_missing() const;
 
     /**
      * @return 0=single breakend without inserted sequence; 1=with inserted sequence; 2=not a single breakend.
@@ -324,8 +326,9 @@ public:
     static const uint8_t N_NONSAMPLE_FIELDS_VCF;  // Including FORMAT
     static const char LINE_END;
     static const char VCF_SEPARATOR;
-    static const char VCF_MISSING_CHAR;
-    static const string VCF_MISSING_STRING;
+    static const char VCF_MISSING_CHAR_1;
+    static const string VCF_MISSING_STRING_1;
+    static const string VCF_MISSING_STRING_2;
     static const char SYMBOLIC_CHAR_OPEN;
     static const char SYMBOLIC_CHAR_CLOSE;
     static const char BREAKEND_CHAR_OPEN;

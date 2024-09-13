@@ -1042,7 +1042,7 @@ void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
     const string DEFAULT_FILTER = VcfReader::PASS_STR;
     const string DEFAULT_FORMAT = "GT";
     const string DEFAULT_SAMPLE = "0/1";
-    const string SUFFIX_REPLACEMENT = VcfReader::VCF_SEPARATOR+DEFAULT_QUAL+VcfReader::VCF_SEPARATOR+DEFAULT_FILTER+VcfReader::VCF_SEPARATOR+VcfReader::VCF_MISSING_CHAR+VcfReader::VCF_SEPARATOR+DEFAULT_FORMAT+VcfReader::VCF_SEPARATOR+DEFAULT_SAMPLE+'\n';
+    const string SUFFIX_REPLACEMENT = VcfReader::VCF_SEPARATOR+DEFAULT_QUAL+VcfReader::VCF_SEPARATOR+DEFAULT_FILTER+VcfReader::VCF_SEPARATOR+VcfReader::VCF_MISSING_CHAR_1+VcfReader::VCF_SEPARATOR+DEFAULT_FORMAT+VcfReader::VCF_SEPARATOR+DEFAULT_SAMPLE+'\n';
     const string SUFFIX_BND = VcfReader::VCF_SEPARATOR+DEFAULT_QUAL+VcfReader::VCF_SEPARATOR+DEFAULT_FILTER+VcfReader::VCF_SEPARATOR+"SVTYPE=BND"+VcfReader::VCF_SEPARATOR+DEFAULT_FORMAT+VcfReader::VCF_SEPARATOR+DEFAULT_SAMPLE+'\n';
     char pos_base;
     int32_t pos;
@@ -1158,7 +1158,7 @@ void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
                     if (to==destination) break;
                     from=to;
                 }
-                outstream << source_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << pos_base << new_sequence << VcfReader::VCF_MISSING_CHAR << SUFFIX_BND;
+                outstream << source_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << pos_base << new_sequence << VcfReader::VCF_MISSING_CHAR_1 << SUFFIX_BND;
             }
             else {
                 pos=source_coordinate.second+1;  // One-based
@@ -1171,7 +1171,7 @@ void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
                     from=to;
                 }
                 reverse_complement(new_sequence);
-                outstream << source_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << VcfReader::VCF_MISSING_CHAR << new_sequence << pos_base << SUFFIX_BND;
+                outstream << source_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << VcfReader::VCF_MISSING_CHAR_1 << new_sequence << pos_base << SUFFIX_BND;
             }
         }
         else if (node_to_chromosome.contains(id2)) {
@@ -1190,7 +1190,7 @@ void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
                     from=to;
                 }
                 reverse_complement(new_sequence);
-                outstream << destination_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << VcfReader::VCF_MISSING_CHAR << new_sequence << pos_base << SUFFIX_BND;
+                outstream << destination_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << VcfReader::VCF_MISSING_CHAR_1 << new_sequence << pos_base << SUFFIX_BND;
             }
             else {
                 pos=destination_coordinate.second+(int32_t)graph.get_length(destination_handle);  // One-based
@@ -1202,7 +1202,7 @@ void VariantGraph::paths_to_vcf_records(ofstream& outstream) {
                     if (to==source) break;
                     from=to;
                 }
-                outstream << destination_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << pos_base << new_sequence << VcfReader::VCF_MISSING_CHAR << SUFFIX_BND;
+                outstream << destination_coordinate.first << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << graph.get_path_name(path) << VcfReader::VCF_SEPARATOR << pos_base << VcfReader::VCF_SEPARATOR << pos_base << new_sequence << VcfReader::VCF_MISSING_CHAR_1 << SUFFIX_BND;
             }
         }
         else { /* NOP: impossible to decide chr and pos. */ }
