@@ -639,13 +639,13 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length) {
-    if (!chromosomes.contains(chromosome)) throw runtime_error("Invalid chromosome");
+    if (!chromosomes.contains(chromosome)) throw runtime_error("Invalid chromosome "+chromosome);
     main_chromosome=chromosome;
     const string& main_chromosome_sequence = chromosomes.at(main_chromosome);
     main_chromosome_length=(int32_t)main_chromosome_sequence.length();
-    if (p<0 || p>=main_chromosome_length) throw runtime_error("Invalid p");
-    if (q<0 || q>main_chromosome_length) throw runtime_error("Invalid q");
-    if (p>q) throw runtime_error("Invalid p and q");
+    if (p<0 || p>=main_chromosome_length) throw runtime_error("Invalid p="+to_string(p)+" in "+chromosome+" of length "+to_string(main_chromosome_length));
+    if (q<0 || q>main_chromosome_length) throw runtime_error("Invalid q="+to_string(q)+" in "+chromosome+" of length "+to_string(main_chromosome_length));
+    if (p>q) throw runtime_error("Invalid p="+to_string(p)+" and q="+to_string(q)+" in "+chromosome+" of length "+to_string(main_chromosome_length));
 
     graph.clear();
     n_vcf_records=0; vcf_records.clear();
