@@ -23,6 +23,7 @@ workflow GraphEvaluation {
         File? force_windows_bed
         String docker
         Int n_cpu
+        Int ram_size_gb
     }
     parameter_meta {
         vcf_id: "Distinct name assigned to each VCF to be evaluated"
@@ -58,7 +59,8 @@ workflow GraphEvaluation {
                 force_unique_reads = force_unique_reads,
                 docker = docker,
                 force_windows_bed = force_windows_bed,
-                n_cpu = n_cpu
+                n_cpu = n_cpu,
+                ram_size_gb = ram_size_gb
         }
     }
 
@@ -91,7 +93,7 @@ task EvaluateChromosome {
         String docker
         File? force_windows_bed
         Int n_cpu
-        Boolean print_bed = false
+        Int ram_size_gb
     }
     parameter_meta {
     }
@@ -109,7 +111,7 @@ task EvaluateChromosome {
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
         N_CORES_PER_SOCKET="$(lscpu | grep '^Core(s) per socket:' | awk '{print $NF}')"
-        N_THREADS=$(( ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
+        N_THREADS=$(( 2 * ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
 
         # Downloading all the calls in $chromosome$.
         export GCS_OAUTH_TOKEN=$(gcloud auth print-access-token)
@@ -135,6 +137,12 @@ task EvaluateChromosome {
             TOOLS="${TOOLS} ${TOOL_ID}"
         fi
         done < list.txt
+        if ~{defined(force_windows_bed)} ; then
+            awk -v chr="~{chromosome}" '{ if ( $1 == chr ) print $0 }' ~{force_windows_bed} > force.bed
+            FORCE_WINDOWS_FLAG="--windows force.bed"
+        else
+            FORCE_WINDOWS_FLAG=""
+        fi
 
         # Starting resource monitoring
         export MONITOR_MOUNT_POINT=~{work_dir}
@@ -142,26 +150,9 @@ task EvaluateChromosome {
         bash ~{docker_dir}/vm_local_monitoring_script.sh &> ${MONITOR_FILE} &
         MONITOR_JOB=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
 
-        if ~{defined(force_windows_bed)} ; then
-            FORCE_WINDOWS_FLAG="--windows ~{force_windows_bed}"
-        else
-            FORCE_WINDOWS_FLAG=""
-        fi
-
         # Evaluating all VCFS
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
-
-
-        function monitorBED() {
-            while true; do
-                head -n 100 ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed && echo 0 || echo 1
-                sleep 10
-            done
-        }
-        tree
-        ~{if print_bed then "monitorBED &" else ""}
-
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
             --n_threads ${N_THREADS} \
             --output_dir ~{work_dir}/${EVALUATION_NAME} \
@@ -184,19 +175,15 @@ task EvaluateChromosome {
         df -h
         ls -laht
 
+        # Analyzing the results of the evaluation
         ANALYSIS_NAME_SMALL="~{chromosome}_analysis_small"
         ANALYSIS_NAME_LARGE="~{chromosome}_analysis_large"
-
-        if ~{defined(truth_vcf_id)}
-        then
+        if ~{defined(truth_vcf_id)} ; then
             TRUTH_ID_FLAG="--truth_id ~{truth_vcf_id}"
         else
             TRUTH_ID_FLAG=""
         fi
-
-        if ~{defined(evaluation_bed_small_overlap)}
-        then
-            # Analyzing the evaluation
+        if ~{defined(evaluation_bed_small_overlap)} ; then
             EVALUATION_BEDS_SMALL=~{sep=',' evaluation_bed_small_overlap}
             EVALUATION_BEDS_SMALL=$(echo ${EVALUATION_BEDS_SMALL} | tr ',' ' ')
             rm -rf ./${ANALYSIS_NAME_SMALL}
@@ -211,7 +198,6 @@ task EvaluateChromosome {
             # Make a placeholder so cromwell doesn't whine
             touch ~{work_dir}/${ANALYSIS_NAME_SMALL}.tar.gz
         fi
-
         if ~{defined(evaluation_bed_large_overlap)} ; then
             EVALUATION_BEDS_LARGE=~{sep=',' evaluation_bed_large_overlap}
             EVALUATION_BEDS_LARGE=$(echo ${EVALUATION_BEDS_LARGE} | tr ',' ' ')
@@ -227,7 +213,6 @@ task EvaluateChromosome {
             # Make a placeholder so cromwell doesn't whine
             touch ~{work_dir}/${ANALYSIS_NAME_LARGE}.tar.gz
         fi
-
         if ! ~{defined(evaluation_bed_small_overlap)} && ! ~{defined(evaluation_bed_large_overlap)} ; then
             rm -rf ./${ANALYSIS_NAME_LARGE}
             ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/analyze_evaluation \
@@ -256,7 +241,7 @@ task EvaluateChromosome {
     runtime {
         docker: docker
         cpu: n_cpu
-        memory: "128GB"
+        memory: ram_size_gb + "GB"
         disks: "local-disk 128 HDD"
         preemptible: 0
     }
