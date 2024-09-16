@@ -19,6 +19,7 @@ workflow GraphEvaluation {
         Float? large_overlap
         Array[File]? evaluation_bed_large_overlap
         Boolean force_unique_reads
+        Int min_sv_length = 10
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
         File? force_windows_bed
         String docker
@@ -55,6 +56,7 @@ workflow GraphEvaluation {
                 evaluation_bed_small_overlap = evaluation_bed_small_overlap,
                 large_overlap = large_overlap,
                 evaluation_bed_large_overlap = evaluation_bed_large_overlap,
+                min_sv_length = min_sv_length,
                 chromosome = chromosome,
                 force_unique_reads = force_unique_reads,
                 docker = docker,
@@ -88,6 +90,7 @@ task EvaluateChromosome {
         Array[File]? evaluation_bed_small_overlap
         Float? large_overlap
         Array[File]? evaluation_bed_large_overlap
+        Int min_sv_length
         String chromosome
         Boolean force_unique_reads
         String docker
@@ -150,7 +153,7 @@ task EvaluateChromosome {
         bash ~{docker_dir}/vm_local_monitoring_script.sh &> ${MONITOR_FILE} &
         MONITOR_JOB=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
 
-        # Evaluating all VCFS
+        # Evaluating all VCFs
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
@@ -164,6 +167,7 @@ task EvaluateChromosome {
             --interval_max_length ~{interval_max_length} \
             --flank_length ~{flank_length} \
             --debug ~{if force_unique_reads then "--force_unique_reads" else ""} \
+            --min_sv_length ~{min_sv_length} \
             ${FORCE_WINDOWS_FLAG}
 
         # Ensure write buffers are flushed to disk
