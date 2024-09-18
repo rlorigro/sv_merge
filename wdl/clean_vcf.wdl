@@ -1,24 +1,6 @@
 version 1.0
+import "fill_vcf_ref_alleles_from_fasta.wdl" as fill_vcf_ref_alleles
 
-workflow CleanVcfAlleles {
-    input {
-        File vcf_gz
-        File vcf_tbi
-        File ref_fasta
-    }
-
-    call CleanVcf {
-        input:
-            vcf_gz = vcf_gz,
-            vcf_tbi = vcf_tbi,
-            ref_fasta = ref_fasta
-    }
-
-    output {
-        File output_vcf_gz = CleanVcf.output_vcf_gz
-        File output_vcf_tbi = CleanVcf.output_vcf_tbi
-    }
-}
 
 task CleanVcf {
     input {
@@ -48,5 +30,35 @@ task CleanVcf {
         docker: "fcunial/callset_integration:latest"
         memory: "4G"
         cpu: 1
+    }
+}
+
+
+workflow CleanVcfAlleles {
+    input {
+        File vcf_gz
+        File vcf_tbi
+        File ref_fasta
+    }
+
+    # First fix the symbolic alleles
+    call CleanVcf {
+        input:
+            vcf_gz = vcf_gz,
+            vcf_tbi = vcf_tbi,
+            ref_fasta = ref_fasta
+    }
+
+    # Finally fix some Ns from the now non-symbolic alleles
+    call fill_vcf_ref_alleles.FillFromFasta as fill_from_fasta {
+        input:
+            vcf_gz = CleanVcf.output_vcf_gz,
+            vcf_tbi = CleanVcf.output_vcf_tbi,
+            ref_fasta = ref_fasta
+    }
+
+    output {
+        File output_vcf_gz = fill_from_fasta.output_vcf_gz
+        File output_vcf_tbi = fill_from_fasta.output_vcf_tbi
     }
 }
