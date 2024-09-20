@@ -225,6 +225,7 @@ workflow hapestry_merge_scattered {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean rescale_weights = false
 
         String docker
         File? monitoring_script
@@ -247,6 +248,7 @@ workflow hapestry_merge_scattered {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
 
@@ -285,6 +287,7 @@ workflow hapestry_merge_scattered {
                 haps_vs_ref_csv = haps_vs_ref_csv,
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
+                rescale_weights = rescale_weights,
                 docker = docker,
                 monitoring_script = monitoring_script,
                 runtime_attributes = merge_runtime_attributes,
