@@ -1249,6 +1249,9 @@ void hapestry(
 
         bool found_header = false;
 
+        path fail_regions_bed_path = output_dir / "windows_failed.bed";
+        ofstream fail_regions_file(fail_regions_bed_path);
+
         // Copy over the mutable parts of the header and then the main contents of the filtered VCF
         // Will be empty if no regions were processed
         for (size_t i=0; i<regions.size(); i++){
@@ -1257,6 +1260,8 @@ void hapestry(
 
             // Skip if the file does not exist
             if (not exists(sub_vcf)){
+                // Log that this region did not contain any solution
+                fail_regions_file << region.to_bed() << '\n';
                 continue;
             }
 

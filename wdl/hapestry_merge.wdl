@@ -102,6 +102,9 @@ task merge {
         if [ ! -s ~{output_dir}/sequence_data.tar.gz ]; then
             tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
         fi
+
+        # tarball just the BED files in the top level output directory
+        tar -cvzf ~{output_dir}/beds.tar.gz ~{output_dir}/*.bed
     >>>
 
     parameter_meta {
@@ -136,6 +139,7 @@ task merge {
     output {
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
+        File beds_tarball = output_dir + "/beds.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
 }
@@ -217,6 +221,7 @@ workflow hapestry_merge {
     output {
         File non_sequence_data_tarball = merge.non_sequence_data_tarball
         File sequence_data_tarball = merge.sequence_data_tarball
+        File beds_tarball = merge.beds_tarball
         File? monitoring_log = merge.monitoring_log
     }
 }
