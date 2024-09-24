@@ -104,7 +104,7 @@ task merge {
         fi
 
         # tarball just the BED files in the top level output directory
-        tar -cvzf ~{output_dir}/beds.tar.gz ~{output_dir}/*.bed
+        tar -cvzf ~{output_dir}/beds.tar.gz ~{output_dir}/run/*.bed
     >>>
 
     parameter_meta {
