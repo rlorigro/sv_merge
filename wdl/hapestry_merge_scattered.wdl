@@ -239,7 +239,11 @@ task concat_beds{
             [ -e "$file" ] || continue
 
             echo "processing ${file}"
-            cat ${file} >> $(basename ${file})
+            # Check if the item is a file before processing
+            if [ -f "$file" ]; then
+                echo "is file: ${file}"
+                cat ${file} >> $(basename ${file})
+            fi
         done
 
         # remove the extracted files
