@@ -250,8 +250,6 @@ task concat_beds{
         rm -rf "$temp_dir"/*
     done
 
-    tree .
-
     # tarball the BEDs
     tar -cvzf beds.tar.gz ./*.bed
 
