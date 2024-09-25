@@ -103,6 +103,9 @@ task merge {
             tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
         fi
 
+        pwd
+        ls -lh ~{output_dir}/run/ | grep "bed"
+
         # tarball just the BED files in the top level output directory
         tar -cvzf ~{output_dir}/beds.tar.gz ~{output_dir}/run/*.bed
     >>>
