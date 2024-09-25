@@ -215,16 +215,22 @@ void parse_read_model_solution(const SolveResult& result_n_d, const PathVariable
 
 
 void parse_read_feasibility_solution(const SolveResult& result, const ReadVariables& vars, TransMap& transmap, path output_dir){
-    // Open a file
     path out_path = output_dir/"solution.csv";
-    ofstream file(out_path);
+
+    // Check if output path exists already
+    bool log_exists = std::filesystem::exists(out_path);
+
+    // Open a file
+    ofstream file(out_path, std::ios_base::app);
 
     if (not file.is_open() or not file.good()){
         throw runtime_error("ERROR: cannot write to file: " + out_path.string());
     }
 
-    // Write header
-    file << "sample,read,path" << '\n';
+    // Write header if the file is new
+    if (not log_exists){
+        file << "sample,read,path" << '\n';
+    }
 
     unordered_set <int64_t> to_be_removed;
 
@@ -238,10 +244,7 @@ void parse_read_feasibility_solution(const SolveResult& result, const ReadVariab
                     if (var.is_integer()){
                         auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
 
-                        if (is_assigned){
-                            file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
-                        }
-                        else{
+                        if (not is_assigned){
                             // Delete all the edges that are not assigned (to simplify iteration later)
                             to_be_removed.emplace(read_id);
                         }
@@ -326,15 +329,16 @@ double optimize_d_given_n(
         }
     }
 
+    // Write a log
+    auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+    string time_csv;
+    duration_to_csv(duration, time_csv);
+
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
+    bool success = result.termination.reason == TerminationReason::kOptimal;
+
     // Append log line to output file which contains the result of each optimization
-    path out_path = output_dir/"log_optimizer.txt";
-    ofstream file(out_path, std::ios_base::app);
-
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-    }
-
-    file << n << ',' << d << '\n';
+    write_time_log(output_dir, "d_given_n", time_csv, success, notes);
 
     return d;
 }
@@ -402,15 +406,15 @@ double optimize_n_given_d(
         }
     }
 
+    auto duration = std::chrono::milliseconds(response.value().solve_stats.solve_time / absl::Milliseconds(1));
+    string time_csv;
+    duration_to_csv(duration, time_csv);
+
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
+    bool success = response.value().termination.reason == TerminationReason::kOptimal;
+
     // Append log line to output file which contains the result of each optimization
-    path out_path = output_dir/"log_optimizer.txt";
-    ofstream file(out_path, std::ios_base::app);
-
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-    }
-
-    file << n << ',' << d << '\n';
+    write_time_log(output_dir, "n_given_d_min", time_csv, success, notes);
 
     return n;
 }
@@ -431,7 +435,8 @@ double optimize_d_given_n(
         PathVariables& vars,
         const SolverType& solver_type,
         const SolveArguments& args,
-        int64_t n
+        int64_t n,
+        path output_dir = ""
         ){
 
     auto constraint = model.AddLinearConstraint(vars.cost_n == n);
@@ -453,8 +458,18 @@ double optimize_d_given_n(
     // Extract the d value
     double d = vars.cost_d.Evaluate(result.variable_values());
 
-    // Print the n and d values of the solution
-//    cerr << "n: " << n << "\td: " << d << '\n';
+    if (not output_dir.empty()) {
+        // Write a log
+        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+        string time_csv;
+        duration_to_csv(duration, time_csv);
+
+        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";d=" + to_string(d);
+        bool success = result.termination.reason == TerminationReason::kOptimal;
+
+        // Append log line to output file which contains the result of each optimization
+        write_time_log(output_dir, "d_given_n_min", time_csv, success, notes);
+    }
 
     return d;
 }
@@ -475,7 +490,8 @@ double optimize_n_given_d(
         PathVariables& vars,
         const SolverType& solver_type,
         const SolveArguments& args,
-        int64_t d
+        int64_t d,
+        path output_dir = ""
         ){
 
     auto constraint = model.AddLinearConstraint(vars.cost_d == d);
@@ -497,8 +513,18 @@ double optimize_n_given_d(
     // Extract the n value
     double n = vars.cost_n.Evaluate(result.variable_values());
 
-    // Print the n and d values of the solution
-//    cerr << "n: " << n << "\td: " << d << '\n';
+    if (not output_dir.empty()) {
+        // Write a log
+        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+        string time_csv;
+        duration_to_csv(duration, time_csv);
+
+        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";n=" + to_string(n);
+        bool success = result.termination.reason == TerminationReason::kOptimal;
+
+        // Append log line to output file which contains the result of each optimization
+        write_time_log(output_dir, "n_given_d", time_csv, success, notes);
+    }
 
     return n;
 }
@@ -518,7 +544,8 @@ double optimize_n(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        const SolveArguments& args
+        const SolveArguments& args,
+        path output_dir = ""
         ){
 
     model.Minimize(vars.cost_n);
@@ -536,8 +563,19 @@ double optimize_n(
     // Extract the n value
     double n = vars.cost_n.Evaluate(result.variable_values());
 
-    // Print the n and d values of the solution
-//    cerr << "n: " << n << '\n';
+    if (not output_dir.empty()) {
+        // Write a log
+        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+        string time_csv;
+        duration_to_csv(duration, time_csv);
+
+        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";n=" + to_string(n);
+        bool success = result.termination.reason == TerminationReason::kOptimal;
+
+        // Append log line to output file which contains the result of each optimization
+        write_time_log(output_dir, "n_min", time_csv, success, notes);
+    }
+
 
     return n;
 }
@@ -557,7 +595,8 @@ double optimize_d(
         Model& model,
         PathVariables& vars,
         const SolverType& solver_type,
-        const SolveArguments& args
+        const SolveArguments& args,
+        path output_dir = ""
         ){
 
     model.Minimize(vars.cost_d);
@@ -575,8 +614,18 @@ double optimize_d(
     // Extract the d value
     double d = vars.cost_d.Evaluate(result.variable_values());
 
-    // Print the n and d values of the solution
-    cerr << "d: " << d << '\n';
+    if (not output_dir.empty()) {
+        // Write a log
+        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+        string time_csv;
+        duration_to_csv(duration, time_csv);
+
+        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";d=" + to_string(d);
+        bool success = result.termination.reason == TerminationReason::kOptimal;
+
+        // Append log line to output file which contains the result of each optimization
+        write_time_log(output_dir, "d_min", time_csv, success, notes);
+    }
 
     return d;
 }
@@ -883,8 +932,8 @@ void optimize_reads_with_d_and_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, args));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min));
+    d_min = round(optimize_d(model, vars, solver_type, args, output_dir));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min, output_dir));
 
     // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
 //    n_max += 1;
@@ -892,8 +941,8 @@ void optimize_reads_with_d_and_n(
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
-    n_min = round(optimize_n(model, vars, solver_type, args));
-    d_max = round(optimize_d_given_n(model, vars, solver_type, args, n_min));
+    n_min = round(optimize_n(model, vars, solver_type, args, output_dir));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, args, n_min, output_dir));
 
     // Put a pseudo count into d_max to try to guard against haploid cases being reduced to diploid
     // TODO: remove this or modify it when switching to non-integer distance costs
@@ -921,17 +970,16 @@ void optimize_reads_with_d_and_n(
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
     const auto& result_n_d = response_n_d.value();
 
-    // Write a log containing the solutioninfo and responsestats
-    path out_path = output_dir/"log_optimizer.txt";
-    ofstream file(out_path);
+    // Write a log
+    auto duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
+    string time_csv;
+    duration_to_csv(duration, time_csv);
 
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-        return;
-    }
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
+    bool success = result_n_d.termination.reason == TerminationReason::kOptimal;
 
-    file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';
-    file << result_n_d << '\n';
+    // Append log line to output file which contains the result of each optimization
+    write_time_log(output_dir, "n_d_quadratic", time_csv, success, notes);
 
     // Check if the final solution is feasible
     if (result_n_d.termination.reason != TerminationReason::kOptimal){
@@ -997,8 +1045,8 @@ void optimize_reads_with_d_plus_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, args));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min));
+    d_min = round(optimize_d(model, vars, solver_type, args, output_dir));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min, output_dir));
 
     // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
 //    n_max += 1;
@@ -1019,16 +1067,16 @@ void optimize_reads_with_d_plus_n(
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
     const auto& result_n_d = response_n_d.value();
 
-    // Write a log containing the solutioninfo and responsestats
-    path out_path = output_dir/"log_optimizer.txt";
-    ofstream file(out_path);
+    // Write a log
+    auto duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
+    string time_csv;
+    duration_to_csv(duration, time_csv);
 
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-    }
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
+    bool success = result_n_d.termination.reason == TerminationReason::kOptimal;
 
-    file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';
-    file << result_n_d << '\n';
+    // Append log line to output file which contains the result of each optimization
+    write_time_log(output_dir, "n_plus_d", time_csv, success, notes);
 
     // Check if the final solution is feasible
     if (result_n_d.termination.reason != TerminationReason::kOptimal){
@@ -1091,17 +1139,16 @@ void optimize_read_feasibility(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
     const auto& result = response.value();
 
-    // Write a log containing the solutioninfo and responsestats
-    path out_path = output_dir/"log_optimizer.txt";
-    ofstream file(out_path);
+    // Write a log
+    auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+    string time_csv;
+    duration_to_csv(duration, time_csv);
 
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-        return;
-    }
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
+    bool success = result.termination.reason == TerminationReason::kOptimal;
 
-    file << "n_read_to_hap_vars: " << vars.read_hap.size() << '\n';
-    file << result << '\n';
+    // Append log line to output file which contains the result of each optimization
+    write_time_log(output_dir, "feasibility", time_csv, success, notes);
 
     // Check if the final solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
