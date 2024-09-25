@@ -235,7 +235,7 @@ task concat_beds{
         tar -xzf "$archive" -C "$temp_dir"
 
         # append the BEDs to the growing BEDs
-        for file in "$temp_dir"/*; do
+        for file in $(find "$temp_dir" -type f); do
             [ -e "$file" ] || continue
 
             echo "processing ${file}"
