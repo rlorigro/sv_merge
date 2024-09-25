@@ -374,11 +374,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             first_positions.push_back(tmp_pair.first);
             if (tmp_pair.second>main_chromosome_length) tmp_pair.second=main_chromosome_length;
             first_positions.push_back(tmp_pair.second);
-            if (record.sv_type==VcfReader::TYPE_REPLACEMENT) {
-                const handle_t handle_alt = sequence2handle(record.alt.substr(1),tmp_buffer_2);
-                insertion_handles.emplace_back(handle_alt);
-            }
-            else if (record.sv_type==VcfReader::TYPE_SNP) {
+            if (record.sv_type==VcfReader::TYPE_REPLACEMENT || record.sv_type==VcfReader::TYPE_SNP) {
                 const handle_t handle_alt = sequence2handle(record.alt,tmp_buffer_2);
                 insertion_handles.emplace_back(handle_alt);
             }

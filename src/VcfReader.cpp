@@ -338,8 +338,14 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
     else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR_1) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR_1)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
-        if (ref_length==1 && alt_length>ref_length) sv_type=VcfReader::TYPE_INSERTION;
-        else if (alt_length==1 && ref_length>alt_length) sv_type=VcfReader::TYPE_DELETION;
+        if (ref_length==1 && alt_length>ref_length) {
+            if (ref.at(0)==alt.at(0)) sv_type=VcfReader::TYPE_INSERTION;
+            else sv_type=VcfReader::TYPE_REPLACEMENT;
+        }
+        else if (alt_length==1 && ref_length>alt_length) {
+            if (ref.at(0)==alt.at(0)) sv_type=VcfReader::TYPE_DELETION;
+            else sv_type=VcfReader::TYPE_REPLACEMENT;
+        }
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
         else if (ref_length==1 && alt_length==1) sv_type=VcfReader::TYPE_SNP;
         else sv_type=-1;
@@ -365,10 +371,16 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
     else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR_1) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR_1)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
-        if (ref_length==1 && alt_length>ref_length) sv_length=(int32_t)(alt_length-1);  // INS
-        else if (alt_length==1 && ref_length>alt_length) sv_length=(int32_t)(ref_length-1);  // DEL
+        if (ref_length==1 && alt_length>ref_length) {
+            if (ref.at(0)==alt.at(0)) sv_length=(int32_t)(alt_length-1);  // INS
+            else sv_length=(int32_t)ref_length;  // Replacement
+        }
+        else if (alt_length==1 && ref_length>alt_length) {
+            if (ref.at(0)==alt.at(0)) sv_length=(int32_t)(ref_length-1);  // DEL
+            else sv_length=(int32_t)ref_length;  // Replacement
+        }
         else if (ref_length==1 && alt_length==1) sv_length=1;  // SNP
-        else if (ref_length>1) sv_length=(int32_t)(ref_length-1);  // Replacement
+        else if (ref_length>1) sv_length=(int32_t)ref_length;  // Replacement
         else sv_length=INT32_MAX;
     }
     else sv_length=INT32_MAX;
@@ -774,8 +786,8 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t
         }
     }
     else if (sv_type==VcfReader::TYPE_REPLACEMENT) {
-        out.first=pos;
-        out.second=pos+sv_length;
+        out.first=pos-1;
+        out.second=pos-1+sv_length;
     }
     else if (sv_type==VcfReader::TYPE_SNP) {
         out.first=pos-1;
