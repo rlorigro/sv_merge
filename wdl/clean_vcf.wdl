@@ -5,11 +5,16 @@ import "fill_vcf_ref_alleles_from_fasta.wdl" as fill_vcf_ref_alleles
 task CleanVcf {
     input {
         File vcf_gz
-        File vcf_tbi
+        File? vcf_tbi
         File ref_fasta
     }
 
     command {
+        # if the tbi is not provided, generate it
+        if [ ! -f ${vcf_tbi} ]; then
+            bcftools index -t ${vcf_gz}
+        fi
+
         # Does the following:
         # - Fixing symbolic ALTs
         # - Uppercasing REF and ALT
@@ -37,7 +42,7 @@ task CleanVcf {
 workflow CleanVcfAlleles {
     input {
         File vcf_gz
-        File vcf_tbi
+        File? vcf_tbi
         File ref_fasta
     }
 

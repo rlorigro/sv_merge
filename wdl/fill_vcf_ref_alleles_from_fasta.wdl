@@ -3,7 +3,7 @@ version 1.0
 workflow FillVcfRefAlleles {
     input {
         File vcf_gz
-        File vcf_tbi
+        File? vcf_tbi
         File ref_fasta
     }
 
@@ -23,11 +23,16 @@ workflow FillVcfRefAlleles {
 task FillFromFasta {
     input {
         File vcf_gz
-        File vcf_tbi
+        File? vcf_tbi
         File ref_fasta
     }
 
     command {
+        # if the tbi is not provided, generate it
+        if [ ! -f ${vcf_tbi} ]; then
+            bcftools index -t ${vcf_gz}
+        fi
+
         bcftools +fill-from-fasta -Oz ${vcf_gz} -- -c REF -f ${ref_fasta} > output.vcf.gz
         bcftools index -t output.vcf.gz
     }
