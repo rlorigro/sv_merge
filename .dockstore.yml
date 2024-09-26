@@ -55,3 +55,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/clean_vcf.wdl
   testParameterFiles:
+- name: VcfdistAndOverlapMetricsEvaluation
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/VcfdistAndOverlapMetricsEvaluation.wdl
+  testParameterFiles:
