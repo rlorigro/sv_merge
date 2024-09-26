@@ -339,11 +339,11 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) {
-            if (ref.at(0)==alt.at(0)) sv_type=VcfReader::TYPE_INSERTION;
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_type=VcfReader::TYPE_INSERTION;
             else sv_type=VcfReader::TYPE_REPLACEMENT;
         }
         else if (alt_length==1 && ref_length>alt_length) {
-            if (ref.at(0)==alt.at(0)) sv_type=VcfReader::TYPE_DELETION;
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_type=VcfReader::TYPE_DELETION;
             else sv_type=VcfReader::TYPE_REPLACEMENT;
         }
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
@@ -372,11 +372,11 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
         if (ref_length==1 && alt_length>ref_length) {
-            if (ref.at(0)==alt.at(0)) sv_length=(int32_t)(alt_length-1);  // INS
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_length=(int32_t)(alt_length-1);  // INS
             else sv_length=(int32_t)ref_length;  // Replacement
         }
         else if (alt_length==1 && ref_length>alt_length) {
-            if (ref.at(0)==alt.at(0)) sv_length=(int32_t)(ref_length-1);  // DEL
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_length=(int32_t)(ref_length-1);  // DEL
             else sv_length=(int32_t)ref_length;  // Replacement
         }
         else if (ref_length==1 && alt_length==1) sv_length=1;  // SNP
