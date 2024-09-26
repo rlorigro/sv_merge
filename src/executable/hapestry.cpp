@@ -1262,6 +1262,10 @@ void hapestry(
         path fail_regions_bed_path = output_dir / "windows_failed.bed";
         ofstream fail_regions_file(fail_regions_bed_path);
 
+        if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
+            throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
+        }
+
         // Copy over the mutable parts of the header and then the main contents of the filtered VCF
         // Will be empty if no regions were processed
         for (size_t i=0; i<regions.size(); i++){
