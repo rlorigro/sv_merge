@@ -51,7 +51,7 @@ public:
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space;
      * @param log_* keeps track of every window that satisfies at least one of these low-support thresholds.
      */
-    explicit Counts(const vector<string>& tools, const string& truth_tool, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t n_windows = 1e6):
+    explicit Counts(const vector<string>& tools, const string& truth_tool, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t min_sv_length, size_t n_windows = 1e6):
         TOOLS(tools),
         TRUTH_TOOL(truth_tool),
         N_TOOLS(tools.size()),
@@ -61,7 +61,8 @@ public:
         log_edges_covered_leq(log_edges_covered_leq),
         log_vcf_records_supported_leq(log_vcf_records_supported_leq),
         log_alignment_identity_leq(log_alignment_identity_leq),
-        log_hap_coverage_leq(log_hap_coverage_leq)
+        log_hap_coverage_leq(log_hap_coverage_leq),
+        min_sv_length(min_sv_length)
     {
         size_t i;
 
@@ -91,8 +92,16 @@ public:
 
         nonref_nodes.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { nonref_nodes.emplace_back(); nonref_nodes.at(i).reserve(n_windows); }
+        nonref_nodes_small.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_nodes_small.emplace_back(); nonref_nodes_small.at(i).reserve(n_windows); }
+        nonref_nodes_large.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_nodes_large.emplace_back(); nonref_nodes_large.at(i).reserve(n_windows); }
         nonref_nodes_fully_covered.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { nonref_nodes_fully_covered.emplace_back(); nonref_nodes_fully_covered.at(i).reserve(n_windows); }
+        nonref_nodes_fully_covered_small.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_nodes_fully_covered_small.emplace_back(); nonref_nodes_fully_covered_small.at(i).reserve(n_windows); }
+        nonref_nodes_fully_covered_large.reserve(N_TOOLS);
+        for (i=0; i<N_TOOLS; i++) { nonref_nodes_fully_covered_large.emplace_back(); nonref_nodes_fully_covered_large.at(i).reserve(n_windows); }
         nonref_nodes_partially_covered.reserve(N_TOOLS);
         for (i=0; i<N_TOOLS; i++) { nonref_nodes_partially_covered.emplace_back(); nonref_nodes_partially_covered.at(i).reserve(n_windows); }
         nonref_nodes_bps.reserve(N_TOOLS);
@@ -217,7 +226,7 @@ public:
                 else if (c==CSV_DELIMITER) { on_field_end_haplotypes(++field,tmp_buffer_1); tmp_buffer_1.clear(); }
                 else tmp_buffer_1.push_back(c);
             }
-            if (!tmp_buffer_1.empty()) { cerr << "load_window> 3.5 \n"; on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(input_file); }
+            if (!tmp_buffer_1.empty()) { on_field_end_haplotypes(++field,tmp_buffer_1); on_line_end_haplotypes(input_file); }
             file.close();
             on_window_end_haplotypes(i,input_file);
 
@@ -431,7 +440,7 @@ public:
         const size_t N_WINDOWS = windows_to_print.size();
         const string SUFFIX = ".txt";
         size_t i, j;
-        size_t truth_tool;
+        int32_t truth_tool;
         vector<size_t> tmp_vector_1;
         vector<double> tmp_vector_2;
         vector<vector<ofstream>> out;
@@ -451,6 +460,7 @@ public:
                 "supported_vcf_records","unsupported_vcf_records","supported_del","unsupported_del","supported_ins","unsupported_ins","supported_inv","unsupported_inv","supported_dup","unsupported_dup",  // Fractions
                 "nonref_node_length_vs_coverage","nonref_node_length_vs_identity",  // Pairs
                 "sv_length_supported","sv_length_unsupported",
+                "nonref_nodes_fully_covered_small","nonref_nodes_fully_covered_large",  // Fractions
                 "recall"
         };
         tmp_vector_1.reserve(N_WINDOWS); tmp_vector_2.reserve(N_WINDOWS);
@@ -498,8 +508,10 @@ public:
         print_measures_impl_pair(nonref_node_length_vs_coverage,28,out);
         print_measures_impl_basic(sv_length_supported,29,out);
         print_measures_impl_basic(sv_length_unsupported,30,out);
+        print_measures_impl_normalized(nonref_nodes_fully_covered_small,nonref_nodes_small,windows_to_print,31,out,true,tmp_vector_2);
+        print_measures_impl_normalized(nonref_nodes_fully_covered_large,nonref_nodes_large,windows_to_print,32,out,true,tmp_vector_2);
         if (truth_tool!=-1) {
-            print_measures_impl_normalized(truth_tool, recall_numerator, recall_denominator, windows_to_print, 31, out);
+            print_measures_impl_normalized(truth_tool, recall_numerator, recall_denominator, windows_to_print, 33, out);
         }
     }
 
@@ -592,6 +604,7 @@ private:
     const double coverage_threshold;
     const size_t max_hap_length;
     const double log_nodes_fully_covered_leq, log_edges_covered_leq, log_vcf_records_supported_leq, log_alignment_identity_leq, log_hap_coverage_leq;
+    const size_t min_sv_length;
 
     size_t n_windows;
 
@@ -627,7 +640,7 @@ private:
     /**
      * Output measures: graph.
      */
-    vector<vector<size_t>> nonref_nodes, nonref_nodes_fully_covered, nonref_nodes_partially_covered;
+    vector<vector<size_t>> nonref_nodes, nonref_nodes_small, nonref_nodes_large, nonref_nodes_fully_covered, nonref_nodes_fully_covered_small, nonref_nodes_fully_covered_large, nonref_nodes_partially_covered;
     vector<vector<size_t>> nonref_nodes_bps, nonref_nodes_bps_covered;
     vector<vector<size_t>> nonref_edges, nonref_edges_covered;
     vector<vector<pair<size_t,double>>> nonref_node_length_vs_coverage;
@@ -689,9 +702,13 @@ private:
      * nonref_nodes_partially_covered
      * nonref_nodes_bps
      * nonref_nodes_bps_covered
+     * nonref_nodes_small
+     * nonref_nodes_large
+     * nonref_nodes_fully_covered_small
+     * nonref_nodes_fully_covered_large
      */
     void on_init_nodes() {
-        node_counts={0,0,0,0,0};
+        node_counts={0,0,0,0,0,0,0,0,0};
     }
 
     void on_field_end_nodes(size_t field, const string& buffer) {
@@ -710,10 +727,16 @@ private:
     void on_line_end_nodes(size_t tool_id) {
         if (is_ref) return;
         node_counts.at(0)++;
-        if (coverage>=coverage_threshold) node_counts.at(1)++;
+        if (coverage>=coverage_threshold) {
+            node_counts.at(1)++;
+            if (length<min_sv_length) node_counts.at(7)++;
+            else node_counts.at(8)++;
+        }
         else node_counts.at(2)++;
         node_counts.at(3)+=length;
         node_counts.at(4)+=(size_t)(coverage*length);
+        if (length<min_sv_length) node_counts.at(5)++;
+        else node_counts.at(6)++;
         nonref_node_length_vs_coverage.at(tool_id).emplace_back(length,coverage);
         nonref_node_length_vs_identity.at(tool_id).emplace_back(length,identity);
     }
@@ -724,6 +747,10 @@ private:
         nonref_nodes_partially_covered.at(tool_id).emplace_back(node_counts.at(2));
         nonref_nodes_bps.at(tool_id).emplace_back(node_counts.at(3));
         nonref_nodes_bps_covered.at(tool_id).emplace_back(node_counts.at(4));
+        nonref_nodes_small.at(tool_id).emplace_back(node_counts.at(5));
+        nonref_nodes_large.at(tool_id).emplace_back(node_counts.at(6));
+        nonref_nodes_fully_covered_small.at(tool_id).emplace_back(node_counts.at(7));
+        nonref_nodes_fully_covered_large.at(tool_id).emplace_back(node_counts.at(8));
 
         if (node_counts.at(0)>0 && node_counts.at(1)<=log_nodes_fully_covered_leq*node_counts.at(0)) {
             if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(nonref_nodes.at(tool_id).size()-1);
@@ -1077,6 +1104,7 @@ int main (int argc, char* argv[]) {
     double LOG_VCF_RECORDS_SUPPORTED_LEQ = 0.8;
     double LOG_ALIGNMENT_IDENTITY_LEQ = 0.8;
     double LOG_HAP_COVERAGE_LEQ = 0.97;
+    size_t MIN_SV_LENGTH = 50;
     string TRUTH_TOOL = "";
     app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
     app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
@@ -1091,6 +1119,7 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_identity",LOG_ALIGNMENT_IDENTITY_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype identity is at most this.")->capture_default_str();
     app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
     app.add_option("--truth_id",TRUTH_TOOL,"Assumes that this directory contains the true calls. Used only for computing a haplotype-based recall-like measure.")->capture_default_str();
+    app.add_option("--min_sv_length",MIN_SV_LENGTH,"Smallest length for a variant to be considered an SV (default="+to_string(MIN_SV_LENGTH)+").")->capture_default_str();
 
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
@@ -1102,7 +1131,7 @@ int main (int argc, char* argv[]) {
         b = std::filesystem::weakly_canonical(b);
     }
 
-    Counts counts(TOOLS,TRUTH_TOOL,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ);
+    Counts counts(TOOLS,TRUTH_TOOL,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ,MIN_SV_LENGTH);
 
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {

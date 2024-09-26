@@ -90,6 +90,7 @@ task annotate {
     >>>
 
     parameter_meta {
+        min_sv_length: "Only variants that affect at least this number of bps are annotated. Shorter variants are used to build graphs, but they are not annotated or printed in output."
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
         n_threads: "Maximum number of threads to use"

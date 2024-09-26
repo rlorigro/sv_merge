@@ -345,7 +345,7 @@ void print_truth_vcf_paths(ofstream& out) {
     const string FILTER = "PASS";
     const string FORMAT = "GT";
     const string SAMPLE = "0/1";  // Arbitrary
-    const string SUFFIX_REPLACEMENT = QUAL+VcfReader::VCF_SEPARATOR+FILTER+VcfReader::VCF_SEPARATOR+VcfReader::VCF_MISSING_CHAR+VcfReader::VCF_SEPARATOR+FORMAT+VcfReader::VCF_SEPARATOR+SAMPLE+'\n';
+    const string SUFFIX_REPLACEMENT = QUAL+VcfReader::VCF_SEPARATOR+FILTER+VcfReader::VCF_SEPARATOR+VcfReader::VCF_MISSING_CHAR_1+VcfReader::VCF_SEPARATOR+FORMAT+VcfReader::VCF_SEPARATOR+SAMPLE+'\n';
     const string SUFFIX_BND = QUAL+VcfReader::VCF_SEPARATOR+FILTER+VcfReader::VCF_SEPARATOR+"SVTYPE=BND"+VcfReader::VCF_SEPARATOR+FORMAT+VcfReader::VCF_SEPARATOR+SAMPLE+'\n';
 
     out << "chr1\t1\tdel1\tAAAAAAAAAAAAAAAAAAAAAAAAAAAA\tAAAAAAAAAAAAAAAAAAAAAA\t" << SUFFIX_REPLACEMENT;

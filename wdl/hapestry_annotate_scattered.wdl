@@ -170,6 +170,7 @@ workflow hapestry_annotate_scattered {
         File confident_bed
 
         # Hapestry specific args
+        Int min_sv_length = 20
         Int interval_max_length = 50000
         Int flank_length = 200
         Int n_threads
@@ -190,7 +191,7 @@ workflow hapestry_annotate_scattered {
     parameter_meta {
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
-        min_sv_length: "Minimum SV length to consider"
+        min_sv_length: "Only variants that affect at least this number of bps are annotated. Shorter variants are used to build graphs, but they are not annotated or printed in output."
         n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
         n_threads: "Maximum number of threads to use"
         tandems_bed: "BED file of tandem repeats"
@@ -223,6 +224,7 @@ workflow hapestry_annotate_scattered {
                 vcf_gz = x.left,
                 vcf_gz_tbi = x.right,
                 bam_not_hardclipped = bam_not_hardclipped,
+                min_sv_length = min_sv_length,
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,
                 n_threads = n_threads,

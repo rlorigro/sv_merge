@@ -311,7 +311,7 @@ workflow hapestry_merge_scattered {
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
         d_weight: "Scaling factor for the distance term in the objective function, larger than 1.0 gives greater priority to minimizing edit distance"
-        min_sv_length: "Minimum SV length to consider"
+        min_sv_length: "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output."
         n_chunks: "Number of chunks to split the VCF into, and subsequently the number of workers"
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"

@@ -118,7 +118,7 @@ int main (int argc, char* argv[]) {
                 pos2=record.get_breakend_pos();
                 outstream << chromosome2 << VcfReader::VCF_SEPARATOR << std::to_string(pos2) << VcfReader::VCF_SEPARATOR << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR << ref_sequences.at(chromosome2).at(pos2-1) << VcfReader::VCF_SEPARATOR;
                 record.get_alt_of_breakend_mate(ref_sequences,buffer);
-                outstream << buffer << VcfReader::VCF_SEPARATOR << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << VcfReader::VCF_SEPARATOR << record.format;
+                outstream << buffer << VcfReader::VCF_SEPARATOR << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << VcfReader::VCF_SEPARATOR << record.format;
                 for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
                 outstream << "\n";
             }
@@ -132,7 +132,7 @@ int main (int argc, char* argv[]) {
                     c=ref_sequences.at(record.chrom).at(record.pos-1);
                     outstream << record.chrom << VcfReader::VCF_SEPARATOR << std::to_string(record.pos) << VcfReader::VCF_SEPARATOR << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR << c << VcfReader::BREAKEND_CHAR_OPEN << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+record.sv_length+1) << VcfReader::BREAKEND_CHAR_OPEN << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -143,7 +143,7 @@ int main (int argc, char* argv[]) {
                     outstream << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::BREAKEND_CHAR_CLOSE << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos) << VcfReader::BREAKEND_CHAR_CLOSE << c << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -157,7 +157,7 @@ int main (int argc, char* argv[]) {
                 c=ref_sequences.at(record.chrom).at(record.pos-1);
                 outstream << record.chrom << VcfReader::VCF_SEPARATOR << std::to_string(record.pos) << VcfReader::VCF_SEPARATOR << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << c << VcfReader::VCF_SEPARATOR << c << VcfReader::BREAKEND_CHAR_CLOSE << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+record.sv_length) << VcfReader::BREAKEND_CHAR_CLOSE << VcfReader::VCF_SEPARATOR;
-                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                 outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << record.format;
                 for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -167,7 +167,7 @@ int main (int argc, char* argv[]) {
                 outstream << record.chrom << VcfReader::VCF_SEPARATOR;
                 outstream << std::to_string(record.pos+record.sv_length) << VcfReader::VCF_SEPARATOR << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << c << VcfReader::VCF_SEPARATOR << c << VcfReader::BREAKEND_CHAR_CLOSE << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos) << VcfReader::BREAKEND_CHAR_CLOSE << VcfReader::VCF_SEPARATOR;
-                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                 outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << record.format;
                 for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -180,7 +180,7 @@ int main (int argc, char* argv[]) {
                     outstream << record.id << SECOND_ADJACENCY_SUFFIX << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::BREAKEND_CHAR_OPEN << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+record.sv_length+1) << VcfReader::BREAKEND_CHAR_OPEN << c << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << NEW_MATE_PREFIX << record.id << SECOND_ADJACENCY_SUFFIX << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -192,7 +192,7 @@ int main (int argc, char* argv[]) {
                     outstream << NEW_MATE_PREFIX << record.id << SECOND_ADJACENCY_SUFFIX << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::BREAKEND_CHAR_OPEN << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+1) << VcfReader::BREAKEND_CHAR_OPEN << c << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << SECOND_ADJACENCY_SUFFIX << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -208,7 +208,7 @@ int main (int argc, char* argv[]) {
                 outstream << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << c << VcfReader::VCF_SEPARATOR;
                 outstream << VcfReader::BREAKEND_CHAR_CLOSE << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+record.sv_length) << VcfReader::BREAKEND_CHAR_CLOSE << c << VcfReader::VCF_SEPARATOR;
-                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                 outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << record.format;
                 for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -220,7 +220,7 @@ int main (int argc, char* argv[]) {
                 outstream << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << c << VcfReader::VCF_SEPARATOR;
                 outstream << c << VcfReader::BREAKEND_CHAR_OPEN << record.chrom << VcfReader::BREAKEND_SEPARATOR << std::to_string(record.pos+1) << VcfReader::BREAKEND_CHAR_OPEN << VcfReader::VCF_SEPARATOR;
-                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                 outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << MATEID_STR << "=" << record.id << VcfReader::VCF_SEPARATOR;
                 outstream << record.format;
                 for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -232,8 +232,8 @@ int main (int argc, char* argv[]) {
                     c=ref_sequences.at(record.chrom).at(record.pos-1);
                     outstream << record.chrom << VcfReader::VCF_SEPARATOR << std::to_string(record.pos) << VcfReader::VCF_SEPARATOR << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR;
-                    outstream << c << record.alt.substr(1,single_breakend_length) << VcfReader::VCF_MISSING_CHAR << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << c << record.alt.substr(1,single_breakend_length) << VcfReader::VCF_MISSING_CHAR_1 << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;
@@ -246,8 +246,8 @@ int main (int argc, char* argv[]) {
                     outstream << std::to_string(record.pos+1) << VcfReader::VCF_SEPARATOR;
                     outstream << NEW_MATE_PREFIX << record.id << VcfReader::VCF_SEPARATOR;
                     outstream << c << VcfReader::VCF_SEPARATOR;
-                    outstream << VcfReader::VCF_MISSING_CHAR << record.alt.substr(record.alt.length()-single_breakend_length,single_breakend_length) << c << VcfReader::VCF_SEPARATOR;
-                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
+                    outstream << VcfReader::VCF_MISSING_CHAR_1 << record.alt.substr(record.alt.length()-single_breakend_length,single_breakend_length) << c << VcfReader::VCF_SEPARATOR;
+                    outstream << (record.qual==-1?VcfReader::VCF_MISSING_STRING_1:std::to_string(record.qual)) << VcfReader::VCF_SEPARATOR << record.filter << VcfReader::VCF_SEPARATOR;
                     outstream << VcfReader::SVTYPE_STR << "=" << VcfReader::BND_STR << VcfReader::INFO_SEPARATOR << VcfReader::VCF_SEPARATOR;
                     outstream << record.format;
                     for (const auto& item: record.genotypes) outstream << VcfReader::VCF_SEPARATOR << item;

@@ -79,9 +79,9 @@ public:
     /**
      * Properties that are already known after the first scan of a VCF line
      */
-    bool is_high_quality, is_pass, is_symbolic;
+    bool is_high_quality, is_pass, is_symbolic, missing_alt;
     int8_t sv_type;  // -1 = unsupported type
-    int32_t sv_length;  // MAX = the length of the SV could not be inferred
+    int32_t sv_length;  // Always >0. MAX = the length of the SV could not be inferred.
     int32_t n_alts;  // >1 iff the site is multiallelic
     int32_t n_samples;  // Actual number of samples in the record (if >n_samples_to_load, it is fixed to n_samples_to_load+1).
     int32_t n_haplotypes_ref, n_haplotypes_alt;
@@ -180,6 +180,8 @@ public:
 
     bool is_alt_symbolic() const;
 
+    bool is_alt_missing() const;
+
     /**
      * @return 0=single breakend without inserted sequence; 1=with inserted sequence; 2=not a single breakend.
      */
@@ -253,6 +255,7 @@ public:
      * - If the SV is a BND, either between zero-based positions `x` and `x+1`, or between zero-based positions `x-1`
      *   and `x`, `out=(x,x)`. The spec allows `x=-1` (virtual telomeric breakend), but the function returns INT32_MAX
      *   instead, since a virtual breakend carries no information.
+     * - For a SNP at position `x` (zero-based), `out=(x,x+1)`.
      * - If a value cannot be determined, it is set to INT32_MAX.
      *
      * @param use_confidence_intervals enlarges the coordinates above using confidence intervals on `pos` and
@@ -289,6 +292,7 @@ private:
      *
      * Remark: the length of a replacement record is arbitrarily set to the length of the substring of the reference
      * that is to be replaced.
+     * Remark: SNPs are assigned length one.
      * Remark: `ref`, `alt` and `info` are assumed to be already set.
      *
      * @param tmp_buffer reused temporary space.
@@ -296,7 +300,7 @@ private:
     void set_sv_length(string& tmp_buffer);
 
     /**
-     * Main logic of `set()`.
+     * Main logic of `set_from_stream()`.
      *
      * @return TRUE iff some VCF fields were skipped.
      */
@@ -322,8 +326,9 @@ public:
     static const uint8_t N_NONSAMPLE_FIELDS_VCF;  // Including FORMAT
     static const char LINE_END;
     static const char VCF_SEPARATOR;
-    static const char VCF_MISSING_CHAR;
-    static const string VCF_MISSING_STRING;
+    static const char VCF_MISSING_CHAR_1;
+    static const string VCF_MISSING_STRING_1;
+    static const string VCF_MISSING_STRING_2;
     static const char SYMBOLIC_CHAR_OPEN;
     static const char SYMBOLIC_CHAR_CLOSE;
     static const char BREAKEND_CHAR_OPEN;
@@ -373,6 +378,7 @@ public:
     static const uint8_t TYPE_BREAKEND;
     static const uint8_t TYPE_REPLACEMENT;
     static const uint8_t TYPE_CNV;
+    static const uint8_t TYPE_SNP;
 
     /**
      * Supported SV types: labels used by the callers.

@@ -43,7 +43,7 @@ task merge {
     }
 
     String docker_dir = "/hapestry"
-    String output_dir = "output/"
+    String output_dir = "output"
 
     command <<<
         git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
@@ -91,9 +91,20 @@ task merge {
         ~{if skip_solve then "--skip_solve" else ""} \
         ~{if rescale_weights then "--rescale_weights" else ""}
 
-        # tarball only the csv files in the output subdirectories
-        find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) -exec tar -cvzf ~{output_dir}/non_sequence_data.tar.gz {} +
-        find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) -exec tar -cvzf ~{output_dir}/sequence_data.tar.gz {} +
+       # Ensure write buffers are flushed to disk
+       sync
+       tree ~{output_dir}/ > files.txt
+
+       # tarball only the csv files in the output subdirectories
+       find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
+       tar -cvzf ~{output_dir}/non_sequence_data.tar.gz -T list.txt
+       rm -f list.txt
+       find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) > list.txt
+       tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
+       rm -f list.txt
+
+       # Ensure write buffers are flushed to disk
+       sync
 
         # if the outputs are empty, create empty placeholders
         if [ ! -s ~{output_dir}/non_sequence_data.tar.gz ]; then
@@ -121,7 +132,7 @@ task merge {
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
         d_weight: "Scaling factor for the D term in the optimizer, greater than 1.0 will prioritize minimizing edit distance"
-        min_sv_length: "Minimum length of SVs to consider"
+        min_sv_length: "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output."
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
@@ -142,6 +153,7 @@ task merge {
     output {
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
+        File files_list = "files.txt"
         File beds_tarball = output_dir + "/beds.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
@@ -188,7 +200,7 @@ workflow hapestry_merge {
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
         d_weight: "Scaling factor for the D term in the optimizer, greater than 1.0 will prioritize minimizing edit distance"
-        min_sv_length: "Minimum length of SVs to consider"
+        min_sv_length: "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output."
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
