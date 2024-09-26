@@ -62,6 +62,19 @@ bool HAPESTRY_DEBUG = false;
 using namespace wfa;
 
 
+class OptimizerConfig {
+public:
+    OptimizerConfig() = default;
+
+    size_t solver_timeout = 30*60;
+    float min_read_hap_identity = 0.5;
+    float d_weight = 1.0;
+    bool skip_solve = false;
+    bool rescale_weights = false;
+    bool use_quadratic_objective = false;
+};
+
+
 void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -733,11 +746,7 @@ void merge_thread_fn(
         int32_t min_sv_length,
         int32_t flank_length,
         size_t graphaligner_timeout,
-        size_t solver_timeout,
-        float min_read_hap_identity,
-        float d_weight,
-        bool skip_solve,
-        bool rescale_weights,
+        const OptimizerConfig& config,
         atomic<size_t>& job_index
 ) {
     // TODO: make this a parameter
@@ -848,9 +857,9 @@ void merge_thread_fn(
         }
 
         // Align all reads to all candidate paths and update transmap
-        align_reads_vs_paths(transmap, variant_graph, min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
+        align_reads_vs_paths(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
-        if (rescale_weights) {
+        if (config.rescale_weights) {
             // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
             rescale_weights_as_quadratic_best_diff(transmap, 0, 1000);
         }
@@ -859,16 +868,21 @@ void merge_thread_fn(
         path output_csv = subdir / "reads_to_paths.csv";
         transmap.write_edge_info_to_csv(output_csv, variant_graph);
 
-        if (not skip_solve){
+        if (not config.skip_solve){
             try {
                 // Optimize
                 SolverType solver_type = SolverType::kGscip;
 
                 // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
-                optimize_read_feasibility(transmap, 1, solver_timeout, subdir, solver_type);
+                optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, solver_type);
 
-                // Then optimize the reads with the joint model
-                optimize_reads_with_d_plus_n(transmap, d_weight, 1, 1, solver_timeout, subdir, solver_type);
+                if (config.use_quadratic_objective) {
+                    optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, solver_type);
+                }
+                else {
+                    // Then optimize the reads with the joint model
+                    optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, solver_type);
+                }
 
                 // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
                 // likely does not conflict with existing names
@@ -902,7 +916,7 @@ void merge_thread_fn(
 
         if (HAPESTRY_DEBUG){
             write_sample_path_divergence(variant_graph, transmap, subdir);
-            align_read_path_edges_of_transmap(transmap, variant_graph, min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
+            align_read_path_edges_of_transmap(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
         }
 
         i = job_index.fetch_add(1);
@@ -926,11 +940,7 @@ void merge_variants(
         int32_t interval_max_length,
         int32_t min_sv_length,
         size_t graphaligner_timeout,
-        size_t solver_timeout,
-        float min_read_hap_identity,
-        float d_weight,
-        bool skip_solve,
-        bool rescale_weights,
+        const OptimizerConfig& optimizer_config,
         const path& output_dir
 ){
 
@@ -1014,11 +1024,7 @@ void merge_variants(
                                      min_sv_length,  // Only SVs are associated with graph edges
                                      flank_length,
                                      graphaligner_timeout,
-                                     solver_timeout,
-                                     min_read_hap_identity,
-                                     d_weight,
-                                     skip_solve,
-                                     rescale_weights,
+                                     optimizer_config,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -1046,11 +1052,7 @@ void hapestry(
         int32_t min_sv_length,
         int32_t n_threads,
         size_t graphaligner_timeout,
-        size_t solver_timeout,
-        float min_read_hap_identity,
-        float d_weight,
-        bool skip_solve,
-        bool rescale_weights,
+        const OptimizerConfig& optimizer_config,
         bool force_unique_reads,
         bool bam_not_hardclipped
 ){
@@ -1223,11 +1225,7 @@ void hapestry(
                 interval_max_length,
                 min_sv_length,
                 graphaligner_timeout,
-                solver_timeout,
-                min_read_hap_identity,
-                d_weight,
-                skip_solve,
-                rescale_weights,
+                optimizer_config,
                 staging_dir
         );
 
@@ -1316,11 +1314,7 @@ int main (int argc, char* argv[]){
     int32_t min_sv_length = 20;
     int32_t n_threads = 1;
     size_t graphaligner_timeout = 90;
-    size_t solver_timeout = 30*60;
-    float min_read_hap_identity = 0.5;
-    float d_weight = 1.0;
-    bool skip_solve = false;
-    bool rescale_weights = false;
+    OptimizerConfig optimizer_config;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
@@ -1389,23 +1383,25 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--solver_timeout",
-            solver_timeout,
+            optimizer_config.solver_timeout,
             "Abort the optimizer after this many seconds, use 0 for no limit");
 
     app.add_option(
             "--min_read_hap_identity",
-            min_read_hap_identity,
+            optimizer_config.min_read_hap_identity,
             "Minimum alignment identity to consider a read-hap assignment in the optimization step")
             ->required();
 
     app.add_option(
             "--d_weight",
-            d_weight,
+            optimizer_config.d_weight,
             "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term");
 
-    app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
+    app.add_flag("--skip_solve", optimizer_config.skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
-    app.add_flag("--rescale_weights", rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
+    app.add_flag("--rescale_weights", optimizer_config.rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
+
+    app.add_flag("--quadratic_objective", optimizer_config.use_quadratic_objective, "Invoke this to use quadratic objective which minimizes the square distance from the 'utopia point'. May incur large run time cost.");
 
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
@@ -1436,11 +1432,7 @@ int main (int argc, char* argv[]){
             min_sv_length,
             n_threads,
             graphaligner_timeout,
-            solver_timeout,
-            min_read_hap_identity,
-            d_weight,
-            skip_solve,
-            rescale_weights,
+            optimizer_config,
             force_unique_reads,
             bam_not_hardclipped
     );

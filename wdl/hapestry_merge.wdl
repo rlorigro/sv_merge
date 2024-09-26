@@ -34,6 +34,7 @@ task merge {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean quadratic_objective = false
         Boolean rescale_weights = false
 
         String docker = "fcunial/hapestry:merge"
@@ -89,6 +90,7 @@ task merge {
         ~{if force_unique_reads then "--force_unique_reads" else ""} \
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
         ~{if skip_solve then "--skip_solve" else ""} \
+        ~{if quadratic_objective then "--quadratic_objective" else ""} \
         ~{if rescale_weights then "--rescale_weights" else ""}
 
        # Ensure write buffers are flushed to disk
@@ -136,6 +138,7 @@ task merge {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
@@ -181,6 +184,7 @@ workflow hapestry_merge {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean quadratic_objective = false
         Boolean rescale_weights = false
 
         String docker
@@ -204,6 +208,7 @@ workflow hapestry_merge {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
@@ -227,6 +232,7 @@ workflow hapestry_merge {
             haps_vs_ref_csv = haps_vs_ref_csv,
             force_unique_reads = force_unique_reads,
             skip_solve = skip_solve,
+            quadratic_objective = quadratic_objective,
             rescale_weights = rescale_weights,
             docker = docker,
             monitoring_script = monitoring_script,

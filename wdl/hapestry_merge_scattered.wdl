@@ -190,7 +190,6 @@ task concat_vcfs{
         File concatenated_vcf_tbi = "concatenated_sorted.vcf.gz.tbi"
     }
 
-
     runtime {
         docker: docker
         cpu: select_first([runtime_attributes.cpu, 1])
@@ -293,6 +292,7 @@ workflow hapestry_merge_scattered {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean quadratic_objective = false
         Boolean rescale_weights = false
 
         String docker
@@ -316,6 +316,7 @@ workflow hapestry_merge_scattered {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
@@ -355,6 +356,7 @@ workflow hapestry_merge_scattered {
                 haps_vs_ref_csv = haps_vs_ref_csv,
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
+                quadratic_objective = quadratic_objective,
                 rescale_weights = rescale_weights,
                 docker = docker,
                 monitoring_script = monitoring_script,
