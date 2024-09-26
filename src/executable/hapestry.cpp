@@ -112,7 +112,7 @@ void write_alignment_debug_info(
         const string& read_sequence,
         const string& cigar,
         const interval_t& path_evaluation_window,
-        float indel_portion,
+        float nonmatch_portion,
         path output_dir
         ){
 
@@ -195,7 +195,7 @@ void write_alignment_debug_info(
 
     file << "path length: " << path_sequence.size() << '\n';
     file << "read length: " << read_sequence.size() << '\n';
-    file << "indel portion: " << indel_portion << '\n';
+    file << "nonmatch portion: " << nonmatch_portion << '\n';
     file << bounds << '\n';
     file << r_all << '\n';
     file << x_all << '\n';
@@ -407,7 +407,7 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
 
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector<interval_t> empty_intervals;
-    float indel_portion;
+    float nonmatch_portion;
     string cigar;
 
     transmap.for_each_read([&](const string& read_name, int64_t id){
@@ -423,11 +423,11 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
 
             auto path_evaluation_window = path_flank_coords[path_name];
 
-            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, indel_portion);
+            align_read_to_path(read_sequence, path_sequence, aligner, path_evaluation_window, cigar, nonmatch_portion);
 
-            if ((1.0f - indel_portion) > min_read_hap_identity) {
+            if ((1.0f - nonmatch_portion) > min_read_hap_identity) {
                 // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
-                auto int_score = int64_t(round(indel_portion*1000)) + 1;
+                auto int_score = int64_t(round(nonmatch_portion*1000)) + 1;
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
@@ -445,7 +445,7 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
                         read_sequence,
                         cigar,
                         path_evaluation_window,
-                        indel_portion,
+                        nonmatch_portion,
                         output_dir
                     );
             }
@@ -495,6 +495,13 @@ void write_region_subsequences_to_file_thread_fn(
 
 
 void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unordered_map<string,int64_t>& path_coverage){
+    // Despite removing duplicate variants, it is still possible for a duplicate path sequence to exist with a different
+    // combination of variants. In this case, we reassign any duplicates arbitrarily to the first path iterated
+
+    // This object stores path_sequence -> path_name, and is used to reassign paths to the first path with the same
+    // sequence
+    unordered_map<string,string> path_reassignment;
+
     // Accumulate coverage of spanning paths in the GAF
     for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
         auto& path = alignment.get_path();
@@ -518,7 +525,29 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 
         auto path_name = alignment.get_path_string();
 
-        path_coverage[path_name]++;
+        string sequence;
+
+        // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
+        for (const auto& [node_name, reversal]: path) {
+            nid_t n = stoll(node_name);
+            auto h = variant_graph.graph.get_handle(n, reversal);
+            sequence += variant_graph.graph.get_sequence(h);
+        }
+
+        // Check if this path has been seen before
+        auto result = path_reassignment.find(sequence);
+        bool is_new = (result == path_reassignment.end());
+
+        if (is_new){
+            // Add the path to the reassignment map and increment its coverage
+            path_reassignment.emplace(sequence, alignment.get_path_string());
+            path_coverage[path_name]++;
+        }
+        else{
+            // Arbitrarily reassign the path to the first path with the same sequence
+            path_coverage[result->second]++;
+        }
+
     });
 }
 
@@ -644,6 +673,50 @@ void write_sample_path_divergence(VariantGraph& variant_graph, const TransMap& t
     }
 }
 
+/// Rescale edge weights for each read as quadratic function of distance from best weight
+void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max){
+    unordered_map<int64_t,float> best_weights;
+
+    // First find the best weight for each read
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
+        auto result = best_weights.find(read_id);
+
+        if (result == best_weights.end()) {
+            best_weights[read_id] = weight;
+        }
+        else {
+            best_weights[read_id] = min(result->second, weight);
+        }
+    });
+
+    vector<tuple<int64_t,int64_t,float> > edges_to_add;
+
+    // Rescale the weights
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
+        float best = best_weights[read_id];
+        float w = round(pow((weight - best), 1.2) + 1);
+
+        if (w < domain_min) {
+            throw runtime_error("ERROR: weight rescaling resulted in weight below minimum: " + to_string(w));
+        }
+
+        // if exceeds max, then just clip it (for the sanity of building the model without int overflow)
+        if (w > domain_max) {
+            w = domain_max;
+        }
+
+//        cerr << "rescaling: " << read_id << ',' << path_id << ' ' << weight << ' ' << best << ' ' << w << '\n';
+
+        edges_to_add.emplace_back(read_id, path_id, w);
+    });
+
+    // Update the DS
+    for (const auto& [read_id, path_id, weight]: edges_to_add){
+        // Will overwrite the edge if it already exists
+        transmap.add_edge(read_id, path_id, weight);
+    }
+}
+
 
 /**
  * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
@@ -664,6 +737,7 @@ void merge_thread_fn(
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
+        bool rescale_weights,
         atomic<size_t>& job_index
 ) {
     // TODO: make this a parameter
@@ -750,7 +824,7 @@ void merge_thread_fn(
         bool success = run_command(command, false, float(graphaligner_timeout));
         string time_csv = t.to_csv();
 
-        write_graphaligner_time_log(subdir, vcf_name_prefix, time_csv, success);
+        write_time_log(subdir, vcf_name_prefix, time_csv, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
@@ -775,6 +849,11 @@ void merge_thread_fn(
 
         // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
+
+        if (rescale_weights) {
+            // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
+            rescale_weights_as_quadratic_best_diff(transmap, 0, 1000);
+        }
 
         // Write the full transmap to CSV (in the form of annotated edges)
         path output_csv = subdir / "reads_to_paths.csv";
@@ -851,6 +930,7 @@ void merge_variants(
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
+        bool rescale_weights,
         const path& output_dir
 ){
 
@@ -938,6 +1018,7 @@ void merge_variants(
                                      min_read_hap_identity,
                                      d_weight,
                                      skip_solve,
+                                     rescale_weights,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -969,6 +1050,7 @@ void hapestry(
         float min_read_hap_identity,
         float d_weight,
         bool skip_solve,
+        bool rescale_weights,
         bool force_unique_reads,
         bool bam_not_hardclipped
 ){
@@ -1145,6 +1227,7 @@ void hapestry(
                 min_read_hap_identity,
                 d_weight,
                 skip_solve,
+                rescale_weights,
                 staging_dir
         );
 
@@ -1176,6 +1259,9 @@ void hapestry(
 
         bool found_header = false;
 
+        path fail_regions_bed_path = output_dir / "windows_failed.bed";
+        ofstream fail_regions_file(fail_regions_bed_path);
+
         // Copy over the mutable parts of the header and then the main contents of the filtered VCF
         // Will be empty if no regions were processed
         for (size_t i=0; i<regions.size(); i++){
@@ -1184,6 +1270,8 @@ void hapestry(
 
             // Skip if the file does not exist
             if (not exists(sub_vcf)){
+                // Log that this region did not contain any solution
+                fail_regions_file << region.to_bed() << '\n';
                 continue;
             }
 
@@ -1225,9 +1313,10 @@ int main (int argc, char* argv[]){
     int32_t n_threads = 1;
     size_t graphaligner_timeout = 90;
     size_t solver_timeout = 30*60;
-    float min_read_hap_identity = 0.85;
+    float min_read_hap_identity = 0.5;
     float d_weight = 1.0;
     bool skip_solve = false;
+    bool rescale_weights = false;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
@@ -1312,6 +1401,8 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--skip_solve", skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
+    app.add_flag("--rescale_weights", rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
+
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
@@ -1345,6 +1436,7 @@ int main (int argc, char* argv[]){
             min_read_hap_identity,
             d_weight,
             skip_solve,
+            rescale_weights,
             force_unique_reads,
             bam_not_hardclipped
     );

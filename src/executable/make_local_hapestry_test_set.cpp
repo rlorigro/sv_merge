@@ -113,7 +113,7 @@ void align_sequences_to_reference_thread_fn(
         path fasta_path = fasta_paths[i];
         path sam_path = fasta_path.parent_path() / (fasta_path.stem().string() + ".sam");
 
-        string command = "minimap2 -a -x map-hifi --eqx -L -t 1 " + ref_fasta.string() + " " + fasta_path.string();
+        string command = "minimap2 -a -x map-hifi --eqx -L -Y -t 1 " + ref_fasta.string() + " " + fasta_path.string();
         run_command(command, sam_path);
 
         // Sort and output as BAM format
@@ -197,12 +197,12 @@ void make_local_test_set(
             r.start -= flank_length;
             r.stop += flank_length;
 
-            auto& r_prev = regions_merged.back();
-
             if (regions_merged.empty()){
                 regions_merged.emplace_back(r);
             }
             else{
+                auto& r_prev = regions_merged.back();
+
                 if (r_prev.name == r.name and r_prev.stop > r.start){
                     regions_merged.back().stop = r.stop;
                 }
@@ -214,8 +214,6 @@ void make_local_test_set(
 
         // Place the regions in the interval tree, and log the windows
         for (auto& r: regions_merged) {
-            output_bed_file << r.to_bed() << '\n';
-
             contig_interval_trees[r.name].insert({r.start, r.stop});
             output_bed_flanked_file << r.to_bed() << '\n';
         }

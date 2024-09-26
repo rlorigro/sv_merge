@@ -34,6 +34,7 @@ task merge {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean rescale_weights = false
 
         String docker = "fcunial/hapestry:merge"
         File? monitoring_script
@@ -87,7 +88,8 @@ task merge {
         --n_threads ~{n_threads} \
         ~{if force_unique_reads then "--force_unique_reads" else ""} \
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
-        ~{if skip_solve then "--skip_solve" else ""}
+        ~{if skip_solve then "--skip_solve" else ""} \
+        ~{if rescale_weights then "--rescale_weights" else ""}
 
        # Ensure write buffers are flushed to disk
        sync
@@ -111,6 +113,12 @@ task merge {
         if [ ! -s ~{output_dir}/sequence_data.tar.gz ]; then
             tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
         fi
+
+        pwd
+        ls -lh ~{output_dir}/run/ | grep "bed"
+
+        # tarball just the BED files in the top level output directory
+        tar -cvzf ~{output_dir}/beds.tar.gz ~{output_dir}/run/*.bed
     >>>
 
     parameter_meta {
@@ -128,6 +136,7 @@ task merge {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
 
@@ -145,6 +154,7 @@ task merge {
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
         File files_list = "files.txt"
+        File beds_tarball = output_dir + "/beds.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
 }
@@ -171,6 +181,7 @@ workflow hapestry_merge {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean rescale_weights = false
 
         String docker
         File? monitoring_script
@@ -193,6 +204,7 @@ workflow hapestry_merge {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
 
@@ -215,6 +227,7 @@ workflow hapestry_merge {
             haps_vs_ref_csv = haps_vs_ref_csv,
             force_unique_reads = force_unique_reads,
             skip_solve = skip_solve,
+            rescale_weights = rescale_weights,
             docker = docker,
             monitoring_script = monitoring_script,
             runtime_attributes = merge_runtime_attributes
@@ -223,6 +236,7 @@ workflow hapestry_merge {
     output {
         File non_sequence_data_tarball = merge.non_sequence_data_tarball
         File sequence_data_tarball = merge.sequence_data_tarball
+        File beds_tarball = merge.beds_tarball
         File? monitoring_log = merge.monitoring_log
     }
 }

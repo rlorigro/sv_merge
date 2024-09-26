@@ -203,13 +203,81 @@ task concat_vcfs{
 }
 
 
+# Task to combine the chunks
+task concat_beds{
+    input {
+        Array[File] bed_tarballs
+
+        String docker = "staphb/bedtools:2.31.1"
+
+        RuntimeAttributes runtime_attributes = {}
+    }
+
+    command <<<
+    set -eoxu pipefail
+
+    # iterate the tarballs. each one will contain BED files like so:
+    # - windows.bed
+    # - windows_unflanked.bed
+    # - windows_failed.bed
+    # - windows_omitted.bed
+    # for each tarball, extract the BEDs and then append them to a growing BED for each filename
+
+    # Temporary directory for extracted BED files
+    temp_dir=$(mktemp -d)
+    echo "Temporary directory created at: $temp_dir"
+
+    # Iterate the tarballs and concatenate
+    for archive in ~{sep=' ' bed_tarballs}; do
+        echo "Processing archive: $archive"
+
+        # extract the BED files
+        tar -xzf "$archive" -C "$temp_dir"
+
+        # append the BEDs to the growing BEDs
+        for file in $(find "$temp_dir" -type f); do
+            [ -e "$file" ] || continue
+
+            echo "processing ${file}"
+            # Check if the item is a file before processing
+            if [ -f "$file" ]; then
+                echo "is file: ${file}"
+                cat ${file} >> $(basename ${file})
+            fi
+        done
+
+        # remove the extracted files
+        rm -rf "$temp_dir"/*
+    done
+
+    # tarball the BEDs
+    tar -cvzf beds.tar.gz ./*.bed
+
+    >>>
+
+    output {
+        File beds_tarball = "beds.tar.gz"
+    }
+
+
+    runtime {
+        docker: docker
+        cpu: select_first([runtime_attributes.cpu, 1])
+        memory: select_first([runtime_attributes.command_mem_gb, 6]) + select_first([runtime_attributes.additional_mem_gb, 1]) + " GB"
+        disks: "local-disk " + select_first([runtime_attributes.disk_size_gb, 100]) + if select_first([runtime_attributes.use_ssd, false]) then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attributes.boot_disk_size_gb, 15])
+        preemptible: select_first([runtime_attributes.preemptible, 2])
+        maxRetries: select_first([runtime_attributes.max_retries, 1])
+    }
+}
+
+
 workflow hapestry_merge_scattered {
     input {
         File vcf_gz
         File vcf_gz_tbi
         File confident_bed
 
-        # Hapestry specific args
         Int interval_max_length = 50000
         Int flank_length = 200
         Int min_sv_length = 20
@@ -225,6 +293,7 @@ workflow hapestry_merge_scattered {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean rescale_weights = false
 
         String docker
         File? monitoring_script
@@ -247,10 +316,11 @@ workflow hapestry_merge_scattered {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
     }
 
-    call chunk_vcf{
+    call chunk_vcf {
         input:
             vcf_gz = vcf_gz,
             vcf_gz_tbi = vcf_gz_tbi,
@@ -266,7 +336,7 @@ workflow hapestry_merge_scattered {
 
     Array[Pair[File,File]] items = zip(chunk_vcf.chunked_vcfs, chunk_vcf.chunked_tbis)
 
-    scatter (x in items){
+    scatter (x in items) {
         call hapestry_merge.merge as scattered_merge {
             input:
                 vcf_gz = x.left,
@@ -285,6 +355,7 @@ workflow hapestry_merge_scattered {
                 haps_vs_ref_csv = haps_vs_ref_csv,
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
+                rescale_weights = rescale_weights,
                 docker = docker,
                 monitoring_script = monitoring_script,
                 runtime_attributes = merge_runtime_attributes,
@@ -297,10 +368,16 @@ workflow hapestry_merge_scattered {
             sequence_tarballs = scattered_merge.sequence_data_tarball
     }
 
+    call concat_beds {
+        input:
+            bed_tarballs = scattered_merge.beds_tarball
+    }
+
     output {
         Array[File] non_sequence_data_tarball = scattered_merge.non_sequence_data_tarball
         Array[File] sequence_data_tarball = scattered_merge.sequence_data_tarball
         File hapestry_vcf = concat_vcfs.concatenated_vcf
         File hapestry_vcf_tbi = concat_vcfs.concatenated_vcf_tbi
+        File hapestry_beds_tarball = concat_beds.beds_tarball
     }
 }

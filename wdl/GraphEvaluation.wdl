@@ -11,9 +11,11 @@ workflow GraphEvaluation {
         Array[File] vcf_tbi
         Int interval_max_length
         Int flank_length
+        Int graphaligner_timeout = 120
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
+        File? confident_bed
         Float? small_overlap
         Array[File]? evaluation_bed_small_overlap
         Float? large_overlap
@@ -38,6 +40,7 @@ workflow GraphEvaluation {
         evaluation_bed_large_overlap: "For every BED file in this list: use only windows with at least `large_overlap` fraction of bases covered by intervals in the BED."
         chromosomes: "Use only these chromosomes. Each chromosome is processed in parallel and produces separate evaluation files."
         force_unique_reads: "Intended for resolving collisions in identically named sequences across samples. If true, then force sequence names to have a suffix _[sample_name] where sample_name is the unique name provided in the BAM CSV for each BAM"
+        graphaligner_timeout: "Maximum time in seconds to allow for graph alignment step"
     }
 
     scatter(chromosome in chromosomes) {
@@ -49,9 +52,11 @@ workflow GraphEvaluation {
                 vcf_tbi = vcf_tbi,
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,
+                graphaligner_timeout = graphaligner_timeout,
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
                 haps_vs_chm13_csv = haps_vs_chm13_csv,
+                confident_bed = confident_bed,
                 small_overlap = small_overlap,
                 evaluation_bed_small_overlap = evaluation_bed_small_overlap,
                 large_overlap = large_overlap,
@@ -83,9 +88,11 @@ task EvaluateChromosome {
         Array[File] vcf_tbi
         Int interval_max_length
         Int flank_length
+        Int graphaligner_timeout
         File tandems_bed
         File reference_fa
         File haps_vs_chm13_csv
+        File? confident_bed
         Float? small_overlap
         Array[File]? evaluation_bed_small_overlap
         Float? large_overlap
@@ -110,6 +117,20 @@ task EvaluateChromosome {
         set -euxo pipefail
         mkdir -p ~{work_dir}
         cd ~{work_dir}
+
+        if ~{defined(confident_bed)}
+        then
+            for vcf in ~{sep=" " vcf_gz}; do
+                # use bcftools to subset the vcf by the confident bed
+                bcftools view -T ~{confident_bed} ${vcf} -Ov -o confident.vcf
+
+                # convert to bgzipped vcf and overwrite the input VCF
+                bcftools view -Oz -o ${vcf} confident.vcf
+
+                # index the vcf
+                bcftools index -t ${vcf}
+            done
+        fi
 
         TIME_COMMAND="/usr/bin/time --verbose"
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
@@ -157,18 +178,19 @@ task EvaluateChromosome {
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
-            --n_threads ${N_THREADS} \
-            --output_dir ~{work_dir}/${EVALUATION_NAME} \
-            --bam_csv ~{haps_vs_chm13_csv} \
-            --vcfs ${VCFS} \
-            --cluster_by ${CLUSTER_BY} \
-            --tandems ~{tandems_bed} \
-            --ref ~{reference_fa} \
-            --interval_max_length ~{interval_max_length} \
-            --flank_length ~{flank_length} \
-            --debug ~{if force_unique_reads then "--force_unique_reads" else ""} \
-            --min_sv_length ~{min_sv_length} \
-            ${FORCE_WINDOWS_FLAG}
+        --n_threads ${N_THREADS} \
+        --output_dir ~{work_dir}/${EVALUATION_NAME} \
+        --bam_csv ~{haps_vs_chm13_csv} \
+        --vcfs ${VCFS} \
+        --cluster_by ${CLUSTER_BY} \
+        --tandems ~{tandems_bed} \
+        --ref ~{reference_fa} \
+        --interval_max_length ~{interval_max_length} \
+        --flank_length ~{flank_length} \
+        --graphaligner_timeout ~{graphaligner_timeout} \
+        --debug ~{if force_unique_reads then "--force_unique_reads" else ""} \
+        --min_sv_length ~{min_sv_length} \
+        ${FORCE_WINDOWS_FLAG}
 
         # Ensure write buffers are flushed to disk
         sync

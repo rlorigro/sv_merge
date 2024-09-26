@@ -45,3 +45,13 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/samtools_merge.wdl
   testParameterFiles:
+- name: fill_vcf_ref_alleles_from_fasta
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/fill_vcf_ref_alleles_from_fasta.wdl
+  testParameterFiles:
+- name: clean_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/clean_vcf.wdl
+  testParameterFiles:

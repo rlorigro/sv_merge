@@ -34,11 +34,11 @@ namespace sv_merge{
 /**
  * Append a log file and write the header if it hasn't been written yet
  * @param output_dir
- * @param vcf_name_prefix
+ * @param name
  * @param time_csv result of calling Timer::to_csv() immediately after task exits
  * @param success whether or not the task timed out
  */
-void write_graphaligner_time_log(path output_dir, string vcf_name_prefix, string time_csv, bool success){
+void write_time_log(path output_dir, const string& name, const string& time_csv, bool success, const string& notes){
     // Begin the logging process
     path log_path = output_dir / "log.csv";
 
@@ -49,10 +49,10 @@ void write_graphaligner_time_log(path output_dir, string vcf_name_prefix, string
 
     // Write the header
     if (not exists){
-        file << "name,h,m,s,ms,success" << '\n';
+        file << "name,h,m,s,ms,success,notes" << '\n';
     }
     // Write the results for this region/tool
-    file << vcf_name_prefix << ',' << time_csv << ',' << success << '\n';
+    file << name << ',' << time_csv << ',' << success << ',' << notes << '\n';
 }
 
 

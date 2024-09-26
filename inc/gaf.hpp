@@ -201,14 +201,4 @@ private:
 };
 
 
-class HalfInterval{
-public:
-    size_t id;
-    int32_t position;
-    bool is_start;
-
-    HalfInterval(size_t id, int32_t position, bool is_start);
-};
-
-
 }
