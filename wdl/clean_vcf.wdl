@@ -15,6 +15,11 @@ task CleanVcf {
             bcftools index -t ${vcf_gz}
         fi
 
+        # if the fai does not exist, generate it??
+        if [ ! -f ${ref_fasta}.fai ]; then
+            samtools faidx ${ref_fasta}
+        fi
+
         # Does the following:
         # - Fixing symbolic ALTs
         # - Uppercasing REF and ALT
