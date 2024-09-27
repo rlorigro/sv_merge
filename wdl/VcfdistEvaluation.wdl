@@ -30,7 +30,7 @@ arr = ["~{sep="\", \"" x}"]
 floats = [float(x) for x in arr]
 mean = sum(floats) / len(floats)
 with open('mean.txt', 'w') as file:
-f.write(f'{mean}\n')
+    f.write(f'{mean}\n')
 CODE
     >>>
 
