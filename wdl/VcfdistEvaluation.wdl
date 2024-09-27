@@ -60,9 +60,6 @@ workflow VcfdistEvaluation {
 
         File vcfdist_bed_file
         String? vcfdist_extra_args
-
-        String overlap_phase_tag
-        String overlap_metrics_docker
     }
 
     scatter (sample in samples) {
