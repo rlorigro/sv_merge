@@ -67,7 +67,7 @@ workflow VcfdistEvaluation {
         call clean_vcf.CleanVcfAlleles as clean{
             input:
                 vcf_gz = eval_vcf,
-                ref_fasta = reference_fasta_fai
+                ref_fasta = reference_fasta
         }
 
         call SubsetSampleFromVcf as SubsetSampleFromVcfEval { input:
