@@ -26,11 +26,11 @@ task ComputeAverage {
 
     command <<<
 python <<CODE
-        arr = ["~{sep="\", \"" x}"]
-        floats = [float(x) for x in arr]
-        mean = sum(floats) / len(floats)
-        with open('mean.txt', 'w') as file:
-        f.write(f'{mean}\n')
+arr = ["~{sep="\", \"" x}"]
+floats = [float(x) for x in arr]
+mean = sum(floats) / len(floats)
+with open('mean.txt', 'w') as file:
+f.write(f'{mean}\n')
 CODE
     >>>
 
