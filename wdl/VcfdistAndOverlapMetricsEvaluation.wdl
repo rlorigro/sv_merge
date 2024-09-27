@@ -103,7 +103,7 @@ workflow VcfdistAndOverlapMetricsEvaluation {
     }
 
     call CalculateOverlapMetrics { input:
-        vcf = eval_vcf,
+        vcf = clean.output_vcf_gz,
         phase_tag = overlap_phase_tag,
         docker = overlap_metrics_docker
     }
