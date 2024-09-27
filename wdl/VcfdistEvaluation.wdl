@@ -189,14 +189,8 @@ task Vcfdist {
             -v ~{verbosity} \
             ~{extra_args}
 
-        # Check if input CSV file is provided
-        if [ -z "$input_csv" ]; then
-            echo "Usage: $0 <input_csv>"
-            exit 1
-        fi
-
         # Extract the row where VAR_TYPE = 'SV' and THRESHOLD = 'BEST'
-        row=$(awk -F'\t' 'NR==1 {for (i=1; i<=NF; i++) header[i]=$i} $1=="SV" && $2=="BEST" {for (i=1; i<=NF; i++) print header[i], $i}' "$input_csv")
+        row=$(awk -F'\t' 'NR==1 {for (i=1; i<=NF; i++) header[i]=$i} $1=="SV" && $2=="BEST" {for (i=1; i<=NF; i++) print header[i], $i}' precision-recall-summary.tsv)
 
         # Extract PREC, RECALL, and F1_SCORE values
         SV_PREC=$(echo "$row" | awk '/PREC/ {print $2}')
@@ -207,8 +201,6 @@ task Vcfdist {
         echo "SV_PREC: $SV_PREC"
         echo "SV_RECALL: $SV_RECALL"
         echo "SV_F1_SCORE: $SV_F1_SCORE"
-
-        # ^thanks AI
 
         # write the values to 3 files
         echo "$SV_PREC" > SV_PREC
