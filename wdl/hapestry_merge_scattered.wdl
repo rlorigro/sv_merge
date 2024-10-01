@@ -82,13 +82,13 @@ task chunk_vcf {
         windows_arg=""
         if ~{defined(windows_override_bed)}
         then
-            windows_arg="--windows ~{windows_override_bed}"
+            windows_arg="--windows ~{windows_override_bed} "
         fi
 
         reference_arg=""
         if ~{defined(reference_fa)}
         then
-            reference_arg="--ref_fasta ~{reference_fa}"
+            reference_arg="--ref_fasta ~{reference_fa} "
         fi
 
         ~{docker_dir}/sv_merge/build/find_windows \
@@ -98,7 +98,7 @@ task chunk_vcf {
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
-        --flank_length ~{flank_length} ${windows_arg} ${reference_arg}
+        --flank_length ~{flank_length} ${windows_arg}${reference_arg}
 
         tree ~{output_dir}
 
