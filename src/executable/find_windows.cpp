@@ -184,14 +184,12 @@ int main (int argc, char* argv[]){
             windows_bed,
             "Path to BED file containing windows, which will override the typical behavior of "
             "find_windows, only keeping the reference bounds clipping and the chunking behavior")
-            ->required();
 
     app.add_option(
             "--ref_fasta",
             ref_fasta,
             "Path to FASTA file containing reference sequence, which will be loaded in order to ensure"
             " the flanks dont exceed the bounds of the ref sequences")
-            ->required();
 
     app.add_option(
             "--tandems",
