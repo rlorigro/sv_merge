@@ -1,6 +1,7 @@
 #include "windows.hpp"
 #include "Timer.hpp"
 #include "CLI11.hpp"
+#include "fasta.hpp"
 #include "bed.hpp"
 
 #include <unordered_map>
@@ -33,11 +34,19 @@ void find_windows(
         path output_dir,
         path tandem_bed,
         path vcf,
+        path windows_bed,
+        path ref_fasta,
         int32_t interval_max_length,
         int32_t min_sv_length,
         int32_t flank_length,
         size_t n_chunks
         ){
+
+    output_dir = std::filesystem::weakly_canonical(output_dir);
+    tandem_bed = std::filesystem::weakly_canonical(tandem_bed);
+    windows_bed = std::filesystem::weakly_canonical(windows_bed);
+    ref_fasta = std::filesystem::weakly_canonical(ref_fasta);
+    vcf = std::filesystem::weakly_canonical(vcf);
 
     if (std::filesystem::exists(output_dir)){
         throw runtime_error("ERROR: output dir exists already: " + output_dir.string());
@@ -67,16 +76,34 @@ void find_windows(
     path bed_log_path = output_dir / "log.bed";
 
     unordered_map<string,string> ref_sequences;
-    construct_windows_from_vcf_and_bed(
-            ref_sequences,
-            contig_tandems,
-            vcfs,
-            flank_length,
-            interval_max_length,
-            min_sv_length,
-            regions,
-            bed_log_path,
-            false);
+
+    if (not ref_sequences.empty()) {
+        cerr << t << "Loading ref sequences from FASTA" << '\n';
+
+        // Load all chromosome sequences (in case of BND)
+        for_sequence_in_fasta_file(ref_fasta, [&](const Sequence& s){
+            ref_sequences[s.name] = s.sequence;
+        });
+    }
+
+    if (windows_bed.empty()){
+        cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
+
+        construct_windows_from_vcf_and_bed(
+                ref_sequences,
+                contig_tandems,
+                vcfs,
+                flank_length,
+                interval_max_length,
+                min_sv_length,
+                regions,
+                bed_log_path,
+                false);
+    }
+    else {
+        cerr << t << "Reading BED file" << '\n';
+        load_windows_from_bed(windows_bed, regions);
+    }
 
     size_t r = 0;
     path output_path;
@@ -86,8 +113,6 @@ void find_windows(
 
     size_t chunk_size = max(1ul,regions.size() / n_chunks);
     size_t n = 0;
-
-    string prev_contig;
 
     while (r < regions.size()) {
         auto& region = regions[r];
@@ -115,7 +140,6 @@ void find_windows(
 
         file << region.name << '\t' << region.start << '\t' << region.stop << '\n';
 
-        prev_contig = region.name;
         r++;
     }
 
@@ -126,6 +150,7 @@ void find_windows(
 int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
+    path ref_fasta;
     path tandem_bed;
     path bam_csv;
     path vcf;
@@ -152,6 +177,20 @@ int main (int argc, char* argv[]){
             "--vcf",
             vcf,
             "Path to VCF file containing variants to be merged")
+            ->required();
+
+    app.add_option(
+            "--windows",
+            windows_bed,
+            "Path to BED file containing windows, which will override the typical behavior of "
+            "find_windows, only keeping the reference bounds clipping and the chunking behavior")
+            ->required();
+
+    app.add_option(
+            "--ref_fasta",
+            ref_fasta,
+            "Path to FASTA file containing reference sequence, which will be loaded in order to ensure"
+            " the flanks dont exceed the bounds of the ref sequences")
             ->required();
 
     app.add_option(
@@ -183,6 +222,8 @@ int main (int argc, char* argv[]){
         output_dir,
         tandem_bed,
         vcf,
+        windows_bed,
+        ref_fasta,
         interval_max_length,
         min_sv_length,
         flank_length,

@@ -27,6 +27,8 @@ task chunk_vcf {
         Int min_sv_length = 20
         Int n_chunks = 32
         File tandems_bed
+        File? windows_override_bed
+        File? reference_fa
 
         String docker
         File? monitoring_script
@@ -75,6 +77,20 @@ task chunk_vcf {
         # unzip the VCF for hapestry
         bcftools view -Ov -o ${vcf} ~{vcf_gz}
 
+        # Kind of circular to provide windows to "find_windows" app, but if we dont then we have to reproduce a lot of
+        # clean up and chunking separately in bash, which is a waste of time.
+        windows_arg=""
+        if ~{defined(windows_override_bed)}
+        then
+            windows_arg="--windows ~{windows_override_bed}"
+        fi
+
+        reference_arg=""
+        if ~{defined(reference_fa)}
+        then
+            reference_arg="--ref_fasta ~{reference_fa}"
+        fi
+
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
@@ -82,7 +98,7 @@ task chunk_vcf {
         --tandems ~{tandems_bed} \
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
-        --flank_length ~{flank_length}
+        --flank_length ~{flank_length} ${windows_arg} ${reference_arg}
 
         tree ~{output_dir}
 
@@ -90,8 +106,8 @@ task chunk_vcf {
         for file in ~{output_dir}/run/*; do
             [ -e "$file" ] || continue
 
-            # if the file is not of the format windows_[numeric].bed, using regex to identify the pattern, skip it
-            if [[ ! $(basename ${file}) =~ ^windows_[0-9]+\.bed$ ]]; then
+            # if the file is not of the format windows_[numeric]_unflanked.bed, using regex to identify the pattern, skip it
+            if [[ ! $(basename ${file}) =~ ^windows_[0-9]+_unflanked\.bed$ ]]; then
                 continue
             fi
 
@@ -107,6 +123,7 @@ task chunk_vcf {
         interval_max_length: "Maximum length of each window evaluated"
         flank_length: "Length of flanking sequence to include in each window"
         tandems_bed: "BED file of tandem repeats"
+        windows_override_bed: "BED file of windows (NOT including flank regions!) to be used for merging. Flanks will be added to the windows provided."
     }
 
     runtime {
@@ -276,6 +293,7 @@ workflow hapestry_merge_scattered {
         File vcf_gz
         File vcf_gz_tbi
         File confident_bed
+        File? windows_override_bed
 
         Int interval_max_length = 50000
         Int flank_length = 200
@@ -302,6 +320,7 @@ workflow hapestry_merge_scattered {
     }
 
     parameter_meta {
+        windows_override_bed: "BED file of windows (NOT including flank regions!) to be used for merging. Flanks will be added to the windows provided."
         bam_not_hardclipped: "If the bam is GUARANTEED not to contain any hardclips, use this flag to trigger much simpler/faster fetching process"
         flank_length: "Length of flanking sequence to include in each window"
         force_unique_reads: "Force unique aligned sequence names among multiple BAMs to prevent collisions"
@@ -332,7 +351,9 @@ workflow hapestry_merge_scattered {
             tandems_bed = tandems_bed,
             n_chunks = n_chunks,
             docker = docker,
-            monitoring_script = monitoring_script
+            monitoring_script = monitoring_script,
+            reference_fa = reference_fa,
+            windows_override_bed = windows_override_bed
     }
 
     Array[Pair[File,File]] items = zip(chunk_vcf.chunked_vcfs, chunk_vcf.chunked_tbis)
