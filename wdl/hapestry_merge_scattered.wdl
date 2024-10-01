@@ -40,7 +40,7 @@ task chunk_vcf {
     String output_dir = "output"
 
     command <<<
-        set -eoxu pipefail
+        git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1                                                                                                                                                                                               set -eoxu pipefail
 
         mkdir ~{output_dir}
 
@@ -91,13 +91,13 @@ task chunk_vcf {
             reference_arg="--ref_fasta ~{reference_fa}"
         fi
 
-        echo ~{n_chunks}
-        echo ~{tandems_bed}
-        echo ~{interval_max_length}
-        echo ~{min_sv_length}
-        echo ~{flank_length}
-        echo ${windows_arg}
-        echo ${reference_arg}
+        echo n_chunks: ~{n_chunks}
+        echo tandems_bed: ~{tandems_bed}
+        echo interval_max_length: ~{interval_max_length}
+        echo min_sv_length: ~{min_sv_length}
+        echo flank_length: ~{flank_length}
+        echo windows_arg: ${windows_arg}
+        echo reference_arg: ${reference_arg}
 
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
