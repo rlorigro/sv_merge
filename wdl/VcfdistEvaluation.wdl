@@ -62,13 +62,14 @@ workflow VcfdistEvaluation {
         String? vcfdist_extra_args
     }
 
+    # First clean the vcf
+    call clean_vcf.CleanVcfAlleles as clean{
+        input:
+            vcf_gz = eval_vcf,
+            ref_fasta = reference_fasta
+    }
+
     scatter (sample in samples) {
-        # First clean the vcf
-        call clean_vcf.CleanVcfAlleles as clean{
-            input:
-                vcf_gz = eval_vcf,
-                ref_fasta = reference_fasta
-        }
 
         call SubsetSampleFromVcf as SubsetSampleFromVcfEval { input:
             vcf = clean.output_vcf_gz,
