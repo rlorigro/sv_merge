@@ -128,10 +128,18 @@ RUN cd /hapestry/GraphAligner \
 ENV PATH="/hapestry/GraphAligner/bin:${PATH}"
 SHELL ["/bin/bash", "-c"]
 
+# GUROBI 11.01 (latest supported version by Google ORTools MathOpt)
+RUN wget https://packages.gurobi.com/11.0/gurobi11.0.1_linux64.tar.gz
+RUN tar -xvzf gurobi11.0.1_linux64.tar.gz
+RUN mv gurobi1101/ /opt/
+
+# This is where the license will be placed during runtime
+RUN mkdir /opt/gurobi
+
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=e05e7366671e4b05ef4a80effbe384da45b8f6fb
+ARG HAPESTRY_COMMIT=b45ecdf9244306cafab4fcc300ae8f67cfc291a9
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
@@ -142,7 +150,7 @@ RUN git checkout ${HAPESTRY_COMMIT} \
 WORKDIR /hapestry/sv_merge/build
 
 RUN cmake ..
-RUN make -j 16
+RUN make -j 31
 
 WORKDIR /hapestry
 
