@@ -31,6 +31,7 @@ task merge {
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
+        File? gurobi_license
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
@@ -56,6 +57,12 @@ task merge {
 
         # get the tbi directory
         tbi_dir=$(dirname ~{vcf_gz_tbi})
+
+        # If a license is provided, we just place it in the conventional location to be found automatically
+        if ~{defined(gurobi_license)}
+        then
+            mv ~{gurobi_license} /opt/gurobi/
+        fi
 
         # if the tbi_dir and the vcf_dir are not the same then move the tbi into the vcf directory
         if [ "$vcf_dir" != "$tbi_dir" ]; then
@@ -91,7 +98,8 @@ task merge {
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
         ~{if skip_solve then "--skip_solve" else ""} \
         ~{if quadratic_objective then "--quadratic_objective" else ""} \
-        ~{if rescale_weights then "--rescale_weights" else ""}
+        ~{if rescale_weights then "--rescale_weights" else ""} \
+        ~{if defined(gurobi_license) then "--use_gurobi" else ""}
 
        # Ensure write buffers are flushed to disk
        sync

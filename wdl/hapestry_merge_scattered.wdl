@@ -317,6 +317,7 @@ workflow hapestry_merge_scattered {
         File tandems_bed
         File reference_fa
         File haps_vs_ref_csv
+        File? gurobi_license
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
@@ -337,6 +338,7 @@ workflow hapestry_merge_scattered {
         graphaligner_timeout: "Timeout for graphaligner in seconds"
         solver_timeout: "Timeout for solver in seconds"
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
+        gurobi_license: "Gurobi .lic file which will be used to authenticate the WLS license. If provided, Gurobi will be used as the solver."
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
         d_weight: "Scaling factor for the distance term in the objective function, larger than 1.0 gives greater priority to minimizing edit distance"
@@ -385,6 +387,7 @@ workflow hapestry_merge_scattered {
                 tandems_bed = tandems_bed,
                 reference_fa = reference_fa,
                 haps_vs_ref_csv = haps_vs_ref_csv,
+                gurobi_license = gurobi_license,
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
                 quadratic_objective = quadratic_objective,
