@@ -72,6 +72,7 @@ public:
     bool skip_solve = false;
     bool rescale_weights = false;
     bool use_quadratic_objective = false;
+    SolverType solver_type = SolverType::kGscip;
 };
 
 
@@ -861,7 +862,7 @@ void merge_thread_fn(
 
         if (config.rescale_weights) {
             // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
-            rescale_weights_as_quadratic_best_diff(transmap, 0, 1000);
+            rescale_weights_as_quadratic_best_diff(transmap, 0, 2000);
         }
 
         // Write the full transmap to CSV (in the form of annotated edges)
@@ -870,18 +871,15 @@ void merge_thread_fn(
 
         if (not config.skip_solve){
             try {
-                // Optimize
-                SolverType solver_type = SolverType::kGscip;
-
                 // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
-                optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, solver_type);
+                optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
 
                 if (config.use_quadratic_objective) {
-                    optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, solver_type);
+                    optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
                 }
                 else {
                     // Then optimize the reads with the joint model
-                    optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, solver_type);
+                    optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
                 }
 
                 // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
@@ -1317,6 +1315,7 @@ int main (int argc, char* argv[]){
     OptimizerConfig optimizer_config;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
+    bool use_gurobi = false;
 
     CLI::App app{"App description"};
 
@@ -1405,6 +1404,8 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
+    app.add_flag("--use_gurobi", use_gurobi, "Invoke this to add more logging and output");
+
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
     app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
@@ -1418,6 +1419,11 @@ int main (int argc, char* argv[]){
 
     if (HAPESTRY_DEBUG){
         cerr << DEBUG_BANNER;
+    }
+
+    // We don't want to make the user try to guess the names of these variables, so this is a simple boolean flag
+    if (use_gurobi) {
+        optimizer_config.solver_type = SolverType::kGurobi;
     }
 
     hapestry(
