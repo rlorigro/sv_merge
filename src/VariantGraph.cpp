@@ -622,6 +622,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     }
 
     // Allocating temporary space: `printed`, `initialized`, `flags`.
+    mark_redundant_records();
     printed.clear(); printed.reserve(n_vcf_records);
     for (i=0; i<n_vcf_records; i++) printed.emplace_back(false);
     path_names.clear(); path_names.reserve(n_vcf_records);
@@ -693,6 +694,24 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
     }
 
     chunk_first.clear(); chunk_first.emplace(chromosome,first_positions);
+}
+
+
+/**
+ * Implemented as a naive quadratic scan. Should be made faster.
+ */
+void VariantGraph::mark_redundant_records() {
+    int32_t i, j;
+
+    for (auto& record: vcf_records) record.is_redundant=false;
+    for (i=0; i<n_vcf_records; i++) sort(vcf_record_to_edge.at(i).begin(),vcf_record_to_edge.at(i).end());
+    for (i=0; i<n_vcf_records; i++) {
+        if (vcf_records.at(i).is_redundant) continue;
+        for (j=i+1; j<n_vcf_records; j++) {
+            if (vcf_records.at(j).is_redundant) continue;
+            if (vcf_record_to_edge.at(j)==vcf_record_to_edge.at(i)) vcf_records.at(j).is_redundant=true;
+        }
+    }
 }
 
 

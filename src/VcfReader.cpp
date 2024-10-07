@@ -181,6 +181,7 @@ VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32
     }
     tmp_buffer_1=""; tmp_buffer_2="";
     tmp_pair.first=0; tmp_pair.second=0;
+    this->is_redundant=false;
 }
 
 
@@ -206,6 +207,7 @@ VcfRecord VcfRecord::clone() const {
     out.n_samples=this->n_samples;
     out.n_haplotypes_ref=this->n_haplotypes_ref;
     out.n_haplotypes_alt=this->n_haplotypes_alt;
+    out.is_redundant=this->is_redundant;
     return out;
 }
 

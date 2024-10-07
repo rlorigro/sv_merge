@@ -556,6 +556,8 @@ set(TESTS
         test_transmap
         test_wfa2
         test_vcfreader
+        test_variantgraph
+        test_variantgraph_snp
         )
 
 

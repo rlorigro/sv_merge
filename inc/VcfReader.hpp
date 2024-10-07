@@ -87,6 +87,11 @@ public:
     int32_t n_haplotypes_ref, n_haplotypes_alt;
 
     /**
+     * Flags used by `VariantGraph`.
+     */
+    bool is_redundant;
+
+    /**
      * @param n_samples_to_load number of samples in a line that are interesting for the user;
      * @param pass_only calls with FILTER different from PASS or `.` are discarded by the user;
      * @param high_qual_only calls with `QUAL<min_qual` are discarded by the user;
