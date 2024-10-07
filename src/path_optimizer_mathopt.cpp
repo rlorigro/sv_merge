@@ -119,11 +119,6 @@ void construct_r_model(const TransMap& transmap, Model& model, ReadVariables& va
                 // DEFINE: flow
                 vars.read_flow[read_id] += r_h;
 
-                auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
-                if (not success){
-                    throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
-                }
-
                 // Do only once for each unique pair of sample-hap
                 if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
                     // DEFINE: sample-hap vars
@@ -133,9 +128,6 @@ void construct_r_model(const TransMap& transmap, Model& model, ReadVariables& va
 
                     // DEFINE: ploidy
                     vars.ploidy[sample_id] += s_h;
-
-                    // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
-                    model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
@@ -146,7 +138,7 @@ void construct_r_model(const TransMap& transmap, Model& model, ReadVariables& va
 
     // CONSTRAINT: read assignment (flow)
     for (const auto& [read_id,f]: vars.read_flow){
-        auto result = vars.reads.emplace(read_id, model.AddVariable(0,1,integral,"r" + std::to_string(read_id) + "_removed"));
+        auto result = vars.reads.emplace(read_id, model.AddVariable(0,1,integral,"r" + std::to_string(read_id) + "_retained"));
         auto& r = result.first->second;
 
         // If this read is "on" then the sum of its read-hap variables must be 1, otherwise they are 0
@@ -236,24 +228,20 @@ void parse_read_feasibility_solution(const SolveResult& result, const ReadVariab
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
     if (result.termination.reason == TerminationReason::kOptimal) {
-        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
-            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
-                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
-                    const Variable& var = vars.reads.at(read_id);
+        transmap.for_each_read([&](const string& read_name, int64_t read_id){
+            const Variable& var = vars.reads.at(read_id);
 
-                    if (var.is_integer()){
-                        auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+            if (var.is_integer()){
+                auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
 
-                        if (not is_assigned){
-                            // Delete all the edges that are not assigned (to simplify iteration later)
-                            to_be_removed.emplace(read_id);
-                        }
-                    }
-                    else{
-                        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
-                    }
-                });
-            });
+                if (not is_assigned){
+                    // Delete all the edges that are not assigned (to simplify iteration later)
+                    to_be_removed.emplace(read_id);
+                }
+            }
+            else{
+                throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+            }
         });
 
         for (const auto& read_id: to_be_removed){
@@ -293,7 +281,7 @@ double optimize_d_given_n(
 
     result_read_path_edges.clear();
 
-    auto constraint = model.AddLinearConstraint(vars.cost_n == n);
+    auto constraint = model.AddLinearConstraint(vars.cost_n <= n + 0.5);
     model.Minimize(vars.cost_d);
 
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
@@ -370,7 +358,7 @@ double optimize_n_given_d(
 
     result_read_path_edges.clear();
 
-    auto constraint = model.AddLinearConstraint(vars.cost_d == d);
+    auto constraint = model.AddLinearConstraint(vars.cost_d <= d + 0.5);
     model.Minimize(vars.cost_n);
 
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
@@ -439,7 +427,7 @@ double optimize_d_given_n(
         path output_dir = ""
         ){
 
-    auto constraint = model.AddLinearConstraint(vars.cost_n == n);
+    auto constraint = model.AddLinearConstraint(vars.cost_n <= n + 0.5);
     model.Minimize(vars.cost_d);
 
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
@@ -494,7 +482,7 @@ double optimize_n_given_d(
         path output_dir = ""
         ){
 
-    auto constraint = model.AddLinearConstraint(vars.cost_d == d);
+    auto constraint = model.AddLinearConstraint(vars.cost_d <= d + 0.5);
     model.Minimize(vars.cost_n);
 
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
@@ -1048,9 +1036,6 @@ void optimize_reads_with_d_plus_n(
     d_min = round(optimize_d(model, vars, solver_type, args, output_dir));
     n_max = round(optimize_n_given_d(model, vars, solver_type, args, d_min, output_dir));
 
-    // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
-//    n_max += 1;
-
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
@@ -1116,6 +1101,14 @@ void optimize_read_feasibility(
     SolveArguments args;
     ReadVariables vars;
 
+    int64_t r_in = 0;
+    int64_t r_out = 0;
+
+    // Count the reads before optimizing feasibility
+    transmap.for_each_read([&](const string& name, int64_t id){
+      r_in++;
+    });
+
     args.parameters.threads = n_threads;
 
     if (time_limit_seconds > 0){
@@ -1139,25 +1132,27 @@ void optimize_read_feasibility(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
     const auto& result = response.value();
 
-    // Write a log
+    // Convert the Google time object to a usable value
     auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
     string time_csv;
     duration_to_csv(duration, time_csv);
 
-    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size());
     bool success = result.termination.reason == TerminationReason::kOptimal;
-
-    // Append log line to output file which contains the result of each optimization
-    write_time_log(output_dir, "feasibility", time_csv, success, notes);
 
     // Check if the final solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
         cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
         transmap = {};
+
+        // Append log line to output file which contains the result of each optimization
+        // If it failed, then r_out is 0 by default
+        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=0";
+        write_time_log(output_dir, "feasibility", time_csv, success, notes);
+
         return;
     }
 
-    // Infer the optimal n and d values of the joint solution
+    // Infer the optimal r value of the feasibility solution
     r = vars.cost_r.Evaluate(result.variable_values());
 
     cerr << "r: " << r << '\n';
@@ -1169,6 +1164,16 @@ void optimize_read_feasibility(
         cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
         transmap = {};
     }
+
+    // Count the remaining reads
+    transmap.for_each_read([&](const string& name, int64_t id){
+      r_out++;
+    });
+
+    // Append log line to output file which contains the result of each optimization
+    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=" + to_string(r_out);
+    write_time_log(output_dir, "feasibility", time_csv, success, notes);
+
 }
 
 
