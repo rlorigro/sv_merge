@@ -1353,7 +1353,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--bam_csv",
             bam_csv,
-            "Simple headerless CSV file with the format [sample_name],[hap_name],[bam_path]")
+            "Simple headerless CSV file with the format [sample_name],[bam_path]")
             ->required();
 
     app.add_option(
