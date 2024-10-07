@@ -91,14 +91,6 @@ task chunk_vcf {
             reference_arg="--ref_fasta ~{reference_fa}"
         fi
 
-        echo n_chunks: ~{n_chunks}
-        echo tandems_bed: ~{tandems_bed}
-        echo interval_max_length: ~{interval_max_length}
-        echo min_sv_length: ~{min_sv_length}
-        echo flank_length: ~{flank_length}
-        echo windows_arg: ${windows_arg}
-        echo reference_arg: ${reference_arg}
-
         ~{docker_dir}/sv_merge/build/find_windows \
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
@@ -147,8 +139,9 @@ task chunk_vcf {
     }
 
     output {
-        Array[File] chunked_vcfs = glob("output/*.vcf.gz")
-        Array[File] chunked_tbis = glob("output/*.vcf.gz.tbi")
+        Array[File] chunked_beds = glob(output_dir + "/run/*_unflanked.bed")
+        Array[File] chunked_vcfs = glob(output_dir + "/*.vcf.gz")
+        Array[File] chunked_tbis = glob(output_dir + "/*.vcf.gz.tbi")
     }
 }
 
@@ -410,6 +403,7 @@ workflow hapestry_merge_scattered {
     }
 
     output {
+        Array[File] chunked_beds = chunk_vcf.chunked_beds
         Array[File] non_sequence_data_tarball = scattered_merge.non_sequence_data_tarball
         Array[File] sequence_data_tarball = scattered_merge.sequence_data_tarball
         File hapestry_vcf = concat_vcfs.concatenated_vcf
