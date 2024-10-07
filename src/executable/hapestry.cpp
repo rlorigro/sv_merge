@@ -570,7 +570,8 @@ void write_solution_to_vcf(
         VariantGraph& variant_graph,
         const TransMap& transmap,
         const vector<string>& sample_names,
-        const path& output_path
+        const path& output_path,
+        const Region& region
         ){
 
     // TODO: consider just directly overwriting the vector<string> in the VcfRecords stored by VariantGraph
@@ -578,6 +579,8 @@ void write_solution_to_vcf(
     unordered_map <string, vector <array<int8_t,2> > > sample_genotypes;
 
     cerr << output_path << '\n';
+
+    string samples_not_found;
 
     // TODO: find a way to deal with regions for which the transmap was cleared by the optimizer and no calls were made
     // (for now they get 0|0 genotypes)
@@ -590,7 +593,7 @@ void write_solution_to_vcf(
 
         // Maybe some info was missing for a given sample, in which case give it 0/0 gt
         if (not success){
-            cerr << "WARNING: sample not found in transmap: " << sample_name << '\n';
+            samples_not_found += " " + sample_name;
             continue;
         }
 
@@ -602,6 +605,8 @@ void write_solution_to_vcf(
             sample_genotypes[sample_name][v][phase] = 1;
         });
     }
+
+    cerr << "WARNING: region " << region.to_string() << " transmap is missing VCF samples" << samples_not_found << '\n';
 
     // Open the VCF output file
     ofstream vcf_file(output_path);
@@ -834,7 +839,7 @@ void merge_thread_fn(
         bool success = run_command(command, false, float(graphaligner_timeout));
         string time_csv = t.to_csv();
 
-        write_time_log(subdir, vcf_name_prefix, time_csv, success);
+        write_time_log(subdir, "graphaligner", time_csv, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
@@ -904,7 +909,7 @@ void merge_thread_fn(
                 // Write the solution to a VCF
                 path output_path = subdir / "solution.vcf";
 
-                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path);
+                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';

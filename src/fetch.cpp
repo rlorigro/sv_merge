@@ -1,5 +1,6 @@
 #include "HalfInterval.hpp"
 #include "fetch.hpp"
+#include "misc.hpp"
 #include <span>
 
 #include "interval_tree.hpp"
@@ -10,66 +11,13 @@ namespace sv_merge{
 
 
 void for_each_sample_bam_path(path bam_csv, const function<void(const string& sample_name, const path& bam_path)>& f){
-    if (not (bam_csv.extension() == ".csv")){
-        throw runtime_error("ERROR: file does not have compatible csv extension: " + bam_csv.string());
-    }
-
-    ifstream file(bam_csv);
-
-    if (not (file.is_open() and file.good())){
-        throw runtime_error("ERROR: could not read file: " + bam_csv.string());
-    }
-
-    char c;
-    string sample_name;
-    string bam_path;
-
-    int64_t n_delimiters = 0;
-    int64_t n_lines = 0;
-    int64_t n_char_in_line = 0;
-    char delimiter = ',';
-
-    while (file.get(c)){
-        if (c == delimiter){
-            n_delimiters++;
-            continue;
-        }
-        if (c == '\r'){
-            throw runtime_error("ERROR: carriage return not supported: " + bam_csv.string());
+    for_each_row_in_csv(bam_csv, [&](const vector<string>& row) {
+        if (row.size() != 2) {
+            throw std::runtime_error("ERROR: sample BAM CSV has invalid number of elements: " + to_string(row.size()) + " " + bam_csv.string());
         }
 
-        if (c == '\n'){
-            if (n_char_in_line == 0){
-                continue;
-            }
-
-            if (n_delimiters != 1){
-                throw runtime_error("ERROR: incorrect number of delimiters on line: " + to_string(n_lines) + " of file " + bam_csv.string());
-            }
-
-            f(sample_name, bam_path);
-            cerr << "input BAM: " << sample_name << " '" << bam_path << "' " << '\n';
-
-            sample_name.clear();
-            bam_path.clear();
-            n_delimiters = 0;
-            n_char_in_line = 0;
-            n_lines++;
-            continue;
-        }
-
-        if (n_delimiters == 0){
-            sample_name += c;
-        }
-        else if (n_delimiters == 1){
-            bam_path += c;
-        }
-        else {
-            throw runtime_error("ERROR: too many delimiters in bam csv");
-        }
-
-        n_char_in_line++;
-    }
+        f(row[0], row[1]);
+    });
 }
 
 
