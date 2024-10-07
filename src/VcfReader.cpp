@@ -1,4 +1,6 @@
 #include "VcfReader.hpp"
+
+#include "CLI11.hpp"
 #include "misc.hpp"
 
 using sv_merge::equal_ignore_case;
@@ -33,9 +35,12 @@ const char VcfReader::PHASED_CHAR = '|';
 const string VcfReader::CHR_STR_LOWER = "chr";
 const string VcfReader::CHR_STR_UPPER = "CHR";
 const char VcfReader::UNKNOWN_BASE = 'N';
+const string VcfReader::MISSING_GT = VcfReader::VCF_MISSING_STRING_1+VcfReader::UNPHASED_CHAR+VcfReader::VCF_MISSING_STRING_1;
 
 const char VcfReader::INFO_ASSIGNMENT = '=';
 const char VcfReader::INFO_SEPARATOR = ';';
+const string VcfReader::INFO_REDUNDANT = "HAPESTRY_REDUNDANT";
+const string VcfReader::INFO_REDUNDANT_HEADER = "##INFO=<ID="+VcfReader::INFO_REDUNDANT+",Number=1,Type=String,Description=\"The call is equivalent to another call in this VCF.\">";
 const string VcfReader::SVTYPE_STR = "SVTYPE";
 const string VcfReader::SVLEN_STR = "SVLEN";
 const string VcfReader::END_STR = "END";
@@ -390,13 +395,19 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
 
 
 void VcfRecord::print(ostream& stream) const {
+    const int32_t N_SAMPLES = genotypes.size();
+
     stream << chrom << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << id << VcfReader::VCF_SEPARATOR << ref << VcfReader::VCF_SEPARATOR << alt << VcfReader::VCF_SEPARATOR;
     if (qual==-1) stream << VcfReader::VCF_MISSING_CHAR_1;
     else stream << qual;
-    stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR << info << VcfReader::VCF_SEPARATOR << format;
-
-    for (const auto& item: genotypes) {
-        stream << VcfReader::VCF_SEPARATOR << item;
+    stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR;
+    if (is_redundant) stream << VcfReader::INFO_REDUNDANT << VcfReader::INFO_ASSIGNMENT << "true" << VcfReader::INFO_SEPARATOR;
+    stream << info << VcfReader::VCF_SEPARATOR << format;
+    if (is_redundant) {
+        for (int32_t i=0; i<N_SAMPLES; i++) stream << VcfReader::VCF_SEPARATOR << VcfReader::MISSING_GT;
+    }
+    else {
+        for (const auto& item: genotypes) stream << VcfReader::VCF_SEPARATOR << item;
     }
 }
 

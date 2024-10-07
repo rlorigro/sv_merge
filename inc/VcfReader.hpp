@@ -347,12 +347,15 @@ public:
     static const string CHR_STR_LOWER;
     static const string CHR_STR_UPPER;
     static const char UNKNOWN_BASE;
+    static const string MISSING_GT;
 
     /**
      * Info field constants
      */
     static const char INFO_ASSIGNMENT;
     static const char INFO_SEPARATOR;
+    static const string INFO_REDUNDANT;
+    static const string INFO_REDUNDANT_HEADER;
     static const string SVTYPE_STR;
     static const string SVLEN_STR;
     static const string END_STR;
