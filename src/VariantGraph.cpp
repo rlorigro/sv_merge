@@ -701,19 +701,27 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
  * Implemented as a naive quadratic scan. Should be made faster.
  */
 void VariantGraph::mark_redundant_records() {
-    int32_t i, j;
+    bool redundant;
+    int32_t i, j, k;
+    size_t length;
 
     for (auto& record: vcf_records) record.is_redundant=false;
-    for (i=0; i<n_vcf_records; i++) sort(vcf_record_to_edge.at(i).begin(),vcf_record_to_edge.at(i).end(),[](const edge_t& a, const edge_t& b) {
-        if (a.first<b.first) return true;
-        else if (a.first>b.first) return false;
-        else return a.second<b.second;
-    });
     for (i=0; i<n_vcf_records; i++) {
         if (vcf_records.at(i).is_redundant) continue;
+        length=vcf_record_to_edge.at(i).length();
         for (j=i+1; j<n_vcf_records; j++) {
-            if (vcf_records.at(j).is_redundant) continue;
-            if (vcf_record_to_edge.at(j)==vcf_record_to_edge.at(i)) vcf_records.at(j).is_redundant=true;
+            if (vcf_records.at(j).is_redundant || length!=vcf_record_to_edge.at(j).length()) continue;
+            redundant=true;
+            for (k=0; k<length; k++) {
+                if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(k)) { redundant=false; break; }
+            }
+            if (!redundant) {
+                redundant=true;
+                for (k=0; k<length; k++) {
+                    if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(length-1-k)) { redundant=false; break; }
+                }
+            }
+            if (redundant) vcf_records.at(j).is_redundant=true;
         }
     }
 }
