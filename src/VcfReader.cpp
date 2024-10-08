@@ -40,7 +40,7 @@ const string VcfReader::MISSING_GT = VcfReader::VCF_MISSING_STRING_1+VcfReader::
 const char VcfReader::INFO_ASSIGNMENT = '=';
 const char VcfReader::INFO_SEPARATOR = ';';
 const string VcfReader::INFO_REDUNDANT = "HAPESTRY_REDUNDANT";
-const string VcfReader::INFO_REDUNDANT_HEADER = "##INFO=<ID="+VcfReader::INFO_REDUNDANT+",Number=1,Type=String,Description=\"The call is equivalent to another call in this VCF.\">";
+const string VcfReader::INFO_REDUNDANT_HEADER = "##INFO=<ID="+VcfReader::INFO_REDUNDANT+",Number=1,Type=String,Description=\"The call is equivalent to another call in this VCF. This can happen, since the same call might have distinct VCF representations that are not collapsed by e.g. bcftools merge (e.g. an implicit and an explicit DEL).\">";
 const string VcfReader::SVTYPE_STR = "SVTYPE";
 const string VcfReader::SVLEN_STR = "SVLEN";
 const string VcfReader::END_STR = "END";
