@@ -703,22 +703,22 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
 void VariantGraph::mark_redundant_records() {
     bool redundant;
     int32_t i, j, k;
-    size_t length;
+    size_t size;
 
     for (auto& record: vcf_records) record.is_redundant=false;
     for (i=0; i<n_vcf_records; i++) {
         if (vcf_records.at(i).is_redundant) continue;
-        length=vcf_record_to_edge.at(i).length();
+        size=vcf_record_to_edge.at(i).size();
         for (j=i+1; j<n_vcf_records; j++) {
-            if (vcf_records.at(j).is_redundant || length!=vcf_record_to_edge.at(j).length()) continue;
+            if (vcf_records.at(j).is_redundant || size!=vcf_record_to_edge.at(j).size()) continue;
             redundant=true;
-            for (k=0; k<length; k++) {
+            for (k=0; k<size; k++) {
                 if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(k)) { redundant=false; break; }
             }
             if (!redundant) {
                 redundant=true;
-                for (k=0; k<length; k++) {
-                    if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(length-1-k)) { redundant=false; break; }
+                for (k=0; k<size; k++) {
+                    if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(size-1-k)) { redundant=false; break; }
                 }
             }
             if (redundant) vcf_records.at(j).is_redundant=true;
