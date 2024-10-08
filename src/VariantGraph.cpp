@@ -704,7 +704,7 @@ void VariantGraph::mark_redundant_records() {
     int32_t i, j;
 
     for (auto& record: vcf_records) record.is_redundant=false;
-    for (i=0; i<n_vcf_records; i++) sort(vcf_record_to_edge.at(i).begin(),vcf_record_to_edge.at(i).end(),[](const pair<string,int32_t>& a,const pair<string,int32_t>& b) {
+    for (i=0; i<n_vcf_records; i++) sort(vcf_record_to_edge.at(i).begin(),vcf_record_to_edge.at(i).end(),[](const edge_t& a, const edge_t& b) {
         if (a.first<b.first) return true;
         else if (a.first>b.first) return false;
         else return a.second<b.second;
