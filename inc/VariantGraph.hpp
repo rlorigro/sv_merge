@@ -112,6 +112,13 @@ public:
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
 
     /**
+     * Two VCF records are equivalent iff they have the same elements in `vcf_record_to_edge`, and if such elements
+     * appear in the same order or in reverse order. For each maximal set of equivalent records, the procedure sets
+     * `is_redundant=true` for all records except one (chosen arbitrarily).
+     */
+    void mark_redundant_records();
+
+    /**
      * Adds a new handle to `graph`. Just a simple wrapper of `HashGraph.create_handle()`.
      *
      * @param tmp_buffer temporary space.

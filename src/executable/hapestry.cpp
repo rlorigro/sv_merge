@@ -1253,6 +1253,7 @@ void hapestry(
                 out_file << line << '\n';
             }
             else{
+                out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
                 input_vcf.close();
                 break;
             }

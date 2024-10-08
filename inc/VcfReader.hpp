@@ -87,6 +87,11 @@ public:
     int32_t n_haplotypes_ref, n_haplotypes_alt;
 
     /**
+     * Flags used by `VariantGraph`.
+     */
+    bool is_redundant;
+
+    /**
      * @param n_samples_to_load number of samples in a line that are interesting for the user;
      * @param pass_only calls with FILTER different from PASS or `.` are discarded by the user;
      * @param high_qual_only calls with `QUAL<min_qual` are discarded by the user;
@@ -342,12 +347,15 @@ public:
     static const string CHR_STR_LOWER;
     static const string CHR_STR_UPPER;
     static const char UNKNOWN_BASE;
+    static const string MISSING_GT;
 
     /**
      * Info field constants
      */
     static const char INFO_ASSIGNMENT;
     static const char INFO_SEPARATOR;
+    static const string INFO_REDUNDANT;
+    static const string INFO_REDUNDANT_HEADER;
     static const string SVTYPE_STR;
     static const string SVLEN_STR;
     static const string END_STR;
