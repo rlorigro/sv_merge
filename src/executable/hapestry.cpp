@@ -100,7 +100,7 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 aligner.alignEnd2End(seq_a, seq_b);
                 auto score = aligner.getAlignmentScore();
 
-//                // WFA creates negative scores for "distance", we make it positive again and rescale it as a percent
+                // WFA creates negative scores for "distance", we make it positive again and rescale it as a percent
                 size_t scaled_score = 100 - (100*size_t(-score)) / min(seq_a.size(), seq_b.size());
 
                 // Avoid adding while iterating
@@ -232,7 +232,7 @@ void align_read_to_path(
 
     // Extract indel edit distance from cigar
     cigar_result.clear();
-    cigar_result = aligner.getCIGAR(false);
+    cigar_result = aligner.getCIGAR(true);
     string length_token;
 
     int64_t n_non_match = 0;
@@ -251,8 +251,8 @@ void align_read_to_path(
         [&](const CigarInterval& intersection, const interval_t& interval) {
             auto l = intersection.get_op_length();
 
-            // Count indels
-            if (intersection.code != cigar_char_to_code['M']){
+            // Count non-matches
+            if (intersection.code != cigar_char_to_code['=']){
                 n_non_match += l;
             }
 
