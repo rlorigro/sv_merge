@@ -31,6 +31,8 @@ using operations_research::math_opt::SolveResult;
 using operations_research::math_opt::SolverType;
 using operations_research::math_opt::TerminationReason;
 using operations_research::math_opt::SolveArguments;
+using operations_research::math_opt::Termination;
+using operations_research::math_opt::VariableMap;
 
 
 namespace sv_merge {
