@@ -922,6 +922,9 @@ void merge_thread_fn(
             align_read_path_edges_of_transmap(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
         }
 
+        // Attempt to manually deallocate transmap for this region
+        transmap = {};
+
         i = job_index.fetch_add(1);
     }
 }
