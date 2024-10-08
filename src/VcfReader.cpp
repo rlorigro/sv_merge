@@ -1,6 +1,4 @@
 #include "VcfReader.hpp"
-
-#include "CLI11.hpp"
 #include "misc.hpp"
 
 using sv_merge::equal_ignore_case;
