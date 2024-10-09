@@ -606,7 +606,9 @@ void write_solution_to_vcf(
         });
     }
 
-    cerr << "WARNING: region " << region.to_string() << " transmap is missing VCF samples" << samples_not_found << '\n';
+    if (not samples_not_found.empty()) {
+        cerr << "WARNING: region " << region.to_string() << " transmap is missing VCF samples" << samples_not_found << '\n';
+    }
 
     // Open the VCF output file
     ofstream vcf_file(output_path);
