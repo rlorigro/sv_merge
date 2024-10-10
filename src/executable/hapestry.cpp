@@ -903,6 +903,7 @@ void merge_thread_fn(
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
             cerr << "WARNING: Command timed out: " << command << '\n';
+            transmap = {};
             i = job_index.fetch_add(1);
             continue;
         }
@@ -946,7 +947,7 @@ void merge_thread_fn(
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';
-                cerr << "ERROR caught at " << region.to_string() << '\n';
+                cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
             }
         }
 
