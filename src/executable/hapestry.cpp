@@ -935,19 +935,13 @@ void merge_thread_fn(
         transmap.write_edge_info_to_csv(output_csv, variant_graph);
 
         if (not config.skip_solve){
-            try {
-                TerminationReason termination_reason = optimize(transmap, variant_graph, vcf_reader, config, region, subdir);
+            TerminationReason termination_reason = optimize(transmap, variant_graph, vcf_reader, config, region, subdir);
 
-                if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
-                    cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
-                }
-                else if (termination_reason != TerminationReason::kOptimal) {
-                    throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
-                }
+            if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
+                cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
             }
-            catch (const exception& e) {
-                cerr << e.what() << '\n';
-                cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
+            else if (termination_reason != TerminationReason::kOptimal) {
+                throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
             }
         }
 
