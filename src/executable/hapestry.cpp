@@ -739,6 +739,63 @@ void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min
 }
 
 
+TerminationReason optimize(
+    TransMap& transmap,
+    VariantGraph& variant_graph,
+    const VcfReader& vcf_reader,
+    const OptimizerConfig& config,
+    const Region& region,
+    path subdir
+){
+    TerminationReason termination_reason;
+
+    // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
+    termination_reason = optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    if (config.use_quadratic_objective) {
+        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+    }
+    else {
+        // Then optimize the reads with the joint model
+        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+    }
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
+    // likely does not conflict with existing names
+    for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+        transmap.add_variant("v" + to_string(v));
+    }
+
+    // Construct mapping of paths to variants
+    transmap.for_each_path([&](const string& path_name, int64_t path_id){
+        // Convert the path to a vector
+        vector <pair <string,bool> > path;
+
+        GafAlignment::parse_string_as_path(path_name, path);
+
+        variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+            string var_name = "v" + to_string(id);
+            transmap.add_edge(var_name, path_name);
+        });
+    });
+
+    // Write the solution to a VCF
+    path output_path = subdir / "solution.vcf";
+
+    write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
+
+    return termination_reason;
+}
+
+
 /**
  * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
  * graph.
@@ -878,40 +935,14 @@ void merge_thread_fn(
 
         if (not config.skip_solve){
             try {
-                // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
-                optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+                TerminationReason termination_reason = optimize(transmap, variant_graph, vcf_reader, config, region, subdir);
 
-                if (config.use_quadratic_objective) {
-                    optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+                if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
+                    cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
                 }
-                else {
-                    // Then optimize the reads with the joint model
-                    optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+                else if (termination_reason != TerminationReason::kOptimal) {
+                    throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
                 }
-
-                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
-                // likely does not conflict with existing names
-                for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-                    transmap.add_variant("v" + to_string(v));
-                }
-
-                // Construct mapping of paths to variants
-                transmap.for_each_path([&](const string& path_name, int64_t path_id){
-                    // Convert the path to a vector
-                    vector <pair <string,bool> > path;
-
-                    GafAlignment::parse_string_as_path(path_name, path);
-
-                    variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-                        string var_name = "v" + to_string(id);
-                        transmap.add_edge(var_name, path_name);
-                    });
-                });
-
-                // Write the solution to a VCF
-                path output_path = subdir / "solution.vcf";
-
-                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';

@@ -354,10 +354,9 @@ double optimize_d_given_n(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
+    	std::chrono::milliseconds& result_duration,
         unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
-        int64_t n,
-        path output_dir
+        int64_t n
         ){
 
     cerr << "Optimizing d for n: " << n << '\n';
@@ -370,21 +369,21 @@ double optimize_d_given_n(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+    termination_reason = result.termination.reason;
+
+    // Parse Duration
+    result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Immediately undo the constraint after solving
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d_given_n found: " << output_dir << '\n';
         return -1;
     }
 
     // Extract the d value
     double d = vars.cost_d.Evaluate(result.variable_values());
-
-    // Print the n and d values of the solution
-//    cerr << "n: " << n << "\td: " << d << '\n';
 
     // Parse the solution
     for (const auto& [edge,var]: vars.read_hap){
@@ -399,20 +398,6 @@ double optimize_d_given_n(
             throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
         }
     }
-
-    // Write a log
-    auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-    string time_csv;
-    duration_to_csv(duration, time_csv);
-
-    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";" + termination_reason_to_string(result.termination.reason);
-    bool success = result.termination.reason == TerminationReason::kOptimal;
-
-    // Append log line to output file which contains the result of each optimization
-    write_time_log(output_dir, "d_given_n", time_csv, success, notes);
-
-    termination_reason = result.termination.reason;
-    result_varmap = std::move(result.variable_values());
 
     return d;
 }
@@ -436,10 +421,9 @@ double optimize_n_given_d(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
+    	std::chrono::milliseconds& result_duration,
         unordered_set <pair <int64_t,int64_t> >& result_read_path_edges,
-        double d,
-        path output_dir
+        double d
         ){
 
     cerr << "Optimizing n for d: " << d << '\n';
@@ -452,21 +436,21 @@ double optimize_n_given_d(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+    termination_reason = result.termination.reason;
+
+    // Parse Duration
+    result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Immediately undo the constraint after solving
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_given_d found: " << output_dir << '\n';
         return -1;
     }
 
     // Extract the n value
     double n = vars.cost_n.Evaluate(result.variable_values());
-
-    // Print the n and d values of the solution
-//    cerr << "n: " << n << "\td: " << d << '\n';
 
     // Parse the solution
     for (const auto& [edge,var]: vars.read_hap){
@@ -481,19 +465,6 @@ double optimize_n_given_d(
             throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
         }
     }
-
-    auto duration = std::chrono::milliseconds(response.value().solve_stats.solve_time / absl::Milliseconds(1));
-    string time_csv;
-    duration_to_csv(duration, time_csv);
-
-    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";" + termination_reason_to_string(result.termination.reason);
-    bool success = response.value().termination.reason == TerminationReason::kOptimal;
-
-    // Append log line to output file which contains the result of each optimization
-    write_time_log(output_dir, "n_given_d_min", time_csv, success, notes);
-
-    termination_reason = result.termination.reason;
-    result_varmap = std::move(result.variable_values());
 
     return n;
 }
@@ -515,9 +486,8 @@ double optimize_d_given_n(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
-        int64_t n,
-        path output_dir = ""
+    	std::chrono::milliseconds& result_duration,
+        int64_t n
         ){
 
     auto constraint = model.AddLinearConstraint(vars.cost_n <= n + 0.5);
@@ -526,31 +496,19 @@ double optimize_d_given_n(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+    termination_reason = result.termination.reason;
+    result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Immediately undo the constraint after solving
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d_given_n found " << '\n';
         return -1;
     }
 
     // Extract the d value
     double d = vars.cost_d.Evaluate(result.variable_values());
-
-    if (not output_dir.empty()) {
-        // Write a log
-        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-        string time_csv;
-        duration_to_csv(duration, time_csv);
-
-        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";d=" + to_string(d) + ";" + termination_reason_to_string(result.termination.reason);
-        bool success = result.termination.reason == TerminationReason::kOptimal;
-
-        // Append log line to output file which contains the result of each optimization
-        write_time_log(output_dir, "d_given_n_min", time_csv, success, notes);
-    }
 
     return d;
 }
@@ -562,6 +520,8 @@ double optimize_d_given_n(
  * @param vars
  * @param transmap
  * @param solver_type
+ * @param termination_reason This is updated so that it is clear why a failure happened
+ * @param result_varmap This is updated so that it can be used for the solution in a special cases where n=1
  * @param d the given cost to constrain to
  * @param n_threads
  * @return
@@ -572,9 +532,8 @@ double optimize_n_given_d(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
-        int64_t d,
-        path output_dir = ""
+        std::chrono::milliseconds& result_duration,
+        int64_t d
         ){
 
     auto constraint = model.AddLinearConstraint(vars.cost_d <= d + 0.5);
@@ -583,31 +542,19 @@ double optimize_n_given_d(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+	termination_reason = result.termination.reason;
+    result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Immediately undo the constraint after solving
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n_given_d found " << '\n';
         return -1;
     }
 
     // Extract the n value
     double n = vars.cost_n.Evaluate(result.variable_values());
-
-    if (not output_dir.empty()) {
-        // Write a log
-        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-        string time_csv;
-        duration_to_csv(duration, time_csv);
-
-        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";n=" + to_string(n) + ";" + termination_reason_to_string(result.termination.reason);
-        bool success = result.termination.reason == TerminationReason::kOptimal;
-
-        // Append log line to output file which contains the result of each optimization
-        write_time_log(output_dir, "n_given_d", time_csv, success, notes);
-    }
 
     return n;
 }
@@ -629,8 +576,7 @@ double optimize_n(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
-        path output_dir = ""
+    	std::chrono::milliseconds& result_duration
         ){
 
     model.Minimize(vars.cost_n);
@@ -638,29 +584,16 @@ double optimize_n(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+	termination_reason = result.termination.reason;
+	result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for n found " << '\n';
         return -1;
     }
 
     // Extract the n value
     double n = vars.cost_n.Evaluate(result.variable_values());
-
-    if (not output_dir.empty()) {
-        // Write a log
-        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-        string time_csv;
-        duration_to_csv(duration, time_csv);
-
-        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";n=" + to_string(n) + ";" + termination_reason_to_string(result.termination.reason);
-        bool success = result.termination.reason == TerminationReason::kOptimal;
-
-        // Append log line to output file which contains the result of each optimization
-        write_time_log(output_dir, "n_min", time_csv, success, notes);
-    }
-
 
     return n;
 }
@@ -672,8 +605,7 @@ double optimize_d(
         const SolverType& solver_type,
         const SolveArguments& args,
         TerminationReason& termination_reason,
-        VariableMap<double>& result_varmap,
-        path output_dir = ""
+        std::chrono::milliseconds& result_duration
         ){
 
     model.Minimize(vars.cost_d);
@@ -681,28 +613,16 @@ double optimize_d(
     const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
 
     const auto result = response.value();
+	termination_reason = result.termination.reason;
+    result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Check if the first solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for d found " << '\n';
         return -1;
     }
 
     // Extract the d value
     double d = vars.cost_d.Evaluate(result.variable_values());
-
-    if (not output_dir.empty()) {
-        // Write a log
-        auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-        string time_csv;
-        duration_to_csv(duration, time_csv);
-
-        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";d=" + to_string(d) + ";" + termination_reason_to_string(result.termination.reason);
-        bool success = result.termination.reason == TerminationReason::kOptimal;
-
-        // Append log line to output file which contains the result of each optimization
-        write_time_log(output_dir, "d_min", time_csv, success, notes);
-    }
 
     return d;
 }
@@ -752,6 +672,7 @@ void optimize_with_golden_search(
         path output_dir
 ){
     TerminationReason tr;
+    std::chrono::milliseconds duration;
     VariableMap<double> result_varmap;
 
     SolveArguments args;
@@ -769,12 +690,12 @@ void optimize_with_golden_search(
 
     // First find one extreme of the pareto set (D_MIN)
     unordered_set <pair <int64_t,int64_t> > n_max_result_edges;
-    d_min = round(optimize_d(model, vars, solver_type, args, tr, result_varmap));
+    d_min = round(optimize_d(model, vars, solver_type, args, tr, duration));
 
     cerr << t << '\n';
     t.reset();
 
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, tr, result_varmap, n_max_result_edges, d_min, output_dir));
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, tr, duration, n_max_result_edges, d_min));
 
     // Need to manually add the result edges to the cache (chicken and egg problem)
     result_edges_cache.emplace(n_max, n_max_result_edges);
@@ -785,12 +706,12 @@ void optimize_with_golden_search(
     cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
 
     // Then find the other extreme of the pareto set (N_MIN)
-    n_min = round(optimize_n(model, vars, solver_type, args, tr, result_varmap));
+    n_min = round(optimize_n(model, vars, solver_type, args, tr, duration));
 
     cerr << t << '\n';
     t.reset();
 
-    d_max = round(optimize_d_given_n(model, vars, solver_type, args, tr, result_varmap, result_edges_cache[n_min], n_min, output_dir));
+    d_max = round(optimize_d_given_n(model, vars, solver_type, args, tr, duration, result_edges_cache[n_min], n_min));
 
     cerr << t << '\n';
     t.reset();
@@ -836,7 +757,7 @@ void optimize_with_golden_search(
 
         auto c_result = results.find(c_i);
         if (c_result == results.end()){
-            double c = optimize_d_given_n(model, vars, solver_type, args, tr, result_varmap, result_edges_cache[c_i], c_i, output_dir);
+            double c = optimize_d_given_n(model, vars, solver_type, args, tr, duration, result_edges_cache[c_i], c_i);
             c_distance = get_normalized_distance(c, c_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(c_i, c_distance);
             cerr << t << '\n';
@@ -848,7 +769,7 @@ void optimize_with_golden_search(
 
         auto d_result = results.find(d_i);
         if (d_result == results.end()){
-            double d = optimize_d_given_n(model, vars, solver_type, args, tr, result_varmap, result_edges_cache[d_i], d_i, output_dir);
+            double d = optimize_d_given_n(model, vars, solver_type, args, tr, duration, result_edges_cache[d_i], d_i);
             d_distance = get_normalized_distance(d, d_i, n_min, n_max, d_min, d_max, n_weight, d_weight);
             results.emplace(d_i, d_distance);
             cerr << t << '\n';
@@ -972,7 +893,50 @@ void optimize_reads_with_d_and_n_using_golden_search(
 }
 
 
-void optimize_reads_with_d_and_n(
+void write_optimization_log(
+    const TerminationReason& termination_reason,
+    const std::chrono::milliseconds& duration,
+    const TransMap& transmap,
+    const string& name,
+    path output_dir
+){
+	string time_csv;
+    duration_to_csv(duration, time_csv);
+
+    size_t n_reads = 0;
+    size_t n_paths = 0;
+    size_t n_edges = 0;
+
+    transmap.for_each_read([&](const string& name, int64_t id){
+    	n_reads++;
+    });
+
+    transmap.for_each_path([&](const string& name, int64_t id){
+    	n_paths++;
+    });
+
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
+    	n_edges++;
+    });
+
+    string notes;
+    notes += termination_reason_to_string(termination_reason);
+    notes += ";";
+    notes += "n_reads=" + to_string(n_reads);
+    notes += ";";
+    notes += "n_paths=" + to_string(n_paths);
+    notes += ";";
+    notes += "n_edges=" + to_string(n_edges);
+
+    bool success = termination_reason == TerminationReason::kOptimal;
+
+	// Append log line to output file which contains the result of each optimization
+    write_time_log(output_dir, name, time_csv, success, notes);
+
+}
+
+
+TerminationReason optimize_reads_with_d_and_n(
         TransMap& transmap,
         double d_weight,
         double n_weight,
@@ -984,7 +948,7 @@ void optimize_reads_with_d_and_n(
         ){
 
     TerminationReason termination_reason;
-    VariableMap<double> result_varmap;
+    std::chrono::milliseconds duration;
     Model model;
     SolveArguments args;
     PathVariables vars;
@@ -1013,23 +977,34 @@ void optimize_reads_with_d_and_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, result_varmap, output_dir));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, result_varmap, d_min, output_dir));
+    d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
-    // Put a pseudo count into n_max to try to guard against diploid cases being reduced to haploid
-//    n_max += 1;
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
 
-    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, duration, d_min));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
+
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
 
     // Then find the other extreme of the pareto set (N_MIN)
-    n_min = round(optimize_n(model, vars, solver_type, args, termination_reason, result_varmap, output_dir));
-    d_max = round(optimize_d_given_n(model, vars, solver_type, args, termination_reason, result_varmap, n_min, output_dir));
+    n_min = round(optimize_n(model, vars, solver_type, args, termination_reason, duration));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_n", output_dir);
 
-    // Put a pseudo count into d_max to try to guard against haploid cases being reduced to diploid
-    // TODO: remove this or modify it when switching to non-integer distance costs
-//    d_max += 5;
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
 
-    cerr << "n_min: " << n_min << "\td_max: " << d_max << '\n';
+    d_max = round(optimize_d_given_n(model, vars, solver_type, args, termination_reason, duration, n_min));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_given_n", output_dir);
+
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
 
     // Now that we have the range of n and d values, we can normalize the costs and construct the quadratic objective
     auto n_range = n_max - n_min;
@@ -1050,45 +1025,35 @@ void optimize_reads_with_d_and_n(
 
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
     const auto& result_n_d = response_n_d.value();
+    termination_reason = result_n_d.termination.reason;
 
     // Write a log
-    auto duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
-    string time_csv;
-    duration_to_csv(duration, time_csv);
+    duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
+	write_optimization_log(termination_reason, duration, transmap, "optimize_n_d_quadratic", output_dir);
 
-    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";" + termination_reason_to_string(result_n_d.termination.reason);
-    bool success = result_n_d.termination.reason == TerminationReason::kOptimal;
-
-    // Append log line to output file which contains the result of each optimization
-    write_time_log(output_dir, "n_d_quadratic", time_csv, success, notes);
-
-    // Check if the final solution is feasible
-    if (result_n_d.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
-        transmap = {};
-        return;
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
     }
 
     // Infer the optimal n and d values of the joint solution
     n = vars.cost_n.Evaluate(result_n_d.variable_values());
     d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
-    cerr << "n: " << n << "\td: " << d << '\n';
-
     if (integral) {
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }
     else{
-        cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
-        transmap = {};
+        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
+
+    return result_n_d.termination.reason;
 }
 
 
 /**
  * This reproduces the function from hapslap
  */
-void optimize_reads_with_d_plus_n(
+TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
         double d_weight,
         double n_weight,
@@ -1103,7 +1068,7 @@ void optimize_reads_with_d_plus_n(
     SolveArguments args;
     PathVariables vars;
     TerminationReason termination_reason;
-    VariableMap<double> result_varmap;
+    std::chrono::milliseconds duration;
 
     args.parameters.threads = n_threads;
 
@@ -1127,78 +1092,64 @@ void optimize_reads_with_d_plus_n(
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, result_varmap, output_dir));
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, result_varmap, d_min, output_dir));
+    d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
-    cerr << "n_max: " << n_max << "\td_min: " << d_min << '\n';
+    if (termination_reason != TerminationReason::kOptimal){
+		return termination_reason;
+    }
 
-    if (int64_t(n_max) == 1){
-        cerr << "Skipping final optimization because n=1 for d_min=" << d_min << '\n';
+    n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, duration, d_min));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
 
-        if (integral) {
-            parse_read_model_solution(termination_reason, result_varmap, vars, transmap, output_dir);
-        }
-        else{
-            cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
-            transmap = {};
-        }
+    if (termination_reason != TerminationReason::kOptimal){
+		return termination_reason;
+    }
+
+    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
+    // using an arbitrary factor of 32.
+    Variable d_norm = model.AddContinuousVariable(0,32,"d");
+    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
+
+    // Normalize the costs
+    model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
+    model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+
+    model.Minimize(d_norm*d_weight + n_norm*n_weight);
+
+    const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
+    const auto& result_n_d = response_n_d.value();
+
+    // Write a log
+    duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
+    termination_reason = result_n_d.termination.reason;
+
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
+
+    // Check if the final solution is optimal
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
+
+    // Infer the optimal n and d values of the joint solution
+    n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    d = vars.cost_d.Evaluate(result_n_d.variable_values());
+
+    if (integral) {
+        parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }
     else{
-        // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
-        // using an arbitrary factor of 32.
-        Variable d_norm = model.AddContinuousVariable(0,32,"d");
-        Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
-
-        // Normalize the costs
-        model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
-        model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
-
-        model.Minimize(d_norm*d_weight + n_norm*n_weight);
-
-        const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
-        const auto& result_n_d = response_n_d.value();
-
-        // Write a log
-        auto duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
-        string time_csv;
-        duration_to_csv(duration, time_csv);
-
-        string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";" + termination_reason_to_string(result_n_d.termination.reason);
-        bool success = result_n_d.termination.reason == TerminationReason::kOptimal;
-
-        // Append log line to output file which contains the result of each optimization
-        write_time_log(output_dir, "n_plus_d", time_csv, success, notes);
-
-        // Check if the final solution is feasible
-        if (result_n_d.termination.reason != TerminationReason::kOptimal){
-            cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
-            transmap = {};
-            return;
-        }
-
-        // Infer the optimal n and d values of the joint solution
-        n = vars.cost_n.Evaluate(result_n_d.variable_values());
-        d = vars.cost_d.Evaluate(result_n_d.variable_values());
-
-        cerr << "n: " << n << "\td: " << d << '\n';
-
-        if (integral) {
-            parse_read_model_solution(result_n_d, vars, transmap, output_dir);
-        }
-        else{
-            cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
-            transmap = {};
-        }
-
+        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
 
+    return termination_reason;
 }
 
 
 /**
  * This reproduces the function from hapslap
  */
-void optimize_read_feasibility(
+TerminationReason optimize_read_feasibility(
         TransMap& transmap,
         size_t n_threads,
         size_t time_limit_seconds,
@@ -1250,28 +1201,22 @@ void optimize_read_feasibility(
 
     // Check if the final solution is feasible
     if (result.termination.reason != TerminationReason::kOptimal){
-        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
-        transmap = {};
-
         // Append log line to output file which contains the result of each optimization
         // If it failed, then r_out is 0 by default
         string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=0"  + ";" + termination_reason_to_string(result.termination.reason);
         write_time_log(output_dir, "feasibility", time_csv, success, notes);
 
-        return;
+        return result.termination.reason;
     }
 
     // Infer the optimal r value of the feasibility solution
     r = vars.cost_r.Evaluate(result.variable_values());
 
-    cerr << "r: " << r << '\n';
-
     if (integral) {
         parse_read_feasibility_solution(result, vars, transmap, output_dir);
     }
     else{
-        cerr << "WARNING: solution parsing not implemented for non-integer variables" << '\n';
-        transmap = {};
+        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
 
     // Count the remaining reads
@@ -1280,9 +1225,10 @@ void optimize_read_feasibility(
     });
 
     // Append log line to output file which contains the result of each optimization
-    string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=" + to_string(r_out) + ";" + termination_reason_to_string(result.termination.reason);
+    string notes = termination_reason_to_string(result.termination.reason) + ";n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=" + to_string(r_out);
     write_time_log(output_dir, "feasibility", time_csv, success, notes);
 
+    return result.termination.reason;
 }
 
 

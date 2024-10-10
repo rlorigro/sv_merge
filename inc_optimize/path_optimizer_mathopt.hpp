@@ -37,6 +37,7 @@ using operations_research::math_opt::VariableMap;
 
 namespace sv_merge {
 
+string termination_reason_to_string(const TerminationReason& reason);
 
 /// Data class to contain the variables of the ILP, int64_t IDs intended to be reused from the TransMap
 class PathVariables{
@@ -94,7 +95,7 @@ void construct_joint_n_d_model(
         bool use_ploidy_constraint = true
         );
 
-void optimize_reads_with_d_and_n(
+TerminationReason optimize_reads_with_d_and_n(
         TransMap& transmap,
         double d_weight,
         double n_weight,
@@ -105,7 +106,7 @@ void optimize_reads_with_d_and_n(
         bool use_ploidy_constraint = true
         );
 
-void optimize_reads_with_d_plus_n(
+TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
         double d_weight,
         double n_weight,
@@ -126,7 +127,7 @@ void optimize_reads_with_d_and_n_using_golden_search(
         bool use_ploidy_constraint = true
         );
 
-void optimize_read_feasibility(
+TerminationReason optimize_read_feasibility(
         TransMap& transmap,
         size_t n_threads,
         size_t time_limit_seconds,

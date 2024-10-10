@@ -139,7 +139,7 @@ RUN mkdir /opt/gurobi
 # HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=b45ecdf9244306cafab4fcc300ae8f67cfc291a9
+ARG HAPESTRY_COMMIT=90c2d29c898ecdef1b390ea32202def084fb14f7
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
