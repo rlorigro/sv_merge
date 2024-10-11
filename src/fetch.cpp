@@ -1032,6 +1032,12 @@ void fetch_reads(
             auto sample_id = transmap.get_id(sample_name);
 
             for (auto& s: sequences) {
+                // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
+                // spanning, etc.
+                if (s.sequence.empty()) {
+                    continue;
+                }
+
                 // If the user wants, we append sample name to the read name to prevent intersample collisions
                 if (append_sample_to_read) {
                     s.name += + "_" + sample_name;
@@ -1262,6 +1268,12 @@ void fetch_reads_from_clipped_bam(
                 }
 
                 string s = seq.substr(i, l);
+
+                // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
+                // spanning, etc.
+                if (s.empty()) {
+                    continue;
+                }
 
                 inner_coord.query_start -= outer_coord.query_start;
                 inner_coord.query_stop -= outer_coord.query_start;
