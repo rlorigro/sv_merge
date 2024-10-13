@@ -294,10 +294,29 @@ void parse_read_feasibility_solution(
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
     if (termination_reason == TerminationReason::kOptimal) {
         transmap.for_each_read([&](const string& read_name, int64_t read_id){
+
+            // Checking the first Map.at
+            const auto result1 = vars.reads.find(read_id);
+            if (result1==vars.reads.end()) {
+                string tmp = "Transmap reads:\n";
+                transmap.for_each_read([&](const string& read_name, int64_t read_id) { tmp+=to_string(read_id)+"="+read_name+"\n"; });
+                tmp+="vars.reads:\n";
+                for (auto& element: vars.reads) { tmp+=to_string(element.first)+"\n"; }
+                throw runtime_error("parse_read_feasibility_solution> First AT failed. read_id="+to_string(read_id)+" read_name="+read_name+"\n"+tmp);
+            }
             const Variable& var = vars.reads.at(read_id);
 
+            // Checking the second Map.at
             if (var.is_integer()){
-                auto is_assigned = bool(int64_t(round(result_var_map.at(var))));
+                bool is_assigned = false;
+                try { is_assigned = bool(int64_t(round(result_var_map.at(var)))); }
+                catch(std::exception& e) {
+                    string tmp = "vars.reads:\n";
+                    for (auto& element: vars.reads) { tmp+=to_string(element.first)+"\n"; }
+                    tmp+="result_var_map:\n";
+                    for (auto& element: result_var_map) { tmp+=to_string(element.first.id())+"\n"; }
+                    throw runtime_error("parse_read_feasibility_solution> Second AT failed. read_id="+to_string(read_id)+" read_name="+read_name+"\n"+tmp);
+                }
 
                 if (not is_assigned){
                     // Delete all the edges that are not assigned (to simplify iteration later)
