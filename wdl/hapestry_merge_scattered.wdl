@@ -99,7 +99,7 @@ task chunk_vcf {
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
-        ${windows_arg} \
+        ~{if defined(windows_override_bed) then "--windows " + windows_override_bed else ""} \
         ${reference_arg}
 
         tree ~{output_dir}
@@ -121,7 +121,15 @@ task chunk_vcf {
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
+        ls ~{output_dir}/run/windows_*_unflanked.bed | sort -V > sorted_beds.txt
+        ls ~{output_dir}/*.vcf.gz | sort -V > sorted_vcfs.txt
+        ls ~{output_dir}/*.vcf.gz.tbi | sort -V > sorted_vcf_tbis.txt
+
         tree ~{output_dir}
+
+        head -n 20 sorted_beds.txt
+        head -n 20 sorted_vcfs.txt
+        head -n 20 sorted_vcf_tbis.txt
         >>>
 
     parameter_meta {
@@ -142,9 +150,9 @@ task chunk_vcf {
     }
 
     output {
-        Array[File] chunked_beds = glob(output_dir + "/run/*_unflanked.bed")
-        Array[File] chunked_vcfs = glob(output_dir + "/*.vcf.gz")
-        Array[File] chunked_tbis = glob(output_dir + "/*.vcf.gz.tbi")
+        Array[File] chunked_beds = read_lines("sorted_beds.txt")
+        Array[File] chunked_vcfs = read_lines("sorted_vcfs.txt")
+        Array[File] chunked_tbis = read_lines("sorted_vcf_tbis.txt")
     }
 }
 
@@ -366,11 +374,14 @@ workflow hapestry_merge_scattered {
 
     Array[Pair[File,File]] items = zip(chunk_vcf.chunked_vcfs, chunk_vcf.chunked_tbis)
 
-    scatter (x in items) {
+    # Lord strike me down
+    Array[Pair[File,Pair[File,File]]] items2 = zip(chunk_vcf.chunked_beds, items)
+
+    scatter (x in items2) {
         call hapestry_merge.merge as scattered_merge {
             input:
-                vcf_gz = x.left,
-                vcf_gz_tbi = x.right,
+                vcf_gz = x.right.left,
+                vcf_gz_tbi = x.right.right,
                 bam_not_hardclipped = bam_not_hardclipped,
                 interval_max_length = interval_max_length,
                 flank_length = flank_length,
@@ -381,6 +392,7 @@ workflow hapestry_merge_scattered {
                 d_weight = d_weight,
                 n_threads = n_threads,
                 tandems_bed = tandems_bed,
+                windows_bed = x.left,
                 reference_fa = reference_fa,
                 haps_vs_ref_csv = haps_vs_ref_csv,
                 gurobi_license = gurobi_license,

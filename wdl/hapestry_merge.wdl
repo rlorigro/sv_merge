@@ -29,6 +29,7 @@ task merge {
         Float d_weight = 1.0
         Int n_threads
         File tandems_bed
+        File? windows_bed
         File reference_fa
         File haps_vs_ref_csv
         File? gurobi_license
@@ -85,6 +86,7 @@ task merge {
         --bam_csv ~{haps_vs_ref_csv} \
         --vcf confident.vcf \
         --tandems ~{tandems_bed} \
+        ~{if defined(windows_bed) then "--windows " + windows_bed else ""} \
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
@@ -149,6 +151,7 @@ task merge {
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
+        windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
 
     runtime {
@@ -187,6 +190,7 @@ workflow hapestry_merge {
         Float d_weight = 1.0
         Int n_threads
         File tandems_bed
+        File? windows_bed
         File reference_fa
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
@@ -219,6 +223,7 @@ workflow hapestry_merge {
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
+        windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
 
     call merge {
@@ -236,6 +241,7 @@ workflow hapestry_merge {
             d_weight = d_weight,
             n_threads = n_threads,
             tandems_bed = tandems_bed,
+            windows_bed = windows_bed,
             reference_fa = reference_fa,
             haps_vs_ref_csv = haps_vs_ref_csv,
             force_unique_reads = force_unique_reads,
