@@ -219,12 +219,19 @@ bool TransMap::has_node(const string& name) const{
 
 
 void TransMap::remove_edge(int64_t a, int64_t b){
-    return graph.remove_edge(a,b);
+    graph.remove_edge(a,b);
 }
 
 
 void TransMap::remove_node(int64_t id){
-    return graph.remove_node(id);
+    // Additionally erase the sequence if it was a Read type node
+    auto result = sequences.find(id);
+
+    if (result != sequences.end()) {
+        sequences.erase(result);
+    }
+
+    graph.remove_node(id);
 }
 
 

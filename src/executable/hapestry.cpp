@@ -268,6 +268,14 @@ void align_read_to_path(
 }
 
 
+/**
+ * Method to align ALL reads to ALL paths
+ * @param transmap will be filled with new edges, reads with no edge are deleted !!!
+ * @param variant_graph used to infer path sequences for all paths
+ * @param min_read_hap_identity threshold to accept an edge
+ * @param flank_length used to filter the region that cigars are computed
+ * @param output_dir for debug/logging
+ */
 void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity, int32_t flank_length, path output_dir=""){
     // TODO: test these params??
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
@@ -324,12 +332,14 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     }
 
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
+    vector <int64_t> reads_to_be_removed;
     vector<interval_t> empty_intervals;
     float non_match_portion;
     string cigar;
 
     transmap.for_each_read([&](const string& read_name, int64_t id){
         auto& read_sequence = transmap.get_sequence(id);
+        bool has_alignment = false;
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
             if (read_sequence.empty() or path_sequence.empty()){
@@ -346,6 +356,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
 
                 // Avoid adding while iterating
                 edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+                has_alignment = true;
             }
 
             // Write out the full alignments for debugging
@@ -365,16 +376,33 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                     );
             }
         }
+
+        if (not has_alignment) {
+            reads_to_be_removed.emplace_back(id);;
+        }
     });
 
     for (auto [a,b,score]: edges_to_add){
         transmap.add_edge(a,b,score);
     }
+
+    // Doing this because later on in hapestry it becomes annoying if some reads have no edges
+    for (auto id: reads_to_be_removed) {
+        transmap.remove_node(id);
+    }
 }
 
 
+/**
+ * Only used for debugging purposes
+ * @param transmap
+ * @param variant_graph
+ * @param min_read_hap_identity
+ * @param flank_length
+ * @param output_dir
+ */
 void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& variant_graph, float min_read_hap_identity, int32_t flank_length, path output_dir=""){
-    // TODO: test these params?? why is gap extension greater than mismatch cost?
+    // TODO: test these params??
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
     // First extract the sequences of the paths
