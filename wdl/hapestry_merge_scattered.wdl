@@ -112,9 +112,12 @@ task chunk_vcf {
             if [[ ! $(basename ${file}) =~ ^windows_[0-9]+_unflanked\.bed$ ]]; then
                 continue
             fi
-
             echo "processing ${file}"
-            bcftools view -T ${file} -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+
+            # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
+            awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > expanded.bed
+
+            bcftools view -T expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
