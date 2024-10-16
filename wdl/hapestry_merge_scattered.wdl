@@ -79,21 +79,7 @@ task chunk_vcf {
             time bcftools view --threads ${n_threads} -T ~{confident_bed} ~{vcf_gz} -Ov -o ${vcf}
         else
             # unzip the VCF for hapestry
-            bcftools view -Ov -o ${vcf} ~{vcf_gz}
-        fi
-
-        # Kind of circular to provide windows to "find_windows" app, but if we dont then we have to reproduce a lot of
-        # clean up and chunking separately in bash, which is a waste of time.
-        windows_arg=""
-        if ~{defined(windows_override_bed)}
-        then
-            windows_arg="--windows ~{windows_override_bed}"
-        fi
-
-        reference_arg=""
-        if ~{defined(reference_fa)}
-        then
-            reference_arg="--ref_fasta ~{reference_fa}"
+            time bcftools view --threads ${n_threads} -Ov -o ${vcf} ~{vcf_gz}
         fi
 
         ~{docker_dir}/sv_merge/build/find_windows \
@@ -105,7 +91,7 @@ task chunk_vcf {
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
         ~{if defined(windows_override_bed) then "--windows " + windows_override_bed else ""} \
-        ${reference_arg}
+        ~{if defined(reference_fa) then "--ref_fasta " + reference_fa else ""} \
 
         tree ~{output_dir}
 
