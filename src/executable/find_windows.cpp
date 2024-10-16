@@ -30,6 +30,25 @@ using std::ref;
 using namespace sv_merge;
 
 
+string to_fixed_length_string(size_t i, size_t max_value) {
+    string s = to_string(i);
+    string s_max = to_string(max_value);
+
+    size_t s_len = s.length();
+    size_t s_max_len = s_max.length();
+
+    if (s_len > s_max_len) {
+        throw runtime_error("ERROR: to_fixed_length_string: cannot generate string for int " + s + " larger than provided max " + s_max);
+    }
+
+    if (s_len < s_max_len) {
+        s = string(s_max_len - s_len, '0') + s;
+    }
+
+    return s;
+}
+
+
 void find_windows(
         path output_dir,
         path tandem_bed,
@@ -117,16 +136,13 @@ void find_windows(
     while (r < regions.size()) {
         auto& region = regions[r];
 
-//        cerr << region.start << ',' << region.stop << '\n';
-
         // If the number of chunks iterated exceeds the desired chunk size, start a new chunk.
-        // Also, if a new contig is reached, start a new chunk.
         if (r % chunk_size == 0){
-            output_path_unflanked = output_dir / ("windows_" + to_string(n) + "_unflanked.bed");
+            output_path_unflanked = output_dir / ("windows_" + to_fixed_length_string(n, n_chunks) + "_unflanked.bed");
             file2.close();
             file2.open(output_path_unflanked);
 
-            output_path = output_dir / ("windows_" + to_string(n) + ".bed");
+            output_path = output_dir / ("windows_" + to_fixed_length_string(n, n_chunks) + ".bed");
             file.close();
             file.open(output_path);
 
