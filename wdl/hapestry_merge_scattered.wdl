@@ -44,6 +44,15 @@ task chunk_vcf {
 
         set -euxo
 
+        n_threads=$(nproc --all)
+
+        # Limit the value to a maximum of 16
+        if [ "$n_threads" -gt 16 ]; then
+            n_threads=16
+        fi
+
+        echo "Available threads (limited to 16): $n_threads"
+
         mkdir ~{output_dir}
 
         # get the directory of the vcf
@@ -61,23 +70,17 @@ task chunk_vcf {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
-        if ~{defined(confident_bed)}
-        then
-            # use bcftools to subset the vcf by the confident bed
-            bcftools view -T ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
-
-            # convert to bgzipped vcf and overwrite the input VCF
-            bcftools view -Oz -o ~{vcf_gz} confident.vcf
-
-            # index the vcf
-            bcftools index -t ~{vcf_gz}
-        fi
-
         # create a variable for the non-gz vcf
         vcf=$(basename ~{vcf_gz} .gz)
 
-        # unzip the VCF for hapestry
-        bcftools view -Ov -o ${vcf} ~{vcf_gz}
+        if ~{defined(confident_bed)}
+        then
+            # use bcftools to subset the vcf by the confident bed and output as raw uncompressed VCF (for hapestry)
+            time bcftools view --threads ${n_threads} -T ~{confident_bed} ~{vcf_gz} -Ov -o ${vcf}
+        else
+            # unzip the VCF for hapestry
+            bcftools view -Ov -o ${vcf} ~{vcf_gz}
+        fi
 
         # Kind of circular to provide windows to "find_windows" app, but if we dont then we have to reproduce a lot of
         # clean up and chunking separately in bash, which is a waste of time.
@@ -119,8 +122,8 @@ task chunk_vcf {
             # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
             awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > expanded.bed
 
-            time bcftools view -R expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
-            time bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
+            time bcftools view --threads ${n_threads} -R expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            time bcftools index --threads ${n_threads} -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
         tree ~{output_dir}
