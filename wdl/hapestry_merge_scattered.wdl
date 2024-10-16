@@ -44,15 +44,6 @@ task chunk_vcf {
 
         set -euxo
 
-        n_threads=$(nproc --all)
-
-        # Limit the value to a maximum of 16
-        if [ "$n_threads" -gt 16 ]; then
-            n_threads=16
-        fi
-
-        echo "Available threads (limited to 16): $n_threads"
-
         mkdir ~{output_dir}
 
         # get the directory of the vcf
@@ -76,10 +67,10 @@ task chunk_vcf {
         if ~{defined(confident_bed)}
         then
             # use bcftools to subset the vcf by the confident bed and output as raw uncompressed VCF (for hapestry)
-            time bcftools view --threads ${n_threads} -T ~{confident_bed} ~{vcf_gz} -Ov -o ${vcf}
+            time bcftools view --threads 4 -T ~{confident_bed} ~{vcf_gz} -Ov -o ${vcf}
         else
             # unzip the VCF for hapestry
-            time bcftools view --threads ${n_threads} -Ov -o ${vcf} ~{vcf_gz}
+            time bcftools view --threads 4 -Ov -o ${vcf} ~{vcf_gz}
         fi
 
         ~{docker_dir}/sv_merge/build/find_windows \
@@ -95,22 +86,35 @@ task chunk_vcf {
 
         tree ~{output_dir}
 
-        # use each of the generated BEDs to subset the VCF
-        for file in ~{output_dir}/run/*; do
-            [ -e "$file" ] || continue
+        # Dynamic load balancing in bash, thanks ChatGPT <3 <3 <3
+        n_threads=$(nproc --all)
 
-            # if the file is not of the format windows_[numeric]_unflanked.bed, using regex to identify the pattern, skip it
-            if [[ ! $(basename ${file}) =~ ^windows_[0-9]+_unflanked\.bed$ ]]; then
-                continue
-            fi
+        echo "Available threads: $n_threads"
+
+        for file in ~{output_dir}/run/windows_[0-9]+_unflanked.bed; do
             echo "processing ${file}"
 
             # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
-            awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > expanded.bed
+            awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > $(basename ${file})_expanded.bed
 
-            time bcftools view --threads ${n_threads} -R expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
-            time bcftools index --threads ${n_threads} -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
+            # Launch the commands in the background, each running single threaded
+            (
+                time bcftools view -R $(basename ${file})_expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+                time bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
+            ) &
+
+            # Check how many jobs are running
+            while (( $(jobs -r | wc -l) >= n_threads )); do
+                # Wait for any single job to finish
+                wait -n
+            done
+
         done
+
+        # Wait for any remaining background processes to finish
+        wait
+
+        sync
 
         tree ~{output_dir}
 
