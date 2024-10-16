@@ -121,15 +121,8 @@ task chunk_vcf {
             bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
-        ls ~{output_dir}/run/windows_*_unflanked.bed | sort -V > sorted_beds.txt
-        ls ~{output_dir}/*.vcf.gz | sort -V > sorted_vcfs.txt
-        ls ~{output_dir}/*.vcf.gz.tbi | sort -V > sorted_vcf_tbis.txt
-
         tree ~{output_dir}
 
-        head -n 20 sorted_beds.txt
-        head -n 20 sorted_vcfs.txt
-        head -n 20 sorted_vcf_tbis.txt
         >>>
 
     parameter_meta {
@@ -150,9 +143,9 @@ task chunk_vcf {
     }
 
     output {
-        Array[File] chunked_beds = read_lines("sorted_beds.txt")
-        Array[File] chunked_vcfs = read_lines("sorted_vcfs.txt")
-        Array[File] chunked_tbis = read_lines("sorted_vcf_tbis.txt")
+        Array[File] chunked_beds = glob(output_dir + "/run/windows_*_unflanked.bed")
+        Array[File] chunked_vcfs = glob(output_dir + "/*.vcf.gz")
+        Array[File] chunked_tbis = glob(output_dir + "/*.vcf.gz.tbi")
     }
 }
 
