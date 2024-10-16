@@ -119,7 +119,7 @@ task chunk_vcf {
             # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
             awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > expanded.bed
 
-            time bcftools view -T expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            time bcftools view -R expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
             time bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
