@@ -42,6 +42,8 @@ task chunk_vcf {
     command <<<
         git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1                                                                                                                                                                                               set -eoxu pipefail
 
+        set -euxo
+
         mkdir ~{output_dir}
 
         # get the directory of the vcf
@@ -117,8 +119,8 @@ task chunk_vcf {
             # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
             awk 'BEGIN {OFS="\t"} { $2 = ($2 > 1 ? $2 - 2 : 0); $3; print }' ${file} > expanded.bed
 
-            bcftools view -T expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
-            bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
+            time bcftools view -T expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+            time bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
         done
 
         tree ~{output_dir}
