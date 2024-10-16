@@ -91,7 +91,14 @@ task chunk_vcf {
 
         echo "Available threads: $n_threads"
 
-        for file in ~{output_dir}/run/windows_[0-9]+_unflanked.bed; do
+        # Use each of the generated BEDs to subset the VCF
+        for file in ~{output_dir}/run/*; do
+            [ -e "$file" ] || continue
+
+            # If the file is not of the format windows_[numeric]_unflanked.bed, using regex to identify the pattern, skip it
+            if [[ ! $(basename ${file}) =~ ^windows_[0-9]+_unflanked\.bed$ ]]; then
+                continue
+            fi
             echo "processing ${file}"
 
             # We force the window start to be -2 because our string 0-based coords vary inconsistently from VCF pos
@@ -105,8 +112,7 @@ task chunk_vcf {
 
             # Check how many jobs are running
             while (( $(jobs -r | wc -l) >= n_threads )); do
-                # Wait for any single job to finish
-                wait -n
+                wait -n  # Wait for any single job to finish
             done
 
         done
