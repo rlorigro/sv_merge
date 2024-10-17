@@ -1279,7 +1279,7 @@ void hapestry(
         // TODO: create option to use /dev/shm/ as staging dir
         // Absolutely must delete the /dev/shm/ copy or warn the user at termination
         //
-        cerr << "Generating graph alignments for VCF: " << vcf << '\n';
+        cerr << t << "Launching threads for graph alignment and optimization: " << vcf << '\n';
 
         merge_variants(
                 contig_interval_trees,
@@ -1301,11 +1301,15 @@ void hapestry(
         path out_vcf = output_dir / ("merged.vcf");
         ofstream out_file(out_vcf);
 
+        cerr << t << "Writing output VCF: " << out_vcf << '\n';
+
         if (not (out_file.is_open() and out_file.good())){
             throw runtime_error("ERROR: could not write file: " + out_vcf.string());
         }
 
         ifstream input_vcf(vcf);
+
+        VcfReader vcf_reader(vcf);
 
         if (not (input_vcf.is_open() and input_vcf.good())){
             throw runtime_error("ERROR: could not write file: " + vcf.string());
@@ -1324,7 +1328,12 @@ void hapestry(
             }
         }
 
-        bool found_header = false;
+        // Write the header in exactly the same way that it is done on a thread/region basis
+        out_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
+        for (const auto& sample_name: vcf_reader.sample_ids){
+            out_file << '\t' << sample_name;
+        }
+        out_file << '\n';
 
         path fail_regions_bed_path = output_dir / "windows_failed.bed";
         ofstream fail_regions_file(fail_regions_bed_path);
@@ -1348,15 +1357,7 @@ void hapestry(
 
             ifstream file(sub_vcf);
             while (getline(file, line)){
-                if (line.starts_with('#')){
-                    if (not line.starts_with("##fileformat")){
-                        if (not found_header){
-                            out_file << line << '\n';
-                            found_header = true;
-                        }
-                    }
-                }
-                else{
+                if (not line.starts_with('#')){
                     out_file << line << '\n';
                 }
             }
