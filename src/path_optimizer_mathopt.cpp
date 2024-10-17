@@ -1111,6 +1111,20 @@ TerminationReason optimize_reads_with_d_plus_n(
     Variable d_norm = model.AddContinuousVariable(0,32,"d");
     Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
 
+    // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
+    // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
+    // so that the solver exits normally and the solution is parsed as given: no read-hap edges.
+    //
+    // An example of a case where this may happen is in a window where none of the reads span. Generally this is the
+    // result of a Graphaligner issue. In some cases a perfect duplication can "capture" all the reads and prevent
+    // them from spanning the flanks.
+    if (d_min == 0){
+        d_min = 1;
+    }
+    if (n_max == 0){
+        n_max = 1;
+    }
+
     // Normalize the costs
     model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
     model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
