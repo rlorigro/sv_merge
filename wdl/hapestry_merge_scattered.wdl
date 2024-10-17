@@ -106,7 +106,7 @@ task chunk_vcf {
 
             # Launch the commands in the background, each running single threaded
             (
-                time bcftools view -R $(basename ${file})_expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
+                time bcftools view -T $(basename ${file})_expanded.bed -Oz -o "~{output_dir}/$(basename ${file}).vcf.gz" ~{vcf_gz}
                 time bcftools index -t -o "~{output_dir}/$(basename ${file}).vcf.gz.tbi" "~{output_dir}/$(basename ${file}).vcf.gz"
             ) &
 
