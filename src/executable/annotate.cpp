@@ -74,15 +74,16 @@ void write_region_subsequences_to_file_thread_fn(
 
         path output_fasta = output_subdir / filename;
         ofstream file(output_fasta);
+        string s;
 
         t.for_each_read([&](const string& name, int64_t id){
-            auto& s = t.get_sequence(id);
+            t.get_sequence(id, s);
             if (s.empty()){
                 return;
             }
 
             file << '>' << name << '\n';
-            file << t.get_sequence(id) << '\n';
+            file << s << '\n';
         });
 
         i = job_index.fetch_add(1);

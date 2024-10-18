@@ -77,14 +77,25 @@ const HeteroNode& TransMap::get_node(const string& name) const{
 }
 
 
-const string& TransMap::get_sequence(const string& name) const{
+void TransMap::get_sequence(const string& name, string& result) const{
     auto id = graph.name_to_id(name);
-    return sequences.at(id);
+    sequences.at(id).to_string(result);
 }
 
 
-const string& TransMap::get_sequence(int64_t id) const{
-    return sequences.at(id);
+void TransMap::get_sequence(int64_t id, string& result) const{
+    sequences.at(id).to_string(result);
+}
+
+
+size_t TransMap::get_sequence_size(int64_t id) const{
+    return sequences.at(id).size();
+}
+
+
+size_t TransMap::get_sequence_size(const string& name) const{
+    auto id = graph.name_to_id(name);
+    return sequences.at(id).size();
 }
 
 
@@ -140,7 +151,7 @@ void TransMap::add_read(const string& name, const string& sequence){
 }
 
 
-void TransMap::add_read_with_move(string& name, string& sequence){
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence){
     if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
@@ -152,7 +163,7 @@ void TransMap::add_read_with_move(string& name, string& sequence){
 }
 
 
-void TransMap::add_read_with_move(string& name, string& sequence, bool is_reverse){
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, bool is_reverse){
     if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
         throw runtime_error("ERROR: cannot add node with preset node name: " + name);
     }
@@ -283,7 +294,7 @@ void TransMap::get_read_sample(int64_t read_id, string& result) const{
 }
 
 
-void TransMap::for_each_read(const function<void(const string& name, const string& sequence)>& f) const{
+void TransMap::for_each_read(const function<void(const string& name, const BinarySequence<uint64_t>& sequence)>& f) const{
     graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, sequences.at(id));
     });

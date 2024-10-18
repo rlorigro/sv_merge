@@ -50,6 +50,7 @@ public:
     /// Accessing
     void get_query_sequence(string& result, int32_t start, int32_t stop) override;
     void get_query_sequence(string& result) override;
+    void get_query_sequence(BinarySequence<uint64_t>& result) override;
     void get_qualities(vector<uint8_t>& result) override;
     void get_query_name(string& result) const override;
     void get_tag_as_string(const string& name, string& result, bool allow_missing=false) const override;

@@ -43,8 +43,8 @@ if (debug)
 
     if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
 #        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
@@ -93,6 +93,8 @@ set(SOURCES
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
+        src/MurmurHash2.cpp
+        src/MurmurHash3.cpp
 #        src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
@@ -533,6 +535,7 @@ set(TESTS
         test_authenticator
         test_bam
         test_bed
+        test_binary_sequence
         test_bisection_method
         test_command_timeout
         test_fasta
@@ -610,7 +613,7 @@ set(EXECUTABLES
         analyze_evaluation
         annotate
         evaluate
-        extract_reads_from_windows
+#        extract_reads_from_windows
         find_windows
         make_local_hapestry_test_set
         solve_from_csv

@@ -54,6 +54,7 @@ void write_region_subsequences_to_file_thread_fn(
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
+    string s;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -68,7 +69,10 @@ void write_region_subsequences_to_file_thread_fn(
 
         t.for_each_read([&](const string& name, int64_t id){
             file << '>' << name << '\n';
-            file << t.get_sequence(id) << '\n';
+
+            t.get_sequence(id,s);
+
+            file << s << '\n';
         });
 
         i = job_index.fetch_add(1);

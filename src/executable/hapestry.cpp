@@ -80,6 +80,8 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
+    string seq_a;
+    string seq_b;
 
     auto sample_id = transmap.get_id(sample_name);
     transmap.for_each_read_of_sample(sample_id, [&](int64_t a){
@@ -88,8 +90,8 @@ void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const
                 return;
             }
 
-            auto& seq_a = transmap.get_sequence(a);
-            auto& seq_b = transmap.get_sequence(b);
+            transmap.get_sequence(a,seq_a);
+            transmap.get_sequence(b,seq_b);
 
             if (llabs(int64_t(seq_a.size()) - int64_t(seq_b.size())) > score_threshold){
 //                cerr << "skipping edge: " << a << ',' << b << " l: " << int64_t(seq_a.size()) << ',' << int64_t(seq_b.size()) << '\n';
@@ -336,9 +338,10 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     vector<interval_t> empty_intervals;
     float non_match_portion;
     string cigar;
+    string read_sequence;
 
     transmap.for_each_read([&](const string& read_name, int64_t id){
-        auto& read_sequence = transmap.get_sequence(id);
+        transmap.get_sequence(id, read_sequence);
         bool has_alignment = false;
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
@@ -450,10 +453,11 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector<interval_t> empty_intervals;
     float nonmatch_portion;
+    string read_sequence;
     string cigar;
 
     transmap.for_each_read([&](const string& read_name, int64_t id){
-        auto& read_sequence = transmap.get_sequence(id);
+        transmap.get_sequence(id, read_sequence);
 
         transmap.for_each_path_of_read(id, [&](int64_t path_id){
             string path_name = transmap.get_node(path_id).name;
@@ -509,6 +513,7 @@ void write_region_subsequences_to_file_thread_fn(
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
+    string s;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -522,13 +527,14 @@ void write_region_subsequences_to_file_thread_fn(
         ofstream file(output_fasta);
 
         t.for_each_read([&](const string& name, int64_t id){
-            auto& s = t.get_sequence(id);
+            t.get_sequence(id,s);
+
             if (s.empty()){
                 return;
             }
 
             file << '>' << name << '\n';
-            file << t.get_sequence(id) << '\n';
+            file << s << '\n';
         });
 
         i = job_index.fetch_add(1);
