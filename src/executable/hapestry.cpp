@@ -1244,6 +1244,8 @@ void hapestry(
             );
         }
 
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+
         cerr << t << "Writing sequences to disk" << '\n';
 
         path fasta_filename = "sequences.fasta";
@@ -1280,6 +1282,8 @@ void hapestry(
             }
         }
 
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+
         // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
         // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
         // TODO: create option to use /dev/shm/ as staging dir
@@ -1305,17 +1309,16 @@ void hapestry(
 
         auto vcf_prefix = get_vcf_name_prefix(vcf);
         path out_vcf = output_dir / ("merged.vcf");
-        ofstream out_file(out_vcf);
 
         cerr << t << "Writing output VCF: " << out_vcf << '\n';
+
+        ofstream out_file(out_vcf);
 
         if (not (out_file.is_open() and out_file.good())){
             throw runtime_error("ERROR: could not write file: " + out_vcf.string());
         }
 
         ifstream input_vcf(vcf);
-
-        VcfReader vcf_reader(vcf);
 
         if (not (input_vcf.is_open() and input_vcf.good())){
             throw runtime_error("ERROR: could not write file: " + vcf.string());
@@ -1328,18 +1331,24 @@ void hapestry(
                 out_file << line << '\n';
             }
             else{
-                out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
-                input_vcf.close();
+                // The next non-## line MUST be the sample line
+                if (line.starts_with("#")){
+                    // Write header lines for the INFO tags that we added here
+                    out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
+
+                    // Copy the input sample line to the output VCF
+                    out_file << line << '\n';
+                }
+                else {
+                    throw runtime_error("ERROR: cannot find sample line in input VCF: " + vcf.string());
+                }
+
+                // Stop iteration
                 break;
             }
         }
 
-        // Write the header in exactly the same way that it is done on a thread/region basis
-        out_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
-        for (const auto& sample_name: vcf_reader.sample_ids){
-            out_file << '\t' << sample_name;
-        }
-        out_file << '\n';
+        input_vcf.close();
 
         path fail_regions_bed_path = output_dir / "windows_failed.bed";
         ofstream fail_regions_file(fail_regions_bed_path);

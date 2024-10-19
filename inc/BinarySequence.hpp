@@ -44,10 +44,14 @@ public:
     BinarySequence(const BinarySequence& s);
     template <class T2> BinarySequence(const T2& s);
     BinarySequence<T> substr(size_t start, size_t n) const;
+    void encode(const string& s);
     void push_back(char c);
     void shift(char c);
     void reverse_complement();
     void clear();
+
+    // For short sequences it may be important to reserve so that default exponential allocator does not overallocate
+    void reserve(size_t bp_length);
     bool empty() const;
     void to_string(string& s) const;
     size_t get_byte_length() const;
@@ -59,6 +63,16 @@ public:
 template <class T> void BinarySequence<T>::clear(){
     sequence.clear();
     length = 0;
+}
+
+
+template <class T> void BinarySequence<T>::reserve(size_t bp_length){
+    // 4 bases per 8bits
+    auto n_bases_per_word = sizeof(T)*4;
+
+    size_t words_needed = int(ceil(double(bp_length) / double(n_bases_per_word)));
+
+    sequence.reserve(words_needed);
 }
 
 
@@ -143,6 +157,37 @@ template <class T> void BinarySequence<T>::push_back(char c){
     length++;
 }
 
+
+template <class T> void BinarySequence<T>::encode(const string& s){
+    auto n_bases_per_word = sizeof(T)*4;
+    size_t words_needed = int(ceil(double(s.length()) / double(n_bases_per_word)));
+
+    sequence.reserve(words_needed);
+
+    for (auto& c: s) {
+        T bits = base_to_index.at(c);
+
+        if (bits == 4){
+            throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+        }
+
+        uint8_t shift_size = (2*length) % (sizeof(T)*8);
+
+        // If we have reached the beginning of a new word, append the word vector with 0
+        if (shift_size == 0){
+            sequence.emplace_back(0);
+        }
+        // Otherwise shift the last word over to prepare to insert another base
+        else {
+            bits <<= shift_size;
+        }
+
+        sequence.back() |= bits;
+        length++;
+    }
+}
+
+
 /// A function to push a new base but not alter the length of the sequence (as a fixed length queue would)
 /// \tparam T
 /// \param c
@@ -196,6 +241,7 @@ template<class T> void BinarySequence<T>::to_string(string& s) const{
     }
 
     s.clear();
+    s.reserve(length);
 
     T mask = 3;
 
@@ -279,6 +325,12 @@ template<class T> void BinarySequence<T>::reverse_complement(){
 template<class T> BinarySequence<T> BinarySequence<T>::substr(size_t start, size_t n) const{
     BinarySequence<T> s;
     size_t n_bits = sizeof(T)*8;
+
+    // Reserve exactly how much space is needed for the sequence
+    auto n_bases_per_word = sizeof(T)*4;
+    size_t words_needed = int(ceil(double(n) / double(n_bases_per_word)));
+
+    s.sequence.reserve(words_needed);
 
     if (start + n > length) {
         throw runtime_error("ERROR: cannot extract substr greater than size of BinarySequence: start: " + std::to_string(start) + " n: " + std::to_string(n) + " length: " + std::to_string(length));

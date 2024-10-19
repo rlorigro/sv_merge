@@ -385,6 +385,7 @@ void decompress_bam_sequence(const bam1_t* alignment, BinarySequence<uint64_t>& 
     bool is_reverse = bam_is_rev(alignment);
 
     sequence.clear();
+    sequence.reserve(stop-start);
 
     uint8_t base_code;
 
