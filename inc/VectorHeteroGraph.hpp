@@ -59,6 +59,11 @@ public:
     // Simple helper function to search a vector and update it (since edges are stored in vectors)
     void update_adjacency_list(int64_t id, float weight, vector<pair <int64_t,float> >& adjacencies);
 
+    /**
+     * Sorts the neighbors of every node by (type,id).
+     */
+    void sort_adjacency_lists();
+
     void add_edge(const string& name_a, const string& name_b, float weight);
     void add_edge(int64_t id_a, int64_t id_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
@@ -76,6 +81,11 @@ public:
     int64_t get_node_count() const;
     int64_t get_edge_count(int64_t id) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
+
+    /**
+     * Assigns `new_weight` to both `id_a->id_b` and `id_b->id_a`, if they exist.
+     */
+    void update_edge_weight(int64_t id_a, int64_t id_b, float new_weight);
 
     bool has_edge(int64_t id_a, int64_t id_b) const;
     bool has_node(const string& name) const;
@@ -216,6 +226,15 @@ template<class T> void HeteroGraph<T>::update_adjacency_list(
 }
 
 
+template<class T> void HeteroGraph<T>::sort_adjacency_lists() {
+    for (auto& element: edges) {
+        std::sort(element.second.begin(), element.second.end(), [&](const pair <int64_t,float>& a, const pair <int64_t,float>& b) {
+            return (nodes.at(a.first).type<nodes.at(b.first).type || a.first<b.first);
+        });
+    }
+}
+
+
 template<class T> void HeteroGraph<T>::add_edge(const string& name_a, const string& name_b, float weight) {
     auto id_a = name_to_id(name_a);
     auto id_b = name_to_id(name_b);
@@ -282,6 +301,27 @@ template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t i
     }
 
     return value;
+}
+
+
+template<class T> void HeteroGraph<T>::update_edge_weight(int64_t id_a, int64_t id_b, float new_weight) {
+    // Updating `a->b`, if it exists.
+    auto result = edges.find(id_a);
+    if (result!=edges.end()) {
+        auto& adjacencies = result->second;
+        auto ab = std::find_if(adjacencies.begin(),adjacencies.end(),[&](const pair<int64_t, float>& p){ return p.first==id_b; });
+        if (ab!=adjacencies.end()) adjacencies.at(ab).second=new_weight;
+    }
+
+    // Updating `b->a`, if it exists.
+    result=edges.find(id_b);
+    if (result!=edges.end()) {
+        auto& adjacencies = result->second;
+        auto ab = std::find_if(adjacencies.begin(),adjacencies.end(),[&](const pair<int64_t, float>& p){ return p.first==id_a; });
+        if (ab!=adjacencies.end()) adjacencies.at(ab).second=new_weight;
+    }
+}
+
 }
 
 
@@ -404,7 +444,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
     const auto result = edges.find(id);
 
     if (result == edges.end()){
-        return;
+        return;ƒ
     }
 
     // Iterate all edges, but only operate on the specified type

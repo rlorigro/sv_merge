@@ -353,10 +353,15 @@ void TransMap::for_each_read_of_path(int64_t path_id, const function<void(int64_
 }
 
 
-void TransMap::for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const{
-    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
-        f(neighbor.name, id);
+void TransMap::for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t sample_id)>& f) const{
+    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t sample_id){
+        f(neighbor.name, sample_id);
     });
+}
+
+
+void TransMap::for_each_sample_of_read(const int64_t& read_id, const function<void(int64_t sample_id)>& f) const{
+    graph.for_each_neighbor_of_type(read_id, 'S', [&](int64_t sample_id){ f(sample_id); });
 }
 
 
@@ -527,6 +532,81 @@ void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& vari
         });
     });
 }
+
+
+void TransMap::compress_reads(float weight_quantum) {
+    size_t length;
+    int64_t i, j, k;
+    int64_t n_reads, n_clusters, read_id;
+    vector<int64_t> read_ids, read_clusters;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> old_weights, new_weights;
+
+    // Making sure that the neighbors of all nodes lie in the same global order
+    graph.sort_adjacency_lists();
+
+    // Collecting all read-haplotype edges
+    n_reads=0;
+    for_each_read([&](const string& name, int64_t read_id) { n_reads++; });
+    neighbors.reserve(n_reads);
+    for (i=0; i<n_reads; i++) neighbors.emplace_back();
+    old_weights.reserve(n_reads);
+    for (i=0; i<n_reads; i++) old_weights.emplace_back();
+    new_weights.reserve(n_reads);
+    for (i=0; i<n_reads; i++) new_weights.emplace_back();
+    read_ids.reserve(n_reads);
+    i=-1;
+    for_each_read([&](const string& name, int64_t read_id) {
+        // The order in which reads are enumerated is not important
+        read_ids.emplace_back(read_id);
+        i++;
+        graph.for_each_neighbor_of_type(read_id,'P',[&](int64_t path_id) {
+            // For every read, its neighbors lie in the same global order.
+            auto [success, weight] = try_get_edge_weight(read_id, path_id);
+            neighbors.at(i).emplace_back(path_id);
+            old_weights.at(i).emplace_back(weight_quantum==0?weight:(int64_t)floor(weight/weight_quantum));
+            new_weights.at(i).emplace_back(weight);
+        });
+    });
+
+    // Clustering reads; adding sample-read edges; computing new read-hap weights.
+    read_clusters.reserve(n_reads);
+    for (i=0; i<n_reads; i++) read_clusters.emplace_back(-1);
+    n_clusters=0;
+    for (i=0; i<n_reads; i++) {
+        if (read_clusters.at(i)!=-1) continue;
+        n_clusters++;
+        read_clusters.at(i)=i;
+        read_id=read_ids.at(i); length=neighbors.at(i).size();
+        for (j=i+1; j<n_reads; j++) {
+            if (read_clusters.at(j)!=-1 || neighbors.at(j)!=neighbors.at(i) || old_weights.at(j)!=old_weights.at(i)) continue;
+            read_clusters.at(j)=i;
+            for (k=0; k<length; k++) new_weights.at(i).at(k)=std::max(new_weights.at(i).at(k),old_weights.at(j).at(k));
+            for_each_sample_of_read(read_ids.at(j),[&](int64_t sample_id) { graph.add_edge(sample_id,read_id,0); });
+        }
+    }
+    old_weights={};
+
+    // Removing reads; updating read-hap weights.
+    for (i=0; i<n_reads; i++) {
+        if (read_clusters.at(i)==i) {
+            read_id=read_ids.at(i);
+            j=-1;
+            graph.for_each_neighbor_of_type(read_id,'P',[&](int64_t path_id) {
+                graph.update_edge_weight(read_id,path_id,new_weights.at(i).at(++j));
+            });
+        }
+        else remove_node(read_ids.at(i));
+    }
+
+    // Clustering samples
+
+
+
+
+}
+
+
 
 
 }

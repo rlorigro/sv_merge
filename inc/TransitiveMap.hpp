@@ -98,6 +98,7 @@ public:
 
     string get_sample_of_read(const string& read_name) const;
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_sample_of_read(const int64_t& read_id, const function<void(int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
 
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
@@ -120,6 +121,20 @@ public:
 
     /// Clearing
     void clear_non_samples();
+
+    /**
+     * Two reads are considered identical iff they connect to the same haplotypes with the same (possibly quantized)
+     * weights. The procedure collapses all identical reads onto a single node, which becomes connected to all the
+     * samples the reads in its equivalence class belong. The weight of every read-hap edge is the max of all the
+     * edges that were collapsed onto it.
+     *
+     * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
+     * exactly.
+     */
+    void compress_reads(float weight_quantum);
+
+
+
 };
 
 
