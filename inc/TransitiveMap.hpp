@@ -16,6 +16,7 @@ using std::to_string;
 using std::vector;
 using std::string;
 using std::pair;
+using std::byte;
 
 
 namespace sv_merge {
@@ -38,6 +39,12 @@ class TransMap {
     string read_node_name;
     string path_node_name;
     string variant_node_name;
+
+    /**
+     * For every original sample, the sample it was compressed into. Used only by procedures `compress()` and
+     * `decomrpess()`.
+     */
+    unordered_map<string,string> sample_to_compressed_sample;
 
 public:
     TransMap();
@@ -123,18 +130,30 @@ public:
     void clear_non_samples();
 
     /**
-     * Two reads are considered identical iff they connect to the same haplotypes with the same (possibly quantized)
-     * weights. The procedure collapses all identical reads onto a single node, which becomes connected to all the
-     * samples the reads in its equivalence class belong. The weight of every read-hap edge is the max of all the
-     * edges that were collapsed onto it.
+     * Two reads are considered identical iff they connect to the same haplotypes with the same weights (possibly
+     * after quantization). The procedure collapses all identical reads onto a single node, which becomes connected to
+     * all the samples of the reads in its equivalence class (breaking the assumption that a read is connected to just
+     * one sample).
+     *
+     * Two samples are considered identical iff their reads belong to the same set of read clusters (regardless of
+     * how many reads in each sample belong to each cluster). Only one sample per equivalence class is kept, and the
+     * mapping is stored in variable `sample_to_compressed_sample`.
+     *
+     * Remark: the procedure assumes that haplotypes are already distinct from previous steps, and it does not try to
+     * compress them.
      *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
-     * exactly.
+     * exactly;
+     * @param mode the weight of every read-hap edge is set to the max (mode=0), min (mode=1), sum (mode=2) or avg
+     * (mode=3) of all the edges that were collapsed onto it.
      */
-    void compress_reads(float weight_quantum);
+    void compress(float weight_quantum, byte mode);
 
-
-
+    /**
+     * Reintroduces a node for every compressed sample using variable `sample_to_compressed_sample`. The rest of the
+     * graph remains compressed.
+     */
+    void decompress_samples();
 };
 
 
