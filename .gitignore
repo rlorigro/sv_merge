@@ -39,3 +39,4 @@ output/*
 scripts/output/*
 *.png
 build_o3/*
+build*
