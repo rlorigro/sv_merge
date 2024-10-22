@@ -536,6 +536,7 @@ set(TESTS
         test_bam
         test_bed
         test_binary_sequence
+        test_binary_sequence_memory
         test_bisection_method
         test_command_timeout
         test_fasta
@@ -557,6 +558,7 @@ set(TESTS
         test_simple_alignment
 #        test_unordered_dense
         test_transmap
+        test_transmap_memory
         test_wfa2
         test_vcfreader
         test_variantgraph
