@@ -552,7 +552,7 @@ int64_t TransMap::get_n_paths() const {
 /**
  * Currently implemented as a quadratic scan, probably too slow for large cohorts.
  */
-void TransMap::compress(float weight_quantum, byte mode) {
+void TransMap::compress(float weight_quantum, uint64_t mode) {
     const int64_t n_reads = get_n_reads();
     const int64_t n_samples = get_n_samples();
 

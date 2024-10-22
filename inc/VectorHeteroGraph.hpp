@@ -310,7 +310,7 @@ template<class T> void HeteroGraph<T>::update_edge_weight(int64_t id_a, int64_t 
     if (result!=edges.end()) {
         auto& adjacencies = result->second;
         auto ab = std::find_if(adjacencies.begin(),adjacencies.end(),[&](const pair<int64_t, float>& p){ return p.first==id_b; });
-        if (ab!=adjacencies.end()) adjacencies.at(ab).second=new_weight;
+        if (ab!=adjacencies.end()) (*ab).second=new_weight;
     }
 
     // Updating `b->a`, if it exists.
@@ -318,10 +318,8 @@ template<class T> void HeteroGraph<T>::update_edge_weight(int64_t id_a, int64_t 
     if (result!=edges.end()) {
         auto& adjacencies = result->second;
         auto ab = std::find_if(adjacencies.begin(),adjacencies.end(),[&](const pair<int64_t, float>& p){ return p.first==id_a; });
-        if (ab!=adjacencies.end()) adjacencies.at(ab).second=new_weight;
+        if (ab!=adjacencies.end()) (*ab).second=new_weight;
     }
-}
-
 }
 
 

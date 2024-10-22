@@ -156,7 +156,7 @@ public:
      * @param mode the weight of every read-hap edge is set to the max (mode=0), min (mode=1), sum (mode=2) or avg
      * (mode=3) of all the edges that were collapsed onto it.
      */
-    void compress(float weight_quantum, byte mode);
+    void compress(float weight_quantum, uint64_t mode);
 
     /**
      * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample` (which is

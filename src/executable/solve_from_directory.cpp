@@ -155,7 +155,7 @@ size_t solve_from_csv(
 
     if (compress_transmap) {
         cerr << "Compressing the transmap... ";
-        transmap.compress(0,byte{2});
+        transmap.compress(0,2);
         cerr << "done\n";
     }
     optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir);
