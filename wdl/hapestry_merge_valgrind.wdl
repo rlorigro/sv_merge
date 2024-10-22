@@ -259,6 +259,6 @@ workflow hapestry_merge {
         File sequence_data_tarball = merge.sequence_data_tarball
         File beds_tarball = merge.beds_tarball
         File? monitoring_log = merge.monitoring_log
-        File? valgrind_log = merge.massif_log
+        File? valgrind_log = merge.valgrind_log
     }
 }
