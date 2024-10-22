@@ -123,11 +123,18 @@ public:
             const function<bool(const HeteroNode& node)>& criteria,
             const function<void(const HeteroNode& node, int64_t id)>& f) const;
 
+    int64_t get_n_reads() const;
+    int64_t get_n_samples() const;
+    int64_t get_n_paths() const;
+
+
     /// Writing
     void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;
 
     /// Clearing
     void clear_non_samples();
+
+    /// Compressing
 
     /**
      * Two reads are considered identical iff they connect to the same haplotypes with the same weights (possibly
@@ -137,10 +144,12 @@ public:
      *
      * Two samples are considered identical iff their reads belong to the same set of read clusters (regardless of
      * how many reads in each sample belong to each cluster). Only one sample per equivalence class is kept, and the
-     * mapping is stored in variable `sample_to_compressed_sample`.
+     * mapping is stored in object variable `sample_to_compressed_sample`.
      *
      * Remark: the procedure assumes that haplotypes are already distinct from previous steps, and it does not try to
      * compress them.
+     *
+     * Remark: the procedure sets object variables `n_reads, n_read_clusters, n_samples, n_sample_clusters`.
      *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
      * exactly;
@@ -150,8 +159,8 @@ public:
     void compress(float weight_quantum, byte mode);
 
     /**
-     * Reintroduces a node for every compressed sample using variable `sample_to_compressed_sample`. The rest of the
-     * graph remains compressed.
+     * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample` (which is
+     * cleared when this procedure returns). The rest of the graph remains compressed.
      */
     void decompress_samples();
 };

@@ -534,10 +534,31 @@ void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& vari
 }
 
 
+int64_t TransMap::get_n_reads() const {
+    return graph.get_edge_count(graph.name_to_id(read_node_name));
+}
+
+
+int64_t TransMap::get_n_samples() const {
+    return graph.get_edge_count(graph.name_to_id(sample_node_name));
+}
+
+
+int64_t TransMap::get_n_paths() const {
+    return graph.get_edge_count(graph.name_to_id(path_node_name));
+}
+
+
+/**
+ * Currently implemented as a quadratic scan, probably too slow for large cohorts.
+ */
 void TransMap::compress(float weight_quantum, byte mode) {
+    const int64_t n_reads = get_n_reads();
+    const int64_t n_samples = get_n_samples();
+
     size_t length;
     int64_t i, j, k;
-    int64_t n_reads, n_clusters, read_id, n_samples;
+    int64_t read_id, n_clusters;
     vector<bool> is_redundant;
     vector<int64_t> node_ids, cluster_representative, cluster_size;
     vector<string> sample_names;
@@ -548,8 +569,6 @@ void TransMap::compress(float weight_quantum, byte mode) {
     graph.sort_adjacency_lists();
 
     // Collecting all read-haplotype edges
-    n_reads=0;
-    for_each_read([&](const string& name, int64_t read_id) { n_reads++; });
     neighbors.reserve(n_reads);
     for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
@@ -598,7 +617,9 @@ void TransMap::compress(float weight_quantum, byte mode) {
                     case 3: weights.at(i).at(k)=weights.at(i).at(k)+weights.at(j).at(k); break;
                 }
             }
-            for_each_sample_of_read(node_ids.at(j),[&](int64_t sample_id) { graph.add_edge(sample_id,read_id,0); });
+            for_each_sample_of_read(node_ids.at(j),[&](int64_t sample_id) {
+                graph.add_edge(sample_id,read_id,0);  // Updates both sides of the edge
+            });
             remove_node(node_ids.at(j));
         }
     }
@@ -622,8 +643,6 @@ void TransMap::compress(float weight_quantum, byte mode) {
     graph.sort_adjacency_lists();
 
     // Collecting all sample-compressedRead edges
-    n_samples=0;
-    for_each_sample([&](string sample_name, int64_t sample_id) { n_samples++; });
     sample_names.reserve(n_samples); node_ids.reserve(n_samples); neighbors.reserve(n_samples);
     i=-1;
     for_each_sample([&](string sample_name, int64_t sample_id) {
@@ -638,8 +657,10 @@ void TransMap::compress(float weight_quantum, byte mode) {
     sample_to_compressed_sample.clear();
     is_redundant.reserve(n_samples);
     for (i=0; i<n_samples; i++) is_redundant.at(i)=false;
+    n_clusters=0;
     for (i=0; i<n_samples; i++) {
         if (is_redundant.at(i)) continue;
+        n_clusters++;
         for (j=i+1; j<n_samples; j++) {
             if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i)) continue;
             is_redundant.at(j)=true;
@@ -653,7 +674,9 @@ void TransMap::compress(float weight_quantum, byte mode) {
 
 void TransMap::decompress_samples() {
     for (auto& pair: sample_to_compressed_sample) {
-        for_each_read_of_sample(pair.second, [&](const string& read_name, int64_t read_id) { add_edge(pair.first,read_name,0); });
+        for_each_read_of_sample(pair.second, [&](const string& read_name, int64_t read_id) {
+            add_edge(pair.first,read_name,0);  // Updates both sides of the edge
+        });
     }
     sample_to_compressed_sample.clear();
 }

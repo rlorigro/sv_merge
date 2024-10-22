@@ -83,7 +83,8 @@ size_t solve_from_csv(
         const SolverType& solver_type,
         size_t max_reads_per_sample,
         size_t n_threads,
-        bool use_ploidy_constraint
+        bool use_ploidy_constraint,
+        bool compress_transmap
         ){
 
     TransMap transmap;
@@ -152,6 +153,11 @@ size_t solve_from_csv(
     // Make tmp dir
     path output_dir = "/tmp/" + to_string(h);
 
+    if (compress_transmap) {
+        cerr << "Compressing the transmap... ";
+        transmap.compress(0,byte{2});
+        cerr << "done\n";
+    }
     optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir);
 
     return i-1;
@@ -166,6 +172,7 @@ void thread_fn(
         size_t max_reads_per_sample,
         size_t n_threads,
         bool use_ploidy_constraint,
+        bool compress_transmap,
         path output_dir
         ){
 
@@ -178,7 +185,7 @@ void thread_fn(
         bool success = true;
 
         try {
-            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint);
+            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap);
         }
         catch (const exception& e) {
             cerr << e.what() << '\n';
@@ -209,6 +216,7 @@ void solve_from_directory(
         size_t max_reads_per_sample,
         size_t n_threads,
         bool use_ploidy_constraint,
+        bool compress_transmap,
         path output_dir
         ){
 
@@ -250,6 +258,7 @@ void solve_from_directory(
                 max_reads_per_sample,
                 n_threads,
                 use_ploidy_constraint,
+                compress_transmap,
                 output_dir
             );
     }
@@ -265,18 +274,20 @@ void solve_from_directory(
 int main(int argc, char** argv){
     CLI::App app{"Solve from CSV"};
 
-    path input_csv;
+    path input_directory;
     path output_dir;
     string solver;
     SolverType solver_type;
     bool use_ploidy_constraint = true;
+    bool compress_transmap = false;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
     size_t n_threads = 1;
 
-    app.add_option("-i,--input", input_csv, "Input CSV file with sample-read-path data for optimizer")->required();
+    app.add_option("-i,--input", input_directory, "Input directory containing subdirectories containing CSV files with sample-read-path data for optimizer")->required();
     app.add_option("-o,--output_dir", output_dir, "Output directory (must not exist)")->required();
     app.add_option("--solver", solver, "Solver to use, must be one of: scip, glop, pdlp")->required();
     app.add_flag("!--no_ploidy", use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
+    app.add_option("--compress_transmap", compress_transmap, "TRUE: the transmap is compressed before running the solver.");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
 
@@ -302,5 +313,5 @@ int main(int argc, char** argv){
         cerr << "NOT using ploidy constraint...\n";
     }
 
-    solve_from_directory(input_csv, solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, output_dir);
+    solve_from_directory(input_directory, solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir);
 }
