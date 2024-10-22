@@ -60,3 +60,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/VcfdistEvaluation.wdl
   testParameterFiles:
+- name: hapestry_merge_valgrind
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge_valgrind.wdl
+  testParameterFiles:
