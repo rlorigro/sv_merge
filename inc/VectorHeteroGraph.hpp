@@ -442,7 +442,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
     const auto result = edges.find(id);
 
     if (result == edges.end()){
-        return;ƒ
+        return;
     }
 
     // Iterate all edges, but only operate on the specified type

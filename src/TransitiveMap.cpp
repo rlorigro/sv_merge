@@ -595,7 +595,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
     is_redundant.reserve(n_reads);
     for (i=0; i<n_reads; i++) is_redundant.at(i)=false;
-    if (mode==byte{3}) {
+    if (mode==3) {
         cluster_size.reserve(n_reads);
         for (i=0; i<n_reads; i++) cluster_size.at(i)=0;
     }
@@ -603,12 +603,12 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
         n_clusters++;
-        if (mode==byte{3}) cluster_size.at(i)=1;
+        if (mode==3) cluster_size.at(i)=1;
         read_id=node_ids.at(i); length=neighbors.at(i).size();
         for (j=i+1; j<n_reads; j++) {
             if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
             is_redundant.at(j)=true;
-            if (mode==byte{3}) cluster_size.at(i)++;
+            if (mode==3) cluster_size.at(i)++;
             for (k=0; k<length; k++) {
                 switch (mode) {
                     case 0: weights.at(i).at(k)=std::max(weights.at(i).at(k),weights.at(j).at(k)); break;
@@ -627,7 +627,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     // Updating read-hap weights
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
-        if (mode==byte{3}) {
+        if (mode==3) {
             length=weights.at(i).size();
             for (j=0; j<length; j++) weights.at(i).at(j)/=cluster_size.at(i);
         }
