@@ -52,29 +52,29 @@ string termination_reason_to_string(const TerminationReason& reason){
  * Construct a model such that each read must be assigned to exactly one path and each sample must have at most 2 paths.
  * For the sake of modularity, no explicit call to CpModelBuilder::Minimize(vars.cost_n + vars.cost_d) is made here, it
  * must be made after constructing the model.
+ *
  * @param transmap - TransMap representing the relationship between samples, paths, and reads
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
 void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
     // DEFINE: hap vars
-    transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
-        string name = "h" + std::to_string(hap_id);
+    transmap.for_each_path([&](const string& hap_name, int64_t hap_id){
+        const string name = "h" + std::to_string(hap_id);
         vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
     });
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            const string read_name = transmap.get_node(read_id).name;
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
-                string hap_name = transmap.get_node(hap_id).name;
-                string read_name = transmap.get_node(read_id).name;
-
-                // DEFINE: read-hap vars
-                string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
+                const string hap_name = transmap.get_node(hap_id).name;
 
                 // Do only once for each unique pair of read-hap. After read clustering, the same read-hap edge may be
                 // enumerated multiple times, since the same read may belong to multiple samples.
                 if (vars.read_hap.find({read_id, hap_id}) == vars.read_hap.end()) {
+                    // DEFINE: read-hap vars
+                    string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
                     auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
                     auto& r_h = result.first->second;
 
