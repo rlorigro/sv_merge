@@ -74,7 +74,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 // enumerated multiple times, since the same read may belong to multiple samples.
                 if (vars.read_hap.find({read_id, hap_id}) == vars.read_hap.end()) {
                     // DEFINE: read-hap vars
-                    string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
+                    const string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
                     auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
                     auto& r_h = result.first->second;
 
@@ -93,7 +93,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 // Do only once for each unique pair of sample-hap
                 if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
                     // DEFINE: sample-hap vars
-                    string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
+                    const string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
                     auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
                     auto& s_h = result2.first->second;
 
