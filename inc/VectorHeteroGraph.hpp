@@ -229,7 +229,7 @@ template<class T> void HeteroGraph<T>::update_adjacency_list(
 template<class T> void HeteroGraph<T>::sort_adjacency_lists() {
     for (auto& element: edges) {
         std::sort(element.second.begin(), element.second.end(), [&](const pair <int64_t,float>& a, const pair <int64_t,float>& b) {
-            return (nodes.at(a.first).type<nodes.at(b.first).type || a.first<b.first);
+            return (nodes.at(a.first).type<nodes.at(b.first).type || (nodes.at(a.first).type==nodes.at(b.first).type && a.first<b.first));
         });
     }
 }

@@ -594,10 +594,10 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
 
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
     is_redundant.reserve(n_reads);
-    for (i=0; i<n_reads; i++) is_redundant.at(i)=false;
+    for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
     if (mode==3) {
         cluster_size.reserve(n_reads);
-        for (i=0; i<n_reads; i++) cluster_size.at(i)=0;
+        for (i=0; i<n_reads; i++) cluster_size.emplace_back(0);
     }
     n_clusters=0;
     for (i=0; i<n_reads; i++) {
@@ -655,8 +655,8 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
 
     // Removing redundant samples
     sample_to_compressed_sample.clear();
-    is_redundant.reserve(n_samples);
-    for (i=0; i<n_samples; i++) is_redundant.at(i)=false;
+    is_redundant.clear(); is_redundant.reserve(n_samples);
+    for (i=0; i<n_samples; i++) is_redundant.emplace_back(false);
     n_clusters=0;
     for (i=0; i<n_samples; i++) {
         if (is_redundant.at(i)) continue;
