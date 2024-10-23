@@ -568,6 +568,7 @@ template<class T> bool HeteroGraph<T>::are_edges_distinct() const {
             }
         }
     }
+    return true;
 }
 
 
