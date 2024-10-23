@@ -163,6 +163,8 @@ public:
      * cleared when this procedure returns). The rest of the graph remains compressed.
      */
     void decompress_samples();
+
+    bool are_edges_distinct() const;
 };
 
 

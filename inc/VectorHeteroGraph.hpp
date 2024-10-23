@@ -64,6 +64,11 @@ public:
      */
     void sort_adjacency_lists();
 
+    /**
+     * @return TRUE iff no duplicated ID exists in any vector of `edges`.
+     */
+    bool are_edges_distinct() const;
+
     void add_edge(const string& name_a, const string& name_b, float weight);
     void add_edge(int64_t id_a, int64_t id_b, float weight);
     void remove_edge(const string& name_a, const string& name_b);
@@ -545,6 +550,21 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(
             if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true) {
                 q.emplace(n_other);
                 visited.emplace(n_other);
+            }
+        }
+    }
+}
+
+
+template<class T> bool HeteroGraph<T>::are_edges_distinct() const {
+    size_t i, j;
+    for (const auto& [id_a,item]: edges){
+        for (i=0; i<item.size(); i++) {
+            for (j=i+1; j<item.size(); j++) {
+                if (item.at(i).first==item.at(j).first) {
+                    cerr << "are_edges_distinct> DUPLICATED NEIGHBOR OF id_a=" << to_string(id_a) << ": i=" << to_string(i) << " (" << to_string(item.at(i).first) << "," << to_string(item.at(i).second) << ") " << ", j=" << to_string(j) << " (" << to_string(item.at(j).first) << "," << to_string(item.at(j).second) << ")\n";
+                    return false;
+                }
             }
         }
     }

@@ -549,6 +549,11 @@ int64_t TransMap::get_n_paths() const {
 }
 
 
+bool TransMap::are_edges_distinct() const {
+    return graph.are_edges_distinct();
+}
+
+
 /**
  * Currently implemented as a quadratic scan, probably too slow for large cohorts.
  */

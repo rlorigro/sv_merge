@@ -154,6 +154,7 @@ size_t solve_from_csv(
     path output_dir = "/tmp/" + to_string(h);
 
     if (compress_transmap) {
+        cerr << "All edges distinct? " << to_string(transmap.are_edges_distinct()) << "\n";
         cerr << "Compressing the transmap... ";
         transmap.compress(0,2);
         cerr << "done\n";
