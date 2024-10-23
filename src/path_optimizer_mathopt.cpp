@@ -71,19 +71,24 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
                 // DEFINE: read-hap vars
                 string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
-                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
-                auto& r_h = result.first->second;
 
-                // DEFINE: flow
-                vars.read_flow[read_id] += r_h;
+                // Do only once for each unique pair of read-hap. After read clustering, the same read-hap edge may be
+                // enumerated multiple times, since the same read may belong to multiple samples.
+                if (vars.read_hap.find({read_id, hap_id}) == vars.read_hap.end()) {
+                    auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
+                    auto& r_h = result.first->second;
 
-                auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
-                if (not success){
-                    throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                    // DEFINE: flow
+                    vars.read_flow[read_id] += r_h;
+
+                    auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
+                    if (not success){
+                        throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                    }
+
+                    // OBJECTIVE: accumulate d cost sum
+                    vars.cost_d += w*r_h;
                 }
-
-                // OBJECTIVE: accumulate d cost sum
-                vars.cost_d += w*r_h;
 
                 // Do only once for each unique pair of sample-hap
                 if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
@@ -100,7 +105,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
-                model.AddLinearConstraint(r_h <= vars.sample_hap.at({sample_id, hap_id}));
+                model.AddLinearConstraint(vars.read_hap.at({read_id, hap_id}) <= vars.sample_hap.at({sample_id, hap_id}));
             });
         });
     });
