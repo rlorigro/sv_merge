@@ -311,6 +311,8 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
     cerr << '\n';
 
+    string sequence;
+
     // Iterate sample reads
     for (const auto& region: regions){
         // Get the sample-read-path transitive mapping for this region
@@ -323,7 +325,9 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
             transmap.for_each_read_of_sample(sample_name, [&](const string &name, int64_t id) {
                 cerr << '>' << name << '\n';
-                cerr << transmap.get_sequence(id) << '\n';
+
+                transmap.get_sequence(id, sequence);
+                cerr << sequence << '\n';
             });
         });
     }

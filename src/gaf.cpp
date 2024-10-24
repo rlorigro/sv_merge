@@ -351,6 +351,11 @@ void GafAlignment::get_query_sequence(string& result, int32_t start, int32_t sto
 }
 
 
+void GafAlignment::get_query_sequence(BinarySequence<uint64_t>& result){
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment with BinarySequence");
+}
+
+
 void GafAlignment::get_qualities(vector<uint8_t>& result){
     throw runtime_error("ERROR: get_qualities not implemented for GAF alignment");
 }
@@ -692,7 +697,7 @@ void GafSummary::for_each_query_summary(const function<void(const string& name, 
             length = c.second - c.first + flank_buffer*2;
         }
         else {
-            length = int32_t(transmap.get_sequence(id).size());
+            length = int32_t(transmap.get_sequence_size(id));
         }
 
         auto result = query_summaries.find(name);
@@ -978,7 +983,7 @@ void GafSummary::compute_with_flanks(const path& gaf_path){
         // causing them to be missed by the evaluation
         interval_t query_interval = transmap.get_flank_coord(name);
         query_interval.first = max(0,int32_t(query_interval.first-flank_buffer));
-        query_interval.second = min(int32_t(transmap.get_sequence(name).size()),int32_t(query_interval.second+flank_buffer));
+        query_interval.second = min(int32_t(transmap.get_sequence_size(name)),int32_t(query_interval.second+flank_buffer));
 
         vector<interval_t> query_intervals_i = {query_interval};
 

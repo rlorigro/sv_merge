@@ -179,7 +179,7 @@ uint64_t get_peak_memory_usage() {
     if (procStats) {
         string line;
         while (std::getline(procStats, line)) {
-            if (string::npos == line.find("VmPeak")) {
+            if (string::npos == line.find("VmHWM")) {
                 continue;
             }
             size_t pos = line.find(":");
@@ -188,8 +188,6 @@ uint64_t get_peak_memory_usage() {
             }
             char* end;
             peakMemoryUsage = std::strtoull(line.c_str() + pos, &end, 10);
-            // Convert from kB to bytes.
-            peakMemoryUsage *= 1024;
             break;
         }
     }

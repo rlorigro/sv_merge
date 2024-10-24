@@ -101,6 +101,10 @@ void SimpleAlignment::get_query_sequence(string& result, int32_t start, int32_t 
     result = query_sequence.substr(start, stop-start);
 }
 
+void SimpleAlignment::get_query_sequence(BinarySequence<uint64_t>& result) {
+    throw runtime_error("ERROR: get_qualities not implemented for SimpleAlignment with BinarySequence");
+}
+
 void SimpleAlignment::get_query_sequence(string& result) {
     result = query_sequence;
 }

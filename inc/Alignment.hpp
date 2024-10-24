@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BinarySequence.hpp"
 #include "Sequence.hpp"
 
 #include <functional>
@@ -183,6 +184,7 @@ public:
     virtual int32_t get_query_length() const = 0;
     virtual void get_query_sequence(string& result, int32_t start, int32_t stop) = 0;
     virtual void get_query_sequence(string& result) = 0;
+    virtual void get_query_sequence(BinarySequence<uint64_t>& result) = 0;
     virtual void get_qualities(vector<uint8_t>& result) = 0;
     virtual void get_query_name(string& result) const = 0;
     virtual void get_tag_as_string(const string& name, string& result, bool allow_missing=false) const = 0;

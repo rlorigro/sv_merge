@@ -28,7 +28,6 @@ void construct_cluster_model(
             auto [success,w] = transmap.try_get_edge_weight(a, b);
 
             if (not success){
-//                w = max(transmap.get_sequence(a).size(), transmap.get_sequence(b).size());
                 cerr << "not found" << '\n';
                 continue;
             }

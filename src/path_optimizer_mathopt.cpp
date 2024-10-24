@@ -271,24 +271,6 @@ void parse_read_feasibility_solution(
     TransMap& transmap,
     path output_dir)
 {
-
-    path out_path = output_dir/"solution.csv";
-
-    // Check if output path exists already
-    bool log_exists = std::filesystem::exists(out_path);
-
-    // Open a file
-    ofstream file(out_path, std::ios_base::app);
-
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
-    }
-
-    // Write header if the file is new
-    if (not log_exists){
-        file << "sample,read,path" << '\n';
-    }
-
     unordered_set <int64_t> to_be_removed;
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap

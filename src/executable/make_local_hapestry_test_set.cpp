@@ -67,6 +67,7 @@ void write_region_subsequences_to_file(
 ){
     // Read IDs might not be unique (e.g. if a read spans multiple windows), so we will add an integer ID to all of them
     size_t i = 0;
+    string s;
 
     for (auto& region: regions){
         const auto& t = region_transmaps.at(region);
@@ -86,13 +87,14 @@ void write_region_subsequences_to_file(
             }
 
             t.for_each_read_of_sample(sample_id, [&](int64_t read_id){
-                auto& s = t.get_sequence(read_id);
+                t.get_sequence(read_id,s);
+
                 if (s.empty()){
                     return;
                 }
 
                 file << '>' << t.get_node(read_id).name << "_" << i << '\n';
-                file << t.get_sequence(read_id) << '\n';
+                file << s << '\n';
                 i++;
             });
         });

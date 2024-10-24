@@ -184,7 +184,6 @@ void extract_subregions_from_sample_contig(
                             alignment.get_tag_as_string(tag, value, allow_unused_tags);
                             x.tags += value + " ";
                         }
-                        x.tags.substr(0, x.tags.size() - 1);
                     }
                 }
 
@@ -275,7 +274,7 @@ void extract_subregions_from_sample_contig(
             if (coords.is_reverse) {
                 if (force_forward) {
                     auto s = query_sequences[name].sequence.substr(i, l);
-                    reverse_complement(s);
+                    s.reverse_complement();
 
                     // Add the sequence and track its reversal
                     result.emplace_back(name,s);
@@ -1053,7 +1052,7 @@ void fetch_reads(
 
 void fetch_query_seqs_for_each_sample_thread_fn(
         const vector <pair <string,path> >& sample_bams,
-        unordered_map<string, unordered_map<string,string> >& sample_queries,
+        unordered_map<string, unordered_map<string,BinarySequence<uint64_t> > >& sample_queries,
         GoogleAuthenticator& authenticator,
         atomic<size_t>& job_index
 ){
@@ -1100,7 +1099,7 @@ void fetch_query_seqs_for_each_sample(
         path bam_csv,
         int64_t n_threads,
         GoogleAuthenticator& authenticator,
-        unordered_map<string, unordered_map<string,string> >& sample_queries
+        unordered_map<string, unordered_map<string,BinarySequence<uint64_t> > >& sample_queries
 ){
     vector <pair <string,path> > sample_bams;
 
@@ -1180,7 +1179,7 @@ void fetch_reads_from_clipped_bam(
     }
 
     // Collect all query names in one place and construct thread-safe container for results of fetching
-    unordered_map<string, unordered_map<string,string> > sample_queries;
+    unordered_map<string, unordered_map<string,BinarySequence<uint64_t> > > sample_queries;
     for (const auto& [sample_name,item]: sample_to_region_coords) {
         // Make sure there is at least a placeholder for samples, so there is no error later. They can be empty.
         sample_queries[sample_name] = {};
@@ -1267,7 +1266,7 @@ void fetch_reads_from_clipped_bam(
                                         sample_name + ',' + name + ",size=" + to_string(seq.size()) + ',' + to_string(i) + ',' + to_string(i+l) + ',' + "region=" + region.to_string());
                 }
 
-                string s = seq.substr(i, l);
+                auto s = seq.substr(i, l);
 
                 // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
                 // spanning, etc.
@@ -1279,7 +1278,7 @@ void fetch_reads_from_clipped_bam(
                 inner_coord.query_stop -= outer_coord.query_start;
 
                 if (outer_coord.is_reverse and force_forward) {
-                    reverse_complement(s);
+                    s.reverse_complement();
 
                     // Reorient inner coordinates also
                     inner_coord.query_start = int32_t(l) - inner_coord.query_start;

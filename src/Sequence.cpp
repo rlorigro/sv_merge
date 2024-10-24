@@ -9,65 +9,65 @@ namespace sv_merge {
 
 
 Sequence::Sequence(const string& name, const string& sequence):
-        name(name),
-        sequence(sequence)
+        sequence(sequence),
+        name(name)
 {}
 
 
 StrandedSequence::StrandedSequence(const string& name, const string& sequence, bool is_reverse):
-        name(name),
         sequence(sequence),
+        name(name),
         is_reverse(is_reverse)
 {}
 
 
 StrandedSequence::StrandedSequence(const string& name, const string& sequence):
-        name(name),
         sequence(sequence),
+        name(name),
         is_reverse(false)
 {}
 
 
 StrandedSequence::StrandedSequence():
-        name(),
         sequence(),
+        name(),
         is_reverse(false)
 {}
 
 
 StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities, bool is_reverse):
-        name(name),
         sequence(sequence),
+        name(name),
         qualities(qualities),
         is_reverse(is_reverse)
 {}
 
 
 StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities):
-        name(name),
         sequence(sequence),
+        name(name),
         qualities(qualities),
         is_reverse(false)
 {}
 
 
 StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, bool is_reverse):
-        name(name),
         sequence(sequence),
+        name(name),
         is_reverse(is_reverse)
 {}
 
 
-StrandedQSequence::StrandedQSequence(const string& name, const string& sequence):
-        name(name),
+StrandedQSequence::StrandedQSequence(const string& name, const BinarySequence<uint64_t>& sequence):
         sequence(sequence),
+        name(name),
         is_reverse(false)
 {}
 
 
 StrandedQSequence::StrandedQSequence():
-        name(),
         sequence(),
+        name(),
         is_reverse(false)
 {}
 

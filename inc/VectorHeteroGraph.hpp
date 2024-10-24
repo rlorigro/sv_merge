@@ -228,7 +228,6 @@ template<class T> void HeteroGraph<T>::add_edge(const string& name_a, const stri
 }
 
 
-// TODO: Untested
 template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, float weight) {
     auto result_a = nodes.find(id_a);
     auto result_b = nodes.find(id_b);
@@ -239,10 +238,6 @@ template<class T> void HeteroGraph<T>::add_edge(int64_t id_a, int64_t id_b, floa
 
     if (result_b == nodes.end()){
         throw runtime_error("ERROR: cannot find id: " + to_string(id_b));
-    }
-
-    if ((result_a->second.type == 'V' and result_b->second.type != 'P') or (result_a->second.type != 'P' and result_b->second.type == 'V')){
-        throw runtime_error("ERROR: cannot add edge from variant to non-path: " + to_string(id_a) + " " + to_string(id_b));
     }
 
     auto& adjacencies_a = edges[id_a];
@@ -263,7 +258,6 @@ template<class T> bool HeteroGraph<T>::has_node(const string& name) const {
 }
 
 
-// TODO: Untested
 template<class T> pair<bool,float> HeteroGraph<T>::try_get_edge_weight(int64_t id_a, int64_t id_b) const{
     pair<bool,float> value = {false, 0};
 

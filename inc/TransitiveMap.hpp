@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VectorHeteroGraph.hpp"
+#include "BinarySequence.hpp"
 #include "VariantGraph.hpp"
 #include "misc.hpp"
 
@@ -26,7 +27,7 @@ class TransMap {
     HeteroGraph<HeteroNode> graph;
 
     // Pains me to add yet another map but here it is
-    unordered_map<int64_t,string> sequences;
+    unordered_map <int64_t, BinarySequence<uint64_t> > sequences;
 
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,coord_t> sequence_flanks;
@@ -50,8 +51,8 @@ public:
     void add_read(const string& name);
     void add_flank_coord(const string& name, int32_t start, int32_t stop);
     void add_read(const string& name, const string& sequence);
-    void add_read_with_move(string& name, string& sequence);
-    void add_read_with_move(string& name, string& sequence, bool reversal);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, bool reversal);
     void add_path(const string& name);
     void add_variant(const string& name);
     void add_edge(const string& a, const string& b);
@@ -77,14 +78,16 @@ public:
 
     const HeteroNode& get_node(int64_t id) const;
     const HeteroNode& get_node(const string& name) const;
-    const string& get_sequence(const string& name) const;
-    const string& get_sequence(int64_t id) const;
+    void get_sequence(const string& name, string& result) const;
+    void get_sequence(int64_t id, string& result) const;
+    size_t get_sequence_size(int64_t id) const;
+    size_t get_sequence_size(const string& name) const;
 
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
-    void for_each_read(const function<void(const string& name, const string& sequence)>& f) const;
+    void for_each_read(const function<void(const string& name, const BinarySequence<uint64_t>& sequence)>& f) const;
     void for_each_read_id(const function<void(int64_t id)>& f) const;
     void for_each_path(const function<void(const string& name, int64_t id)>& f) const;
 

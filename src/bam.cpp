@@ -1,3 +1,4 @@
+#include "BinarySequence.hpp"
 #include "IntervalGraph.hpp"
 #include "Sequence.hpp"
 #include "Region.hpp"
@@ -191,6 +192,15 @@ void HtsAlignment::get_query_sequence(string& result){
 }
 
 
+void HtsAlignment::get_query_sequence(BinarySequence<uint64_t>& result){
+    if (not is_decompressed){
+        decompress_bam_sequence(hts_alignment, query_sequence);
+        is_decompressed = true;
+    }
+    result = query_sequence;
+}
+
+
 void HtsAlignment::get_qualities(vector<uint8_t>& result){
     uint8_t* q = bam_get_qual(hts_alignment);
 
@@ -367,6 +377,53 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int32_t 
             sequence += bases[is_reverse][base_code];
         }
     }
+}
+
+
+void decompress_bam_sequence(const bam1_t* alignment, BinarySequence<uint64_t>& sequence, int32_t start, int32_t stop){
+    auto compressed_sequence = bam_get_seq(alignment);
+    bool is_reverse = bam_is_rev(alignment);
+
+    sequence.clear();
+    sequence.reserve(stop-start);
+
+    uint8_t base_code;
+
+    // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
+    int32_t increment = 1;
+
+    if (is_reverse){
+        std::swap(start,stop);
+        start -= 1;
+        stop -= 1;
+        increment = -1;
+    }
+
+    for (int32_t i=start; i!=stop; i+=increment){
+        uint32_t index = i/2;
+
+        if (i%2 == 0){
+            // Perform bit SHIFT and decode using the standard or complemented base map
+            base_code = compressed_sequence[index] >> bam_sequence_shift;
+            sequence.push_back(bases[is_reverse][base_code]);
+        }
+        else {
+            // Perform bit MASK and decode using the standard or complemented base map
+            base_code = compressed_sequence[index] & bam_sequence_mask;
+            sequence.push_back(bases[is_reverse][base_code]);
+        }
+    }
+}
+
+
+void decompress_bam_sequence(const bam1_t* alignment, BinarySequence<uint64_t>& sequence){
+    auto length = alignment->core.l_qseq;
+
+    // Fetch 4 bit base code from the correct 8 bit integer and convert to a char
+    int32_t start = 0;
+    int32_t stop = length;
+
+    decompress_bam_sequence(alignment, sequence, start, stop);
 }
 
 
