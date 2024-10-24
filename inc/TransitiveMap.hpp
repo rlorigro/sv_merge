@@ -159,8 +159,10 @@ public:
     void compress(float weight_quantum, uint64_t mode);
 
     /**
-     * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample` (which is
-     * cleared when this procedure returns). The rest of the graph remains compressed.
+     * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample`. The rest of
+     * the graph remains compressed.
+     *
+     * Remark: this procedure can be called only once, since `sample_to_compressed_sample` is cleared by it.
      */
     void decompress_samples();
 

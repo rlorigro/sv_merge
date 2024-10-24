@@ -161,6 +161,11 @@ size_t solve_from_csv(
         cerr << "All edges distinct after compression? " << to_string(transmap.are_edges_distinct()) << "\n";
     }
     optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir);
+    if (compress_transmap) {
+        cerr << "Decompressing the transmap... ";
+        transmap.decompress_samples();
+        cerr << "done\n";
+    }
 
     return i-1;
 }
