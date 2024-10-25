@@ -666,11 +666,8 @@ representative.at(j)=read_id;
             length=weights.at(i).size();
             for (j=0; j<length; j++) weights.at(i).at(j)/=cluster_size.at(i);
         }
-        read_id=node_ids.at(i);
-        j=-1;
-        graph.for_each_neighbor_of_type(read_id,'P',[&](int64_t path_id) {
-            graph.update_edge_weight(read_id,path_id,weights.at(i).at(++j));
-        });
+        read_id=node_ids.at(i); length=neighbors.at(i).size();
+        for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),weights.at(i).at(j));
     }
     neighbors.clear(); weights.clear(); compared_weights.clear(); is_redundant.clear(); cluster_size.clear(); node_ids.clear();
 
