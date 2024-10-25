@@ -596,6 +596,13 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
             if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
         });
     });
+    cerr << "Read-hap weights before compression: \n";
+    for (i=0; i<n_reads; i++) {
+        read_id=node_ids.at(i);
+        cerr << "read=" << to_string(read_id) << " redundant=" << to_string(is_redundant.at(i)) << " weights=";
+        for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
+        cerr << "\n";
+    }
 
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
     is_redundant.reserve(n_reads);
@@ -629,6 +636,13 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         }
     }
     cerr << "Read clusters: " << to_string(n_clusters) << " N. reads: " << to_string(n_reads) << "\n";
+    cerr << "Read-hap weights after compression: \n";
+    for (i=0; i<n_reads; i++) {
+        read_id=node_ids.at(i);
+        cerr << "read=" << to_string(read_id) << " redundant=" << to_string(is_redundant.at(i)) << " weights=";
+        for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
+        cerr << "\n";
+    }
 
     // Updating read-hap weights
     for (i=0; i<n_reads; i++) {
