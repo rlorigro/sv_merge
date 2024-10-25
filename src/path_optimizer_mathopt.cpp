@@ -71,7 +71,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 const string hap_name = transmap.get_node(hap_id).name;
 
                 // Do only once for each unique pair of read-hap. After read clustering, the same read-hap edge may be
-                // enumerated multiple times, since the same read may belong to multiple samples.
+                // enumerated multiple times, since the same compressed read may belong to multiple samples.
                 if (vars.read_hap.find({read_id, hap_id}) == vars.read_hap.end()) {
                     // DEFINE: read-hap vars
                     const string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);

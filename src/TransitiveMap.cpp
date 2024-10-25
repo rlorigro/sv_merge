@@ -702,6 +702,24 @@ representative.at(j)=read_id;
     }
     neighbors.clear(); is_redundant.clear(); node_ids.clear();
     cerr << "Sample clusters: " << to_string(n_clusters) << " N. samples: " << to_string(n_samples) << "\n";
+
+
+
+
+    cerr << "Elements in transmap after compression: \n";
+    int64_t x = 0;
+    for_each_sample([&](string sample_name, int64_t sample_id) { x++; });
+    cerr << "Transmap samples: " << to_string(x) << "\n";
+    x=0;
+    for_each_read([&](string read_name, int64_t read_id) { x++; });
+    cerr << "Transmap reads: " << to_string(x) << "\n";
+    x=0;
+    for_each_path([&](string path_name, int64_t path_id) { x++; });
+    cerr << "Transmap paths: " << to_string(x) << "\n";
+
+
+
+
 }
 
 
