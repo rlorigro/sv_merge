@@ -596,6 +596,9 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
             if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
         });
     });
+
+
+/*
     cerr << "Read-hap weights before compression: \n";
     for (i=0; i<n_reads; i++) {
         read_id=node_ids.at(i);
@@ -603,6 +606,24 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
         cerr << "\n";
     }
+*/
+
+    cerr << "HG01175 before compression: \n";
+    for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        if (sample_name!="HG01175") return;
+        for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+            for_each_path_of_read(read_id, [&](int64_t path_id) {
+                auto [success, weight] = try_get_edge_weight(read_id, path_id);
+                string path_name = get_node(path_id).name;
+                cerr << sample_name << "," << read_name << "," << path_name << "," << to_string(weight) << '\n';
+            });
+        });
+    });
+
+
+
+
+
 
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
 
@@ -718,6 +739,19 @@ representative.at(j)=read_id;
     cerr << "Transmap paths: " << to_string(x) << "\n";
 
 
+
+
+    cerr << "HG01175 after compression: \n";
+    for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        if (sample_name!="HG01175") return;
+        for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+            for_each_path_of_read(read_id, [&](int64_t path_id) {
+                auto [success, weight] = try_get_edge_weight(read_id, path_id);
+                string path_name = get_node(path_id).name;
+                cerr << sample_name << "," << read_name << "," << path_name << "," << to_string(weight) << '\n';
+            });
+        });
+    });
 
 
 }
