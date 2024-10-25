@@ -623,11 +623,12 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
                 }
             }
             for_each_sample_of_read(node_ids.at(j),[&](int64_t sample_id) {
-                graph.add_edge(sample_id,read_id,0);  // Updates both sides of the edge
+                graph.add_edge(sample_id,read_id,0);  // Overwrites existing edge if present. Updates both sides of the edge.
             });
             remove_node(node_ids.at(j));
         }
     }
+    cerr << "Read clusters: " << to_string(n_clusters) << " N. reads: " << to_string(n_reads) << "\n";
 
     // Updating read-hap weights
     for (i=0; i<n_reads; i++) {
@@ -674,11 +675,13 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         }
     }
     neighbors.clear(); is_redundant.clear(); node_ids.clear();
+    cerr << "Sample clusters: " << to_string(n_clusters) << " N. samples: " << to_string(n_samples) << "\n";
 }
 
 
 void TransMap::decompress_samples() {
     for (auto& pair: sample_to_compressed_sample) {
+        add_sample(pair.first);
         for_each_read_of_sample(pair.second, [&](const string& read_name, int64_t read_id) {
             add_edge(pair.first,read_name,0);  // Updates both sides of the edge
         });
