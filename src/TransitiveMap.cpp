@@ -599,7 +599,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     cerr << "Read-hap weights before compression: \n";
     for (i=0; i<n_reads; i++) {
         read_id=node_ids.at(i);
-        cerr << "read=" << to_string(read_id) << " redundant=" << to_string(is_redundant.at(i)) << " weights=";
+        cerr << "read=" << to_string(read_id) << " redundant=false weights=";
         for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
         cerr << "\n";
     }
