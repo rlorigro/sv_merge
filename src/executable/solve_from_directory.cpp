@@ -158,7 +158,10 @@ size_t solve_from_csv(
         cerr << "done\n";
         cerr << "All edges distinct after compression? " << to_string(transmap.are_edges_distinct()) << "\n";
     }
-    optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir);
+    string tokens = csv.string();
+    size_t q = tokens.find_last_of("/");
+    size_t p = tokens.substr(0,q).find_last_of("/");
+    optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir/tokens.substr(p+1,q-p-1));
     if (compress_transmap) {
         cerr << "Decompressing the transmap... ";
         transmap.decompress_samples();
