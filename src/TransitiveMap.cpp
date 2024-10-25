@@ -599,12 +599,19 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     cerr << "Read-hap weights before compression: \n";
     for (i=0; i<n_reads; i++) {
         read_id=node_ids.at(i);
-        cerr << "read=" << to_string(read_id) << " redundant=false weights=";
+        cerr << "read=" << to_string(read_id) << " weights=";
         for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
         cerr << "\n";
     }
 
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
+
+
+vector<int64_t> representative;
+representative.reserve(n_reads);
+for (i=0; i<n_reads; i++) representative.emplace_back();
+
+
     is_redundant.reserve(n_reads);
     for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
     if (mode==3) {
@@ -617,9 +624,17 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         n_clusters++;
         if (mode==3) cluster_size.at(i)=1;
         read_id=node_ids.at(i); length=neighbors.at(i).size();
+
+
+representative.at(i)=read_id;
+
+
         for (j=i+1; j<n_reads; j++) {
             if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
             is_redundant.at(j)=true;
+
+representative.at(j)=read_id;
+
             if (mode==3) cluster_size.at(i)++;
             for (k=0; k<length; k++) {
                 switch (mode) {
@@ -639,7 +654,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
     cerr << "Read-hap weights after compression: \n";
     for (i=0; i<n_reads; i++) {
         read_id=node_ids.at(i);
-        cerr << "read=" << to_string(read_id) << " redundant=" << to_string(is_redundant.at(i)) << " weights=";
+        cerr << "read=" << to_string(read_id) << " representative=" << to_string(representative.at(i)) << " weights=";
         for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
         cerr << "\n";
     }
