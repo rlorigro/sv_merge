@@ -149,10 +149,8 @@ RUN git checkout ${HAPESTRY_COMMIT} \
 
 WORKDIR /hapestry/sv_merge/build
 
-RUN cmake .. -Ddebug=1 -Dno_san=1
+RUN cmake ..
 RUN make -j 31
-
-RUN apt-get install -y heaptrack
 
 WORKDIR /hapestry
 
