@@ -84,7 +84,8 @@ size_t solve_from_csv(
         size_t max_reads_per_sample,
         size_t n_threads,
         bool use_ploidy_constraint,
-        bool compress_transmap
+        bool compress_transmap,
+        path output_dir
         ){
 
     TransMap transmap;
@@ -150,9 +151,6 @@ size_t solve_from_csv(
     // Construct a random seed that is based on the csv file
     auto h = std::hash<std::string>{}(csv.string());
 
-    // Make tmp dir
-    path output_dir = "/tmp/" + to_string(h);
-
     if (compress_transmap) {
         cerr << "All edges distinct before compression? " << to_string(transmap.are_edges_distinct()) << "\n";
         cerr << "Compressing the transmap... ";
@@ -192,7 +190,7 @@ void thread_fn(
         bool success = true;
 
         try {
-            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap);
+            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir);
         }
         catch (const exception& e) {
             cerr << e.what() << '\n';
