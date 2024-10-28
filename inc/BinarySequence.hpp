@@ -56,7 +56,10 @@ public:
     void to_string(string& s) const;
     size_t get_byte_length() const;
     size_t size() const;
+
     void print_as_bits() const;
+
+    T get_random_base() const;
 };
 
 
@@ -118,6 +121,11 @@ template<class T> BinarySequence<T>::BinarySequence():
 {}
 
 
+template<class T> T BinarySequence<T>::get_random_base() const{
+    return rand() % 4;
+}
+
+
 template <class T> BinarySequence<T>::BinarySequence(const BinarySequence<T>& s):
         sequence(s.sequence),
         length(s.length)
@@ -139,7 +147,8 @@ template <class T> void BinarySequence<T>::push_back(char c){
     T bits = base_to_index.at(c);
 
     if (bits == 4){
-        throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+        // throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+        bits = get_random_base();
     }
 
     uint8_t shift_size = (2*length) % (sizeof(T)*8);
@@ -168,7 +177,8 @@ template <class T> void BinarySequence<T>::encode(const string& s){
         T bits = base_to_index.at(c);
 
         if (bits == 4){
-            throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+            // throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+            bits = get_random_base();
         }
 
         uint8_t shift_size = (2*length) % (sizeof(T)*8);
@@ -195,7 +205,8 @@ template <class T> void BinarySequence<T>::shift(char c){
     T bits = base_to_index.at(c);
 
     if (bits == 4){
-        throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+        // throw runtime_error("ERROR: non ACGT character encountered in sequence: " + string(1,c) + " (ord=" + std::to_string(int(c)) + ")");
+        bits = get_random_base();
     }
 
     for (size_t i=0; i<sequence.size(); i++){
