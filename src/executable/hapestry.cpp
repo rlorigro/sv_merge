@@ -294,7 +294,7 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         string& sequence = path_sequences[name];
 
         int32_t total_length = 0;
-        int32_t buffer_size = 60;
+        int32_t buffer_size = min(60, flank_length - 1);
 
         path_flank_coords[name] = {-1,-1};
 
@@ -600,6 +600,217 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
 }
 
 
+void write_solution_as_hap_vcf(
+        VariantGraph& variant_graph,
+        const TransMap& transmap,
+        const vector<string>& sample_names,
+        const unordered_map<string,string>& ref_sequences,
+        const path& output_path,
+        const Region& region,
+        int32_t flank_length
+        ){
+
+    // Open the VCF output file
+    ofstream vcf_file(output_path);
+
+    if (not (vcf_file.is_open() and vcf_file.good())){
+        throw runtime_error("ERROR: could not write file: " + output_path.string());
+    }
+
+    // Write the VCF header
+    vcf_file << "##fileformat=VCFv4.2" << '\n';
+    vcf_file << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
+    for (const auto& sample_name: sample_names){
+        vcf_file << '\t' << sample_name;
+    }
+    vcf_file << '\n';
+
+    size_t unflanked_length = region.stop-region.start-(2*flank_length);
+    size_t unflanked_start = region.start + flank_length;
+
+    cerr << "region.start: " << region.start << '\n';
+    cerr << "region.stop: " << region.stop << '\n';
+    cerr << "unflanked_start: " << unflanked_start << '\n';
+    cerr << "unflanked_length: " << unflanked_length << '\n';
+
+    const string& ref_sequence = ref_sequences.at(region.name);
+
+    // Since there may be NO ref sequence between the flank nodes, we must anchor on the last base of the left flank
+    const char anchor_base = ref_sequence[unflanked_start - 1];
+
+    const string ref_allele = anchor_base + ref_sequence.substr(unflanked_start, unflanked_length);
+
+    // cerr << "ref_allele: " << ref_allele << '\n';
+
+    unordered_map<string,string> path_sequences;
+
+    // Some of the paths may include BND operations that do not terminate on the flanks of this region, so here we opt
+    // to just skip them
+    unordered_set<string> invalid_paths;
+
+    // There should be only one path that is exactly the reference path
+    string ref_path_name;
+
+    unordered_set<string> samples_not_found;
+    unordered_map<string, unordered_map<int64_t, array<bool,2> > > sample_gts;
+
+    // Get an ordered representation of ALL the paths that each sample has. Use this to construct consistent GTs
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        set<int64_t> path_ids;
+
+        // First find an ordered assignment of phases, which is sorted by path id
+        transmap.for_each_path_of_sample(sample_name, [&](const string& p_name, int64_t p){
+            path_ids.emplace(p);
+        });
+
+        if (path_ids.size() > 2){
+            string s;
+            for (auto p: path_ids){
+                s += transmap.get_node(p).name + " ";
+            }
+            throw runtime_error("ERROR: more than two paths found for sample " + sample_name + ": " + s);
+        }
+
+        // If a path has
+        if (path_ids.empty()) {
+            return;
+        }
+
+        for (const auto& p: path_ids) {
+            sample_gts[sample_name][p][0] = *path_ids.begin() == p;
+            sample_gts[sample_name][p][1] = *path_ids.rbegin() == p;
+        }
+    });
+
+    transmap.for_each_path([&](const string& path_name, int64_t path_id) {
+        string var_id = region.name + "_" + to_string(unflanked_start) + "_" + to_string(path_id);
+
+        string sequence;
+
+        vector <pair <string,bool> > path;
+        GafAlignment::parse_string_as_path(path_name, path);
+
+        bool is_only_ref = true;
+
+        // cerr << "path_name: " << path_name << '\n';
+
+        bool has_left_flank = false;
+        bool has_right_flank = false;
+
+        // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
+        for (size_t i=0; i<path.size(); i++){
+            auto n = stoll(path[i].first);
+            auto r = path[i].second;
+            auto h = variant_graph.graph.get_handle(n, r);
+
+            bool is_ref_node = variant_graph.is_reference_node(n);
+
+            // cerr << n << ' ' << sequence << '\n';
+
+            if (i > 0) {
+                auto n_prev = stoll(path[i-1].first);
+                auto r_prev = path[i-1].second;
+                auto h_prev = variant_graph.graph.get_handle(n_prev, r_prev);
+
+                auto e = variant_graph.graph.edge_handle(h_prev, h);
+
+                if (not variant_graph.is_reference_edge(e)) {
+                    // cerr << "edge is NOT ref" << '\n';
+                    is_only_ref = false;
+                }
+            }
+
+            // If a node is encountered that is a tip, and also is not reference, then we are likely in a BND
+            if (variant_graph.is_dangling_node(n)){
+                if (is_ref_node) {
+                    if (i == 0) {
+                        has_left_flank = true;
+                    }
+                    else if (i == path.size() - 1) {
+                        has_right_flank = true;
+                    }
+                }
+                else {
+                    invalid_paths.emplace(path_name);
+                    // Break callback function, do not write to hap VCF
+                    return;
+                }
+            }
+
+            sequence += variant_graph.graph.get_sequence(h);
+        }
+
+        if (is_only_ref) {
+            if (ref_path_name.empty()) {
+                ref_path_name = path_name;
+            }
+            else if (ref_path_name != path_name) {
+                throw runtime_error("ERROR: multiple paths are ref-only nodes: " + ref_path_name + " != " + path_name);
+            }
+
+            // Break callback function, do not write to hap VCF because you cannot substitute a REF allele with itself
+            return;
+        }
+
+        // TODO: infer an actual quality from the read-hap edge weights...
+
+        if (has_left_flank) {
+            // trim left, but keep last base of the flank as anchor base
+            sequence = sequence.substr(flank_length-1);
+        }
+
+        if (has_right_flank) {
+            // trim right
+            sequence = sequence.substr(0,sequence.size()-flank_length);
+        }
+
+        // #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	[SAMPLES]
+        vcf_file << region.name << '\t';
+        vcf_file << unflanked_start - 1 << '\t';
+        vcf_file << var_id << '\t';
+        vcf_file << ref_allele << '\t';
+        vcf_file << sequence << '\t';
+        vcf_file << '.' << '\t';
+        vcf_file << '.' << '\t';
+        vcf_file << '.' << '\t';
+        vcf_file << "GT" << '\t';
+
+        for (size_t i=0; i<sample_names.size(); i++) {
+            const auto& sample_name = sample_names[i];
+            auto result = sample_gts.find(sample_name);
+
+            if (result == sample_gts.end()) {
+                samples_not_found.emplace(sample_name);
+                vcf_file << "0|0" << ((i < sample_names.size() - 1) ? "\t" : "");
+                continue;
+            }
+
+            const auto& path_gts = result->second;
+            auto result2 = path_gts.find(path_id);
+
+            if (result2 == path_gts.end()) {
+                vcf_file << "0|0" << ((i < sample_names.size() - 1) ? "\t" : "");
+                continue;
+            }
+
+            const auto& gt = result2->second;
+            vcf_file << gt[0] << '|' << gt[1] << ((i < sample_names.size() - 1) ? "\t" : "");
+        }
+
+        vcf_file << '\n';
+    });
+
+    if (not samples_not_found.empty()) {
+        string s;
+
+        for (const auto& x: samples_not_found) {
+            s += x + " ";
+        }
+        cerr << "WARNING: for hap VCF region " << region.to_string() << " transmap is missing VCF samples " << s << '\n';
+    }
+}
+
+
 void write_solution_to_vcf(
         VariantGraph& variant_graph,
         const TransMap& transmap,
@@ -658,6 +869,8 @@ void write_solution_to_vcf(
         vcf_file << '\t' << sample_name;
     }
     vcf_file << '\n';
+
+    // TODO: infer an actual quality from the read-hap edge weights...
 
     for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
         auto& record = variant_graph.vcf_records.at(v);
@@ -776,9 +989,7 @@ void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min
 TerminationReason optimize(
     TransMap& transmap,
     VariantGraph& variant_graph,
-    const VcfReader& vcf_reader,
     const OptimizerConfig& config,
-    const Region& region,
     path subdir
 ){
     TerminationReason termination_reason;
@@ -808,24 +1019,6 @@ TerminationReason optimize(
         transmap.add_variant("v" + to_string(v));
     }
 
-    // Construct mapping of paths to variants
-    transmap.for_each_path([&](const string& path_name, int64_t path_id){
-        // Convert the path to a vector
-        vector <pair <string,bool> > path;
-
-        GafAlignment::parse_string_as_path(path_name, path);
-
-        variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-            string var_name = "v" + to_string(id);
-            transmap.add_edge(var_name, path_name);
-        });
-    });
-
-    // Write the solution to a VCF
-    path output_path = subdir / "solution.vcf";
-
-    write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
-
     return termination_reason;
 }
 
@@ -846,8 +1039,10 @@ void merge_thread_fn(
         int32_t flank_length,
         size_t graphaligner_timeout,
         const OptimizerConfig& config,
+        bool write_hap_vcf,
         atomic<size_t>& job_index
 ) {
+
     // TODO: make this a parameter
     int64_t min_path_coverage = 1;
 
@@ -970,7 +1165,7 @@ void merge_thread_fn(
 
         if (not config.skip_solve){
             try {
-                TerminationReason termination_reason = optimize(transmap, variant_graph, vcf_reader, config, region, subdir);
+                TerminationReason termination_reason = optimize(transmap, variant_graph, config, subdir);
 
                 if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
                     cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
@@ -978,6 +1173,56 @@ void merge_thread_fn(
                 else if (termination_reason != TerminationReason::kOptimal) {
                     throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
                 }
+
+                vector<int64_t> unused_paths;
+
+                transmap.for_each_path([&](const string& path_name, int64_t path_id) {
+                    bool used = false;
+                    transmap.for_each_sample_of_path(path_name, [&](const string& sample_name, int64_t sample_id) {
+                        used = true;
+                    });
+
+                    if (not used) {
+                        unused_paths.push_back(path_id);
+                    }
+                });
+
+                for (const auto& p: unused_paths) {
+                    transmap.remove_node(p);
+                }
+
+                // Construct mapping of paths to variants
+                transmap.for_each_path([&](const string& path_name, int64_t path_id){
+                    // Convert the path to a vector
+                    vector <pair <string,bool> > path;
+
+                    GafAlignment::parse_string_as_path(path_name, path);
+
+                    variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                        string var_name = "v" + to_string(id);
+                        transmap.add_edge(var_name, path_name);
+                    });
+                });
+
+                // Write the solution to a VCF
+                path output_path = subdir / "solution.vcf";
+
+                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
+
+                output_path = subdir / "solution_haps.vcf";
+
+                if (write_hap_vcf) {
+                    write_solution_as_hap_vcf(
+                        variant_graph,
+                        transmap,
+                        vcf_reader.sample_ids,
+                        ref_sequences,
+                        output_path,
+                        region,
+                        flank_length
+                    );
+                }
+
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';
@@ -1015,6 +1260,7 @@ void merge_variants(
         int32_t min_sv_length,
         size_t graphaligner_timeout,
         const OptimizerConfig& optimizer_config,
+        bool write_hap_vcf,
         const path& output_dir
 ){
 
@@ -1099,6 +1345,7 @@ void merge_variants(
                                      flank_length,
                                      graphaligner_timeout,
                                      optimizer_config,
+                                     write_hap_vcf,
                                      std::ref(job_index)
                 );
             } catch (const exception &e) {
@@ -1109,6 +1356,84 @@ void merge_variants(
         // Wait for threads to finish
         for (auto &n: threads) {
             n.join();
+        }
+    }
+}
+
+
+void concatenate_output_vcfs(
+        const path& out_vcf,
+        const path& vcf,
+        const path& output_dir,
+        vector<Region>& regions,
+        int32_t flank_length,
+        const string& fail_log_suffix = "failed",
+        const string& vcf_prefix = "solution"
+        ) {
+
+    ofstream out_file(out_vcf);
+
+    if (not (out_file.is_open() and out_file.good())){
+        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
+    }
+
+    ifstream input_vcf(vcf);
+
+    if (not (input_vcf.is_open() and input_vcf.good())){
+        throw runtime_error("ERROR: could not write file: " + vcf.string());
+    }
+
+    // Just copy over the header lines
+    string line;
+    while (getline(input_vcf, line)){
+        if (line.starts_with("##")){
+            out_file << line << '\n';
+        }
+        else{
+            // The next non-## line MUST be the sample line
+            if (line.starts_with("#")){
+                // Write header lines for the INFO tags that we added here
+                out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
+
+                // Copy the input sample line to the output VCF
+                out_file << line << '\n';
+            }
+            else {
+                throw runtime_error("ERROR: cannot find sample line in input VCF: " + vcf.string());
+            }
+
+            // Stop iteration
+            break;
+        }
+    }
+
+    input_vcf.close();
+
+    path fail_regions_bed_path = output_dir / ("windows_" + fail_log_suffix + ".bed");
+    ofstream fail_regions_file(fail_regions_bed_path);
+
+    if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
+        throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
+    }
+
+    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    // Will be empty if no regions were processed
+    for (size_t i=0; i<regions.size(); i++){
+        const auto& region = regions[i];
+        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / (vcf_prefix + ".vcf");
+
+        // Skip if the file does not exist
+        if (not exists(sub_vcf)){
+            // Log that this region did not contain any solution
+            fail_regions_file << region.to_bed() << '\n';
+            continue;
+        }
+
+        ifstream file(sub_vcf);
+        while (getline(file, line)){
+            if (not line.starts_with('#')){
+                out_file << line << '\n';
+            }
         }
     }
 }
@@ -1128,7 +1453,8 @@ void hapestry(
         size_t graphaligner_timeout,
         const OptimizerConfig& optimizer_config,
         bool force_unique_reads,
-        bool bam_not_hardclipped
+        bool bam_not_hardclipped,
+        bool write_hap_vcf
 ){
     Timer t;
 
@@ -1304,6 +1630,7 @@ void hapestry(
                 min_sv_length,
                 graphaligner_timeout,
                 optimizer_config,
+                write_hap_vcf,
                 staging_dir
         );
 
@@ -1311,71 +1638,13 @@ void hapestry(
         path out_vcf = output_dir / ("merged.vcf");
 
         cerr << t << "Writing output VCF: " << out_vcf << '\n';
+        concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, flank_length);
 
-        ofstream out_file(out_vcf);
-
-        if (not (out_file.is_open() and out_file.good())){
-            throw runtime_error("ERROR: could not write file: " + out_vcf.string());
-        }
-
-        ifstream input_vcf(vcf);
-
-        if (not (input_vcf.is_open() and input_vcf.good())){
-            throw runtime_error("ERROR: could not write file: " + vcf.string());
-        }
-
-        // Just copy over the header lines
-        string line;
-        while (getline(input_vcf, line)){
-            if (line.starts_with("##")){
-                out_file << line << '\n';
-            }
-            else{
-                // The next non-## line MUST be the sample line
-                if (line.starts_with("#")){
-                    // Write header lines for the INFO tags that we added here
-                    out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
-
-                    // Copy the input sample line to the output VCF
-                    out_file << line << '\n';
-                }
-                else {
-                    throw runtime_error("ERROR: cannot find sample line in input VCF: " + vcf.string());
-                }
-
-                // Stop iteration
-                break;
-            }
-        }
-
-        input_vcf.close();
-
-        path fail_regions_bed_path = output_dir / "windows_failed.bed";
-        ofstream fail_regions_file(fail_regions_bed_path);
-
-        if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
-            throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
-        }
-
-        // Copy over the mutable parts of the header and then the main contents of the filtered VCF
-        // Will be empty if no regions were processed
-        for (size_t i=0; i<regions.size(); i++){
-            const auto& region = regions[i];
-            path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "solution.vcf";
-
-            // Skip if the file does not exist
-            if (not exists(sub_vcf)){
-                // Log that this region did not contain any solution
-                fail_regions_file << region.to_bed() << '\n';
-                continue;
-            }
-
-            ifstream file(sub_vcf);
-            while (getline(file, line)){
-                if (not line.starts_with('#')){
-                    out_file << line << '\n';
-                }
-            }
+        // Additionally write a window-length haplotype substitution VCF if the user requested one
+        if (write_hap_vcf) {
+            out_vcf = output_dir / ("merged_hap.vcf");
+            cerr << t << "Writing output VCF: " << out_vcf << '\n';
+            concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, flank_length, "failed_haps", "solution_haps");
         }
     }
     else{
@@ -1402,6 +1671,7 @@ int main (int argc, char* argv[]){
     OptimizerConfig optimizer_config;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
+    bool write_hap_vcf = false;
     bool use_gurobi = false;
 
     CLI::App app{"App description"};
@@ -1497,6 +1767,8 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
 
+    app.add_flag("--write_hap_vcf", write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
+
     try{
         app.parse(argc, argv);
     }
@@ -1527,7 +1799,8 @@ int main (int argc, char* argv[]){
             graphaligner_timeout,
             optimizer_config,
             force_unique_reads,
-            bam_not_hardclipped
+            bam_not_hardclipped,
+            write_hap_vcf
     );
 
     return 0;
