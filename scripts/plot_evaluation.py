@@ -180,7 +180,7 @@ def plot_6_major_distributions(histograms: dict, title, colors):
 
             c = "red"
             if sample_label not in colors:
-                sys.stderr.write("WARNING: could not find color for %s, using default of red" % sample_label)
+                sys.stderr.write("WARNING: could not find color for %s, using default of red\n" % sample_label)
             else:
                 c = colors[sample_label]
 
@@ -493,6 +493,8 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
         "nonref_nodes_bps": [0,length_max],
         "nonref_nodes_bps_covered": [0,1],
         "nonref_nodes_fully_covered": [0,1],
+        "nonref_nodes_fully_covered_small": [0,1],
+        "nonref_nodes_fully_covered_large": [0,1],
         "nonref_nodes_partially_covered": [0,1],
         "supported_del": [0,1],
         "supported_dup": [0,1],
@@ -506,6 +508,7 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
         "unsupported_ins": [0,1],
         "unsupported_inv": [0,1],
         "unsupported_vcf_records": [0,1],
+        "recall": [0,1],
     }
 
     # c6,c3,c1,c8,c9,c0,c4,
@@ -518,6 +521,7 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
         'sniffles_joint': "C6",
         'dipcall': "C4",
         'reference': "gray",
+        'merged_hap': "gray",
     }
 
     # data = defaultdict(lambda: defaultdict(list))
