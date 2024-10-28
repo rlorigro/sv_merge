@@ -170,7 +170,7 @@ task merge {
         File files_list = "files.txt"
         File beds_tarball = output_dir + "/beds.tar.gz"
         File? monitoring_log = "monitoring.log"
-        File? heaptrack_log = "heaptrack.out"
+        File? heaptrack_log = "heaptrack.out.gz"
     }
 }
 
