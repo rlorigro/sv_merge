@@ -157,6 +157,7 @@ task concat_vcfs{
         Array[File] sequence_tarballs
 
         String docker = "staphb/bcftools:1.20"
+        String vcf_prefix
 
         RuntimeAttributes runtime_attributes = {}
     }
@@ -178,7 +179,7 @@ task concat_vcfs{
         echo "Processing archive: $archive"
 
         # find the path of the VCF file in the tarball and don't give error exit code if not found
-        vcf_path=$(tar -tzf "$archive" | grep -oP '.*\merged.vcf$') || true
+        vcf_path=$(tar -tzf "$archive" | grep -oP '.*\~{vcf_prefix}.vcf$') || true
 
         echo $vcf_path
 
@@ -401,9 +402,16 @@ workflow hapestry_merge_scattered {
         }
     }
 
-    call concat_vcfs {
+    call concat_vcfs as concat_standard_vcfs {
         input:
-            sequence_tarballs = scattered_merge.sequence_data_tarball
+            sequence_tarballs = scattered_merge.sequence_data_tarball,
+            vcf_prefix = "merged"
+    }
+
+    call concat_vcfs as concat_hap_vcfs {
+        input:
+            sequence_tarballs = scattered_merge.sequence_data_tarball,
+            vcf_prefix = "merged_hap"
     }
 
     call concat_beds {
@@ -415,8 +423,10 @@ workflow hapestry_merge_scattered {
         Array[File] chunked_beds = chunk_vcf.chunked_beds
         Array[File] non_sequence_data_tarball = scattered_merge.non_sequence_data_tarball
         Array[File] sequence_data_tarball = scattered_merge.sequence_data_tarball
-        File hapestry_vcf = concat_vcfs.concatenated_vcf
-        File hapestry_vcf_tbi = concat_vcfs.concatenated_vcf_tbi
+        File hapestry_vcf = concat_standard_vcfs.concatenated_vcf
+        File hapestry_hap_vcf = concat_hap_vcfs.concatenated_vcf
+        File hapestry_vcf_tbi = concat_standard_vcfs.concatenated_vcf_tbi
+        File hapestry_hap_vcf_tbi = concat_hap_vcfs.concatenated_vcf_tbi
         File hapestry_beds_tarball = concat_beds.beds_tarball
     }
 }
