@@ -1001,11 +1001,11 @@ TerminationReason optimize(
         return termination_reason;
     }
 
+    // Then optimize the reads with the joint model
     if (config.use_quadratic_objective) {
         termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
     }
     else {
-        // Then optimize the reads with the joint model
         termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
     }
 
@@ -1477,6 +1477,7 @@ void hapestry(
     unordered_map<string,string> ref_sequences;
     vector<Region> regions;
 
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
     cerr << t << "Loading reference sequences" << '\n';
 
     // Load all chromosome sequences (in case of BND)
@@ -1484,6 +1485,7 @@ void hapestry(
         ref_sequences[s.name] = s.sequence;
     });
 
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
     cerr << "Reading tandem BED" << '\n';
 
     unordered_map<string,vector<interval_t> > contig_tandems;
@@ -1514,6 +1516,7 @@ void hapestry(
         ofstream output_bed_file(bed_output_path);
         ofstream output_bed_flanked_file(bed_flanked_output_path);
 
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
         cerr << t << "Flanking windows and writing BED" << '\n';
 
         // Add flanks, place the regions in the interval tree, and log the windows
@@ -1529,6 +1532,21 @@ void hapestry(
         output_bed_file.close();
         output_bed_flanked_file.close();
 
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+        cerr << t << "Forgetting unused reference contigs" << '\n';
+        vector<string> unused_contigs;
+
+        for (const auto& [name, seq]: ref_sequences) {
+            if (not contig_interval_trees.contains(name)) {
+                unused_contigs.emplace_back(name);
+            }
+        }
+
+        for (const auto& name: unused_contigs) {
+            ref_sequences.erase(name);
+        }
+
+        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
         cerr << t << "Fetching reads for all windows" << '\n';
 
         // The container to store all fetched reads and their relationships to samples/paths
@@ -1571,7 +1589,6 @@ void hapestry(
         }
 
         cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
-
         cerr << t << "Writing sequences to disk" << '\n';
 
         path fasta_filename = "sequences.fasta";
@@ -1608,13 +1625,9 @@ void hapestry(
             }
         }
 
-        cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
 
         // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
-        // By default, all of these files will be stored in /dev/shm and then copied into the output dir as a final step.
-        // TODO: create option to use /dev/shm/ as staging dir
-        // Absolutely must delete the /dev/shm/ copy or warn the user at termination
-        //
+        // TODO: create option to use /dev/shm/ as staging dir. Absolutely must delete the /dev/shm/ copy or warn the user at termination
         cerr << t << "Launching threads for graph alignment and optimization: " << vcf << '\n';
 
         merge_variants(
