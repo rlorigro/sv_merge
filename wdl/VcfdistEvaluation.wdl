@@ -85,7 +85,7 @@ workflow VcfdistEvaluation {
             reference_fasta_fai = reference_fasta_fai
         }
 
-        call Vcfdist { input:
+        call Vcfdist as vcfdist { input:
             sample = sample,
             eval_vcf = SubsetSampleFromVcfEval.single_sample_vcf,
             truth_vcf = SubsetSampleFromVcfTruth.single_sample_vcf,
@@ -95,27 +95,23 @@ workflow VcfdistEvaluation {
         }
     }
 
-    scatter (x in Vcfdist.outputs) {
-        Float SV_PREC = x.SV_PREC
-        Float SV_RECALL = x.SV_RECALL
-        Float SV_F1_SCORE = x.SV_F1_SCORE
-    }
-
     call ComputeAverage as avg_p { input:
-        x = SV_PREC
+        x = vcfdist.SV_PREC
     }
 
     call ComputeAverage as avg_r { input:
-        x = SV_RECALL
+        x = vcfdist.SV_RECALL
     }
 
     call ComputeAverage as avg_f { input:
-        x = SV_F1_SCORE
+        x = vcfdist.SV_F1_SCORE
     }
 
     output {
         # per-sample
-        Array[VcfdistOutputs] vcfdist_outputs_per_sample = Vcfdist.outputs
+        Array[File] vcfdist_summary_vcf = vcfdist.summary_vcf
+        Array[File] vcfdist_precision_recall_summary_tsv = vcfdist.precision_recall_summary_tsv
+        Array[File] vcfdist_superclusters_tsv = vcfdist.superclusters_tsv
 
         Float SV_PREC_avg = avg_p.y
         Float SV_RECALL_avg = avg_r.y
@@ -213,20 +209,18 @@ task Vcfdist {
     >>>
 
     output {
-        VcfdistOutputs outputs = {
-            "summary_vcf": "~{sample}.summary.vcf",
-            "precision_recall_summary_tsv": "~{sample}.precision-recall-summary.tsv",
-            "precision_recall_tsv": "~{sample}.precision-recall.tsv",
-            "query_tsv": "~{sample}.query.tsv",
-            "truth_tsv": "~{sample}.truth.tsv",
-            "phasing_summary_tsv": "~{sample}.phasing-summary.tsv",
-            "switchflips_tsv": "~{sample}.switchflips.tsv",
-            "superclusters_tsv": "~{sample}.superclusters.tsv",
-            "phase_blocks_tsv": "~{sample}.phase-blocks.tsv",
-            "SV_PREC":read_float("SV_PREC"),
-            "SV_RECALL":read_float("SV_RECALL"),
-            "SV_F1_SCORE":read_float("SV_F1_SCORE"),
-        }
+        File summary_vcf = "~{sample}.summary.vcf"
+        File precision_recall_summary_tsv = "~{sample}.precision-recall-summary.tsv"
+        File precision_recall_tsv = "~{sample}.precision-recall.tsv"
+        File query_tsv = "~{sample}.query.tsv"
+        File truth_tsv = "~{sample}.truth.tsv"
+        File phasing_summary_tsv = "~{sample}.phasing-summary.tsv"
+        File switchflips_tsv = "~{sample}.switchflips.tsv"
+        File superclusters_tsv = "~{sample}.superclusters.tsv"
+        File phase_blocks_tsv = "~{sample}.phase-blocks.tsv"
+        Float SV_PREC =read_float("SV_PREC")
+        Float SV_RECALL =read_float("SV_RECALL")
+        Float SV_F1_SCORE =read_float("SV_F1_SCORE")
     }
 
     runtime {
