@@ -58,7 +58,7 @@ task chunk_vcf {
         fi
 
         if [ -s ~{monitoring_script} ]; then
-          bash ~{monitoring_script} > monitoring.log &
+          MONITOR_PROCESS = bash ~{monitoring_script} > monitoring.log & echo $!
         fi
 
         # create a variable for the non-gz vcf
@@ -87,6 +87,10 @@ task chunk_vcf {
         tree ~{output_dir}
 
         # Dynamic load balancing in bash, thanks ChatGPT <3 <3 <3
+
+        # This block and the subsequent wait command MUST be inside the subshell ( ) to prevent monitor script
+        # from running eternally
+        (
         n_threads=$(nproc --all)
 
         echo "Available threads: $n_threads"
@@ -119,6 +123,7 @@ task chunk_vcf {
 
         # Wait for any remaining background processes to finish
         wait
+        )
 
         sync
 
