@@ -628,11 +628,6 @@ void write_solution_as_hap_vcf(
     size_t unflanked_length = region.stop-region.start-(2*flank_length);
     size_t unflanked_start = region.start + flank_length;
 
-    cerr << "region.start: " << region.start << '\n';
-    cerr << "region.stop: " << region.stop << '\n';
-    cerr << "unflanked_start: " << unflanked_start << '\n';
-    cerr << "unflanked_length: " << unflanked_length << '\n';
-
     const string& ref_sequence = ref_sequences.at(region.name);
 
     // Since there may be NO ref sequence between the flank nodes, we must anchor on the last base of the left flank
