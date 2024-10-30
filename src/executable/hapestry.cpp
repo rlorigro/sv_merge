@@ -1154,14 +1154,14 @@ void merge_thread_fn(
         // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
+        // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
+        path output_csv = subdir / "reads_to_paths.csv";
+        transmap.write_edge_info_to_csv(output_csv, variant_graph);
+
         if (config.rescale_weights) {
             // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
             rescale_weights_as_quadratic_best_diff(transmap, 0, 2000);
         }
-
-        // Write the full transmap to CSV (in the form of annotated edges)
-        path output_csv = subdir / "reads_to_paths.csv";
-        transmap.write_edge_info_to_csv(output_csv, variant_graph);
 
         if (not config.skip_solve){
             try {
