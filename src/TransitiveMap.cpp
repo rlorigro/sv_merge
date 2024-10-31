@@ -229,6 +229,11 @@ bool TransMap::has_node(const string& name) const{
 }
 
 
+bool TransMap::has_node(int64_t id) const{
+    return graph.has_node(id);
+}
+
+
 void TransMap::remove_edge(int64_t a, int64_t b){
     graph.remove_edge(a,b);
 }
@@ -353,6 +358,13 @@ void TransMap::for_each_read_of_sample(int64_t sample_id, const function<void(in
 void TransMap::for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const{
     graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t id){
         f(id);
+    });
+}
+
+
+void TransMap::for_each_path_of_read(int64_t read_id, const function<void(const string& path_name, int64_t path_id)>& f) const{
+    graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t id){
+        f(graph.get_node(id).name, id);
     });
 }
 
@@ -535,6 +547,26 @@ void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& vari
 
                 out << sample_name << ',' << get_node(read_id).name << ',' << read_length << ',' << get_node(path_id).name << ',' << path_length << ',' << weight << '\n';
             });
+        });
+    });
+}
+
+
+void TransMap::extract_sample_as_transmap(const string& sample_name, TransMap& result) {
+    result.add_sample(sample_name);
+
+    for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+        result.add_read(read_name);
+
+        // When generating the new transmap, must use string names, NOT IDs, because the IDs will differ betw transmaps
+        result.add_edge(sample_name, read_name);
+
+        for_each_path_of_read(read_id, [&](const string& path_name, int64_t path_id) {
+            if (not result.has_node(path_name)) {
+                result.add_path(path_name);
+            }
+
+            result.add_edge(read_name, path_name);
         });
     });
 }

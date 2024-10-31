@@ -69,6 +69,7 @@ public:
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
     bool has_edge(int64_t a, int64_t b) const;
     bool has_node(const string& name) const;
+    bool has_node(int64_t id) const;
     int64_t get_node_count() const;
     int64_t get_edge_count(int64_t id) const;
     const unordered_map<int64_t,coord_t>& get_flank_map() const;
@@ -106,6 +107,7 @@ public:
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_read(int64_t read_id, const function<void(int64_t path_id)>& f) const;
+    void for_each_path_of_read(int64_t read_id, const function<void(const string& path_name, int64_t path_id)>& f) const;
 
     void for_each_phased_variant_of_sample(const string& sample_name, const function<void(const string& name, int64_t id, bool phase)>& f) const;
     void for_each_phased_variant_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id, bool phase)>& f) const;
@@ -123,6 +125,9 @@ public:
 
     /// Clearing
     void clear_non_samples();
+
+    // Copying
+    void extract_sample_as_transmap(const string& sample_name, TransMap& result);
 };
 
 

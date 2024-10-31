@@ -325,6 +325,7 @@ workflow hapestry_merge_scattered {
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
+        Boolean samplewise = false
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
 
@@ -351,6 +352,7 @@ workflow hapestry_merge_scattered {
         n_threads: "Maximum number of threads to use"
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
+        samplewise: "Solve each sample independently"
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         tandems_bed: "BED file of tandem repeats"
@@ -398,6 +400,7 @@ workflow hapestry_merge_scattered {
                 gurobi_license = gurobi_license,
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
+                samplewise = samplewise,
                 quadratic_objective = quadratic_objective,
                 rescale_weights = rescale_weights,
                 docker = docker,

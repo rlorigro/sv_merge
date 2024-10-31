@@ -72,6 +72,7 @@ public:
     bool skip_solve = false;
     bool rescale_weights = false;
     bool use_quadratic_objective = false;
+    bool samplewise = false;
     SolverType solver_type = SolverType::kGscip;
 };
 
@@ -983,7 +984,6 @@ void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min
 
 TerminationReason optimize(
     TransMap& transmap,
-    VariantGraph& variant_graph,
     const OptimizerConfig& config,
     path subdir
 ){
@@ -1008,10 +1008,47 @@ TerminationReason optimize(
         return termination_reason;
     }
 
-    // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
-    // likely does not conflict with existing names
-    for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-        transmap.add_variant("v" + to_string(v));
+    return termination_reason;
+}
+
+
+TerminationReason optimize_samplewise(
+    TransMap& transmap,
+    const OptimizerConfig& config,
+    path subdir
+) {
+    vector <pair<int64_t,int64_t> > edges_to_remove;
+    TerminationReason termination_reason = TerminationReason::kOptimal;
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        TransMap submap;
+        transmap.extract_sample_as_transmap(sample_name, submap);
+
+        termination_reason = optimize(transmap, config, subdir);
+
+        // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
+
+        // TODO handle this more smarter.. what about kFeasible?
+        if (termination_reason != TerminationReason::kOptimal) {
+            return;
+        }
+
+        // Find edges in transmap that weren't part of the samplewise solution before continuing to next sample
+        transmap.for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+            transmap.for_each_path_of_read(read_id, [&](const string& path_name, int64_t path_id) {
+                // Convert names to submap IDs
+                auto a = submap.get_id(read_name);
+                auto b = submap.get_id(path_name);
+
+                if (not submap.has_edge(a, b)) {
+                    edges_to_remove.emplace_back(a,b);
+                }
+            });
+        });
+    });
+
+    for (const auto& [a,b]: edges_to_remove) {
+        transmap.remove_edge(a, b);
     }
 
     return termination_reason;
@@ -1160,7 +1197,14 @@ void merge_thread_fn(
 
         if (not config.skip_solve){
             try {
-                TerminationReason termination_reason = optimize(transmap, variant_graph, config, subdir);
+                TerminationReason termination_reason;
+
+                if (config.samplewise) {
+                    termination_reason = optimize_samplewise(transmap, config, subdir);
+                }
+                else {
+                    termination_reason = optimize(transmap, config, subdir);
+                }
 
                 if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
                     cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
@@ -1184,6 +1228,12 @@ void merge_thread_fn(
 
                 for (const auto& p: unused_paths) {
                     transmap.remove_node(p);
+                }
+
+                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
+                // likely does not conflict with existing names
+                for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+                    transmap.add_variant("v" + to_string(v));
                 }
 
                 // Construct mapping of paths to variants
@@ -1776,6 +1826,8 @@ int main (int argc, char* argv[]){
     app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
 
     app.add_flag("--write_hap_vcf", write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
+
+    app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
 
     try{
         app.parse(argc, argv);
