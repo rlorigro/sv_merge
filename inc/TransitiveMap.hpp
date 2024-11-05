@@ -95,6 +95,7 @@ public:
 
     void get_read_sample(const string& read_name, string& result) const;
     void get_read_sample(int64_t read_id, string& result) const;
+    int64_t get_read_sample(int64_t read_id) const;
 
     void for_each_read_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read_of_sample(int64_t sample_id, const function<void(int64_t read_id)>& f) const;

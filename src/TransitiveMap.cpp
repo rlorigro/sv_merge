@@ -299,6 +299,33 @@ void TransMap::get_read_sample(int64_t read_id, string& result) const{
 }
 
 
+
+
+int64_t TransMap::get_read_sample(int64_t read_id) const{
+    if (graph.get_node(read_id).type != 'R'){
+        throw runtime_error("ERROR: non-read ID provided for get_read_sample: " + to_string(read_id) + " " + graph.get_node(read_id).name);
+    }
+
+    int64_t result = -1;
+
+    graph.for_each_neighbor_of_type(read_id, 'S', [&](int64_t id){
+        // Check for cases that should be impossible
+        if (result != -1){
+            throw runtime_error("ERROR: multiple samples found for id: " + to_string(read_id));
+        }
+
+        result = id;
+    });
+
+    // For this project, every read must have exactly one sample.
+    if (result == -1){
+        throw runtime_error("ERROR: no sample found for id: " + to_string(read_id));
+    }
+
+    return result;
+}
+
+
 void TransMap::for_each_read(const function<void(const string& name, const BinarySequence<uint64_t>& sequence)>& f) const{
     graph.for_each_neighbor_of_type(read_node_name, 'R', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, sequences.at(id));
@@ -605,27 +632,31 @@ void TransMap::extract_sample_as_transmap(const string& sample_name, TransMap& r
 void TransMap::detangle_sample_paths(unordered_map<string,string>& hapmap){
     vector <pair <int64_t, int64_t> > edges_to_be_removed;
     vector <tuple <string, string, float> > edges_to_add;
+    string result;
 
     for_each_path([&](const string& path_name, int64_t path_id) {
-        vector<int64_t> samples_of_path;
+        unordered_map <int64_t,vector<int64_t> > sample_reads_of_path;
 
-        for_each_sample_of_path(path_id, [&](const string& sample_name, int64_t sample_id) {
-            samples_of_path.emplace_back(sample_id);
+        // Find the reads that connect to this path and group them by sample. Each sample will get their own path.
+        for_each_read_of_path(path_id, [&](int64_t read_id) {
+            auto sample_id = get_read_sample(read_id);
+            sample_reads_of_path[sample_id].push_back(read_id);
         });
 
-        // Only care about paths that are touched by multiple samples
-        if (samples_of_path.size() > 1) {
-            for (const auto& sample_id: samples_of_path) {
+        // Only care about paths that are used by multiple samples
+        if (sample_reads_of_path.size() > 1) {
+            for (const auto& [sample_id,reads]: sample_reads_of_path) {
                 // Construct a child node to replace the parent node, because it needs to be untangled w.r.t. samples
                 auto new_name = path_name + "_" + to_string(sample_id);
                 hapmap.emplace(new_name, path_name);
 
                 // Connect the reads to the new child path, and stage the old edges to be deleted (leaving the parent
                 // path stranded as an island, will be reconnected later)
-                for_each_neighbor_of_type(path_id, 'R', [&](int64_t read_id, float w){
+                for (auto read_id: reads) {
+                    auto [_,w] = try_get_edge_weight(read_id, path_id);
                     edges_to_add.emplace_back(get_node(read_id).name, new_name, w);
                     edges_to_be_removed.emplace_back(read_id, path_id);
-                });
+                }
             }
         }
     });
