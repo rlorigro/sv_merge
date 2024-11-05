@@ -1200,74 +1200,84 @@ void merge_thread_fn(
                 TerminationReason termination_reason;
 
                 if (config.samplewise) {
-                    termination_reason = optimize_samplewise(transmap, config, subdir);
+                    // Split out all the paths per sample so that every sample is an independent connected component
+                    unordered_map<string,string> hapmap;
+                    transmap.detangle_sample_paths(hapmap);
+
+                    termination_reason = optimize(transmap, config, subdir);
+
+                    // Reverse the detangling step
+                    transmap.retangle_sample_paths(hapmap);
                 }
                 else {
                     termination_reason = optimize(transmap, config, subdir);
                 }
 
+                // Handle timeout case (do nothing)
                 if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
                     cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
                 }
+                // Handle failure case (ERROR)
                 else if (termination_reason != TerminationReason::kOptimal) {
                     throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
                 }
+                // Normal operation, solver succeeded
+                else {
+                    vector<int64_t> unused_paths;
 
-                vector<int64_t> unused_paths;
+                    transmap.for_each_path([&](const string& path_name, int64_t path_id) {
+                        bool used = false;
+                        transmap.for_each_sample_of_path(path_name, [&](const string& sample_name, int64_t sample_id) {
+                            used = true;
+                        });
 
-                transmap.for_each_path([&](const string& path_name, int64_t path_id) {
-                    bool used = false;
-                    transmap.for_each_sample_of_path(path_name, [&](const string& sample_name, int64_t sample_id) {
-                        used = true;
+                        if (not used) {
+                            unused_paths.push_back(path_id);
+                        }
                     });
 
-                    if (not used) {
-                        unused_paths.push_back(path_id);
+                    for (const auto& p: unused_paths) {
+                        transmap.remove_node(p);
                     }
-                });
 
-                for (const auto& p: unused_paths) {
-                    transmap.remove_node(p);
-                }
+                    // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
+                    // likely does not conflict with existing names
+                    for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
+                        transmap.add_variant("v" + to_string(v));
+                    }
 
-                // Add all the variant nodes to the transmap using a simple name based on the variantgraph ID which
-                // likely does not conflict with existing names
-                for (size_t v=0; v<variant_graph.vcf_records.size(); v++){
-                    transmap.add_variant("v" + to_string(v));
-                }
+                    // Construct mapping of paths to variants
+                    transmap.for_each_path([&](const string& path_name, int64_t path_id){
+                        // Convert the path to a vector
+                        vector <pair <string,bool> > path;
 
-                // Construct mapping of paths to variants
-                transmap.for_each_path([&](const string& path_name, int64_t path_id){
-                    // Convert the path to a vector
-                    vector <pair <string,bool> > path;
+                        GafAlignment::parse_string_as_path(path_name, path);
 
-                    GafAlignment::parse_string_as_path(path_name, path);
-
-                    variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
-                        string var_name = "v" + to_string(id);
-                        transmap.add_edge(var_name, path_name);
+                        variant_graph.for_each_vcf_record(path, [&](size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record){
+                            string var_name = "v" + to_string(id);
+                            transmap.add_edge(var_name, path_name);
+                        });
                     });
-                });
 
-                // Write the solution to a VCF
-                path output_path = subdir / "solution.vcf";
+                    // Write the solution to a VCF
+                    path output_path = subdir / "solution.vcf";
 
-                write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
+                    write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
 
-                output_path = subdir / "solution_haps.vcf";
+                    output_path = subdir / "solution_haps.vcf";
 
-                if (write_hap_vcf) {
-                    write_solution_as_hap_vcf(
-                        variant_graph,
-                        transmap,
-                        vcf_reader.sample_ids,
-                        ref_sequences,
-                        output_path,
-                        region,
-                        flank_length
-                    );
+                    if (write_hap_vcf) {
+                        write_solution_as_hap_vcf(
+                            variant_graph,
+                            transmap,
+                            vcf_reader.sample_ids,
+                            ref_sequences,
+                            output_path,
+                            region,
+                            flank_length
+                        );
+                    }
                 }
-
             }
             catch (const exception& e) {
                 cerr << e.what() << '\n';

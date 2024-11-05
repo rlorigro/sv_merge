@@ -3,16 +3,12 @@
 #include <fstream>
 
 using std::ofstream;
+using std::tuple;
 
 
 namespace sv_merge{
 
-TransMap::TransMap():
-        sample_node_name("sample_node"),
-        read_node_name("read_node"),
-        path_node_name("path_node"),
-        variant_node_name("variant_node")
-{
+TransMap::TransMap(){
     // Source nodes use lower case types to avoid being confused with the types they point to
     graph.add_node(sample_node_name, 's');
     graph.add_node(read_node_name, 'r');
@@ -20,6 +16,10 @@ TransMap::TransMap():
     graph.add_node(variant_node_name, 'v');
 }
 
+const string TransMap::sample_node_name = "sample_node";
+const string TransMap::read_node_name = "read_node";
+const string TransMap::path_node_name = "path_node";
+const string TransMap::variant_node_name = "variant_node";
 
 void TransMap::reserve_nodes(size_t n){
     graph.reserve_nodes(n);
@@ -328,8 +328,15 @@ void TransMap::for_each_sample(const function<void(const string& name, int64_t i
 
 
 void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const{
-    graph.for_each_neighbor_of_type(id, type, [&](int64_t id){
-        f(id);
+    graph.for_each_neighbor_of_type(id, type, [&](int64_t id2){
+        f(id2);
+    });
+}
+
+
+void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id, float w)>& f) const{
+    graph.for_each_neighbor_of_type(id, type, [&](int64_t id2, float w){
+        f(id2, w);
     });
 }
 
@@ -409,6 +416,20 @@ void TransMap::for_each_sample_of_path(const string& path_name, const function<v
     unordered_set<int64_t> visited;
 
     auto id = graph.name_to_id(path_name);
+    graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
+        graph.for_each_neighbor_of_type(r, 'S', [&](int64_t s){
+            if (not visited.count(s)){
+                f(graph.get_node(s).name, s);
+                visited.emplace(s);
+            }
+        });
+    });
+}
+
+
+void TransMap::for_each_sample_of_path(int64_t id, const function<void(const string& name, int64_t id)>& f) const{
+    unordered_set<int64_t> visited;
+
     graph.for_each_neighbor_of_type(id, 'R', [&](int64_t r){
         graph.for_each_neighbor_of_type(r, 'S', [&](int64_t s){
             if (not visited.count(s)){
@@ -513,6 +534,15 @@ void TransMap::for_node_in_bfs(
 }
 
 
+void TransMap::for_edge_in_bfs(
+        const string& start_name,
+        float min_edge_weight,
+        const function<bool(const HeteroNode& node)>& criteria,
+        const function<void(const HeteroNode& a, int64_t a_id, const HeteroNode& b, int64_t b_id)>& f) const{
+    graph.for_edge_in_bfs(start_name,min_edge_weight,criteria,f);
+}
+
+
 void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const{
     ofstream out(output_path);
 
@@ -569,6 +599,107 @@ void TransMap::extract_sample_as_transmap(const string& sample_name, TransMap& r
             result.add_edge(read_name, path_name);
         });
     });
+}
+
+
+void TransMap::detangle_sample_paths(unordered_map<string,string>& hapmap){
+    vector <pair <int64_t, int64_t> > edges_to_be_removed;
+    vector <tuple <string, string, float> > edges_to_add;
+
+    for_each_path([&](const string& path_name, int64_t path_id) {
+        vector<int64_t> samples_of_path;
+
+        for_each_sample_of_path(path_id, [&](const string& sample_name, int64_t sample_id) {
+            samples_of_path.emplace_back(sample_id);
+        });
+
+        // Only care about paths that are touched by multiple samples
+        if (samples_of_path.size() > 1) {
+            for (const auto& sample_id: samples_of_path) {
+                // Construct a child node to replace the parent node, because it needs to be untangled w.r.t. samples
+                auto new_name = path_name + "_" + to_string(sample_id);
+                hapmap.emplace(new_name, path_name);
+
+                // Connect the reads to the new child path, and stage the old edges to be deleted (leaving the parent
+                // path stranded as an island, will be reconnected later)
+                for_each_neighbor_of_type(path_id, 'R', [&](int64_t read_id, float w){
+                    edges_to_add.emplace_back(get_node(read_id).name, new_name, w);
+                    edges_to_be_removed.emplace_back(read_id, path_id);
+                });
+            }
+        }
+    });
+
+    for (auto [a,b]: edges_to_be_removed) {
+        remove_edge(a,b);
+    }
+
+    for (const auto& [child_name,parent_name]: hapmap) {
+        add_path(child_name);
+    }
+
+    for (const auto& [a,b,w]: edges_to_add) {
+        add_edge(a,b,w);
+    }
+}
+
+
+void TransMap::retangle_sample_paths(const unordered_map<string,string>& hapmap){
+    // Reconnect any reads from children paths to their original parent path
+    for (const auto& [child_path_name,parent_path_name]: hapmap) {
+        auto [a_success,child_path_id] = try_get_id(child_path_name);
+
+        // It's ok if some of the child paths have been deleted
+        if (not a_success) {
+            continue;
+        }
+
+        auto [b_success,parent_path_id] = try_get_id(parent_path_name);
+
+        // It's NOT OK (!!) if the parent path corresponding to the child path has been deleted !!
+        if (not b_success) {
+            throw runtime_error("ERROR: cannot retangle TransMap with missing parent path: " + parent_path_name);
+        }
+
+        // Copy the incoming read-->child_path edges to the parent_path
+        for_each_neighbor_of_type(child_path_id, 'R', [&](int64_t read_id, float w) {
+            add_edge(read_id, parent_path_id, w);
+        });
+
+        // Delete the naughty children
+        remove_node(child_path_id);
+    }
+}
+
+
+bool operator==(const TransMap& a, const TransMap& b) {
+    // All data must be compared on a name level to avoid inconsistencies in name<->id mapping, which are arbitrary
+    unordered_set <pair <string,string> > a_edges;
+    unordered_set <pair <string,string> > b_edges;
+    unordered_set<string> a_nodes;
+    unordered_set<string> b_nodes;
+
+    a.for_edge_in_bfs(
+        TransMap::sample_node_name,
+        0,
+        [&](const HeteroNode& node){return true;},
+        [&](const HeteroNode& a_node, int64_t a_id, const HeteroNode& b_node, int64_t b_id) {
+            a_edges.emplace(a_node.name, b_node.name);
+            a_nodes.emplace(a_node.name);
+            a_nodes.emplace(b_node.name);
+    });
+
+    b.for_edge_in_bfs(
+        TransMap::sample_node_name,
+        0,
+        [&](const HeteroNode& node){return true;},
+        [&](const HeteroNode& a_node, int64_t a_id, const HeteroNode& b_node, int64_t b_id) {
+            b_edges.emplace(a_node.name, b_node.name);
+            b_nodes.emplace(a_node.name);
+            b_nodes.emplace(b_node.name);
+    });
+
+    return (a_nodes == b_nodes) and (a_edges == b_edges);
 }
 
 
