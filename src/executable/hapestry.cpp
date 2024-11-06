@@ -998,7 +998,11 @@ TerminationReason optimize(
     }
 
     if (config.prune_with_d_min) {
-        prune_paths_with_d_min(transmap, config.d_weight, config.solver_timeout, subdir, config.solver_type);
+        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+    }
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
     }
 
     // Then optimize the reads with the joint model
@@ -1007,10 +1011,6 @@ TerminationReason optimize(
     }
     else {
         termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
-    }
-
-    if (termination_reason != TerminationReason::kOptimal) {
-        return termination_reason;
     }
 
     return termination_reason;
