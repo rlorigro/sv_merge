@@ -703,6 +703,8 @@ void TransMap::retangle_sample_paths(const unordered_map<string,string>& hapmap)
 }
 
 
+
+/// WARNING: DOES NOT COMPARE EDGE WEIGHTS, ONLY COMPARES EDGE PRESENCE/ABSENCE
 bool operator==(const TransMap& a, const TransMap& b) {
     // All data must be compared on a name level to avoid inconsistencies in name<->id mapping, which are arbitrary
     unordered_set <pair <string,string> > a_edges;

@@ -73,6 +73,7 @@ public:
     bool rescale_weights = false;
     bool use_quadratic_objective = false;
     bool samplewise = false;
+    bool prune_with_d_min = false;
     SolverType solver_type = SolverType::kGscip;
 };
 
@@ -741,7 +742,7 @@ void write_solution_as_hap_vcf(
                 ref_path_name = path_name;
             }
             else if (ref_path_name != path_name) {
-                throw runtime_error("ERROR: multiple paths are ref-only nodes: " + ref_path_name + " != " + path_name);
+                cerr << "WARNING: multiple paths are ref-only nodes: " + ref_path_name + " != " + path_name << '\n';
             }
 
             // Break callback function, do not write to hap VCF because you cannot substitute a REF allele with itself
@@ -994,6 +995,10 @@ TerminationReason optimize(
 
     if (termination_reason != TerminationReason::kOptimal) {
         return termination_reason;
+    }
+
+    if (config.prune_with_d_min) {
+        prune_paths_with_d_min(transmap, config.d_weight, config.solver_timeout, subdir, config.solver_type);
     }
 
     // Then optimize the reads with the joint model
@@ -1838,6 +1843,8 @@ int main (int argc, char* argv[]){
     app.add_flag("--write_hap_vcf", write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
 
     app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
+
+    app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
 
     try{
         app.parse(argc, argv);

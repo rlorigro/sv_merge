@@ -148,6 +148,8 @@ public:
     void retangle_sample_paths(const unordered_map<string,string>& hapmap);
 };
 
+
+/// WARNING: DOES NOT COMPARE EDGE WEIGHTS, ONLY COMPARES EDGE PRESENCE/ABSENCE
 bool operator==(const TransMap& a, const TransMap& b);
 
 }

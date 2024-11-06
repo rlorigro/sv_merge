@@ -1032,6 +1032,101 @@ TerminationReason optimize_reads_with_d_and_n(
 }
 
 
+TerminationReason prune_paths_with_d_min(
+        TransMap& transmap,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint
+        ){
+
+    Model model;
+    SolveArguments args;
+    PathVariables vars;
+    TerminationReason termination_reason;
+    std::chrono::milliseconds duration;
+
+    args.parameters.threads = n_threads;
+
+    if (time_limit_seconds > 0){
+        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    }
+    else{
+        args.parameters.time_limit = absl::InfiniteDuration();
+    }
+
+    bool integral = true;
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+        integral = false;
+    }
+
+    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
+
+    // First find one extreme of the pareto set (D_MIN)
+    model.Minimize(vars.cost_d);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+    const auto result = response.value();
+    termination_reason = result.termination.reason;
+    duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_initial", output_dir);
+
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
+
+    if (not integral) {
+        throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+    }
+
+    // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
+    if (termination_reason == TerminationReason::kOptimal) {
+        vector<int64_t> to_be_removed;
+
+        transmap.for_each_path([&](const string& path_name, int64_t path_id){
+            size_t n_reads = 0;
+            bool is_covered = false;
+
+            transmap.for_each_read_of_path(path_id, [&](int64_t read_id){
+                const Variable& var = vars.read_hap.at({read_id, path_id});
+
+                if (var.is_integer()){
+                    auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+
+                    if (is_assigned){
+                        is_covered = true;
+                    }
+                }
+                else{
+                    throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+                }
+
+                n_reads++;
+            });
+
+            // If this path is not an island, and no assigned read-hap edge connects to it, it should be removed
+            if (n_reads > 0 and not is_covered) {
+                to_be_removed.push_back(path_id);
+            }
+        });
+
+        for (auto path_id: to_be_removed){
+            transmap.remove_node(path_id);
+        }
+    }
+    else{
+        cerr << "WARNING: cannot update transmap for non-optimal solution" << '\n';
+        transmap = {};
+    }
+
+    return termination_reason;
+
+}
+
+
 /**
  * This reproduces the function from hapslap
  */

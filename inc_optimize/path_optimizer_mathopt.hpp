@@ -117,6 +117,15 @@ TerminationReason optimize_reads_with_d_plus_n(
         bool use_ploidy_constraint = true
         );
 
+TerminationReason prune_paths_with_d_min(
+        TransMap& transmap,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint = true
+        );
+
 void optimize_reads_with_d_and_n_using_golden_search(
         TransMap& transmap,
         double d_weight,
