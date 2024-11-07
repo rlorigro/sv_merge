@@ -39,6 +39,7 @@ task merge {
         Boolean samplewise = false
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
+        Boolean prune_with_d_min = false
 
         String docker = "fcunial/hapestry:merge"
         File? monitoring_script
@@ -104,6 +105,7 @@ task merge {
         ~{if samplewise then "--samplewise" else ""} \
         ~{if quadratic_objective then "--quadratic_objective" else ""} \
         ~{if rescale_weights then "--rescale_weights" else ""} \
+        ~{if prune_with_d_min then "--prune_with_d_min" else ""} \
         ~{if defined(gurobi_license) then "--use_gurobi" else ""}
 
        # Ensure write buffers are flushed to disk
