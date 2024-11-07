@@ -64,6 +64,11 @@ public:
 
     /// Accessing
     bool empty() const;
+
+    size_t get_read_count() const;
+    size_t get_path_count() const;
+    size_t get_sample_count() const;
+
     int64_t get_id(const string& name) const;
     pair<bool,int64_t> try_get_id(const string& name) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;

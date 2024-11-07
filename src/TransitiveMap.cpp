@@ -51,6 +51,24 @@ int64_t TransMap::get_id(const string& name) const{
 }
 
 
+size_t TransMap::get_read_count() const{
+    auto id = graph.name_to_id(read_node_name);
+    return graph.get_edge_count(id);
+}
+
+
+size_t TransMap::get_path_count() const{
+    auto id = graph.name_to_id(path_node_name);
+    return graph.get_edge_count(id);
+}
+
+
+size_t TransMap::get_sample_count() const{
+    auto id = graph.name_to_id(sample_node_name);
+    return graph.get_edge_count(id);
+}
+
+
 pair<bool,int64_t> TransMap::try_get_id(const string& name) const{
     return graph.try_name_to_id(name);
 }

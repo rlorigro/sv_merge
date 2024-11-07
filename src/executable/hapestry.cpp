@@ -990,6 +990,9 @@ TerminationReason optimize(
 ){
     TerminationReason termination_reason;
 
+    double d_min = -1;
+    double n_max = -1;
+
     // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
     termination_reason = optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
 
@@ -998,7 +1001,7 @@ TerminationReason optimize(
     }
 
     if (config.prune_with_d_min) {
-        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type, d_min, n_max);
     }
 
     if (termination_reason != TerminationReason::kOptimal) {
@@ -1007,10 +1010,12 @@ TerminationReason optimize(
 
     // Then optimize the reads with the joint model
     if (config.use_quadratic_objective) {
+        // TODO: implement latest simplifications on bound-finding/normalization?
+        // This solver is not realistically practical given the time it takes to run
         termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
     }
     else {
-        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type, true, d_min, n_max);
     }
 
     return termination_reason;

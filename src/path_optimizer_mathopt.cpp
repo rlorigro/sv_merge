@@ -885,20 +885,12 @@ void write_optimization_log(
 	string time_csv;
     duration_to_csv(duration, time_csv);
 
-    size_t n_reads = 0;
-    size_t n_paths = 0;
+    size_t n_reads = transmap.get_read_count();
+    size_t n_paths = transmap.get_path_count();
     size_t n_edges = 0;
 
-    transmap.for_each_read([&](const string& name, int64_t id){
-    	n_reads++;
-    });
-
-    transmap.for_each_path([&](const string& name, int64_t id){
-    	n_paths++;
-    });
-
     transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
-    	n_edges++;
+        n_edges++;
     });
 
     string notes;
@@ -1038,6 +1030,8 @@ TerminationReason prune_paths_with_d_min(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
+        double& d_min_result,
+        double& n_max_result,
         bool use_ploidy_constraint
         ){
 
@@ -1074,6 +1068,7 @@ TerminationReason prune_paths_with_d_min(
 
     write_optimization_log(termination_reason, duration, transmap, "optimize_d_initial", output_dir);
 
+    // EXIT EARLY
     if (termination_reason != TerminationReason::kOptimal){
         return termination_reason;
     }
@@ -1082,44 +1077,43 @@ TerminationReason prune_paths_with_d_min(
         throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
 
-    // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
-    if (termination_reason == TerminationReason::kOptimal) {
-        vector<int64_t> to_be_removed;
+    // Assign the resulting n_max and d_min so they can be reused later
+    d_min_result = round(vars.cost_d.Evaluate(result.variable_values()));
+    n_max_result = round(vars.cost_n.Evaluate(result.variable_values()));
 
-        transmap.for_each_path([&](const string& path_name, int64_t path_id){
-            size_t n_reads = 0;
-            bool is_covered = false;
+    cerr << "estimated d_min and n_max: " << d_min_result << ' ' << n_max_result << '\n';
 
-            transmap.for_each_read_of_path(path_id, [&](int64_t read_id){
-                const Variable& var = vars.read_hap.at({read_id, path_id});
+    vector<int64_t> to_be_removed;
 
-                if (var.is_integer()){
-                    auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+    transmap.for_each_path([&](const string& path_name, int64_t path_id){
+        size_t n_reads = 0;
+        bool is_covered = false;
 
-                    if (is_assigned){
-                        is_covered = true;
-                    }
+        transmap.for_each_read_of_path(path_id, [&](int64_t read_id){
+            const Variable& var = vars.read_hap.at({read_id, path_id});
+
+            if (var.is_integer()){
+                auto is_assigned = bool(int64_t(round(result.variable_values().at(var))));
+
+                if (is_assigned){
+                    is_covered = true;
                 }
-                else{
-                    throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
-                }
-
-                n_reads++;
-            });
-
-            // If this path is not an island, and no assigned read-hap edge connects to it, it should be removed
-            if (n_reads > 0 and not is_covered) {
-                to_be_removed.push_back(path_id);
             }
+            else{
+                throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+            }
+
+            n_reads++;
         });
 
-        for (auto path_id: to_be_removed){
-            transmap.remove_node(path_id);
+        // If this path is not an island, and no assigned read-hap edge connects to it, it should be removed
+        if (n_reads > 0 and not is_covered) {
+            to_be_removed.push_back(path_id);
         }
-    }
-    else{
-        cerr << "WARNING: cannot update transmap for non-optimal solution" << '\n';
-        transmap = {};
+    });
+
+    for (auto path_id: to_be_removed){
+        transmap.remove_node(path_id);
     }
 
     return termination_reason;
@@ -1138,7 +1132,9 @@ TerminationReason optimize_reads_with_d_plus_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint
+        bool use_ploidy_constraint,
+        double d_min,
+        double n_max
         ){
 
     Model model;
@@ -1146,6 +1142,12 @@ TerminationReason optimize_reads_with_d_plus_n(
     PathVariables vars;
     TerminationReason termination_reason;
     std::chrono::milliseconds duration;
+
+    bool integral = true;
+
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+        integral = false;
+    }
 
     args.parameters.threads = n_threads;
 
@@ -1156,32 +1158,35 @@ TerminationReason optimize_reads_with_d_plus_n(
         args.parameters.time_limit = absl::InfiniteDuration();
     }
 
-    double n_max = -1;
-    double d_min = -1;
-    double n = -1;
-    double d = -1;
-
-    bool integral = true;
-    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
-        integral = false;
-    }
-
     construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
-    // First find one extreme of the pareto set (D_MIN)
-    d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
-    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+    // ---- First find one extreme of the pareto set (D_MIN) ----
 
-    if (termination_reason != TerminationReason::kOptimal){
-		return termination_reason;
+    // If d_min or n_max are not provided, find them from scratch
+    if (d_min == -1 and n_max == -1){
+
+        cerr << "no bounds given, re-optimizing for d_min: " << d_min << ' ' << n_max << '\n';
+        model.Minimize(vars.cost_d);
+
+        const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+
+        const auto result = response.value();
+        termination_reason = result.termination.reason;
+        duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+
+        // Check if the first solution is feasible/optimal
+        if (termination_reason != TerminationReason::kOptimal){
+            return termination_reason;
+        }
+
+        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+
+        // Ideally we would minimize( n | d=d_min ) but we are choosing to be lazy here because it is a costly step
+        d_min = round(vars.cost_d.Evaluate(result.variable_values()));
+        n_max = round(vars.cost_n.Evaluate(result.variable_values()));
     }
 
-    n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, duration, d_min));
-    write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
-
-    if (termination_reason != TerminationReason::kOptimal){
-		return termination_reason;
-    }
+    // ------------------- Normalize -----------------------------
 
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.
@@ -1206,6 +1211,8 @@ TerminationReason optimize_reads_with_d_plus_n(
     model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
     model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
 
+    // --------------- Minimize joint model -------------------------
+
     model.Minimize(d_norm*d_weight + n_norm*n_weight);
 
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
@@ -1223,8 +1230,8 @@ TerminationReason optimize_reads_with_d_plus_n(
     }
 
     // Infer the optimal n and d values of the joint solution
-    n = vars.cost_n.Evaluate(result_n_d.variable_values());
-    d = vars.cost_d.Evaluate(result_n_d.variable_values());
+    double n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    double d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     if (integral) {
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
