@@ -63,6 +63,9 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
     });
 
+    unordered_map <pair <int64_t,int64_t>, LinearExpression> sample_hap_read_sums;
+    unordered_map <int64_t, LinearExpression> hap_vsh_sums;
+
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
@@ -86,7 +89,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 vars.cost_d += w*r_h;
 
                 // Do only once for each unique pair of sample-hap
-                if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
+                if (not vars.sample_hap.contains({sample_id, hap_id})){
                     // DEFINE: sample-hap vars
                     string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
                     auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
@@ -95,15 +98,22 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     // DEFINE: ploidy
                     vars.ploidy[sample_id] += s_h;
 
-                    // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
-                    model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
+                    // Accumulated sum for use later: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
+                    hap_vsh_sums[hap_id] += s_h;
                 }
 
-                // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
-                model.AddLinearConstraint(r_h <= vars.sample_hap.at({sample_id, hap_id}));
+                sample_hap_read_sums[{sample_id, hap_id}] += r_h;
             });
         });
     });
+
+    for (auto [sample_hap, read_sum]: sample_hap_read_sums) {
+        auto& s_h = vars.sample_hap.at(sample_hap);
+
+        // CONSTRAINT: sum(vrh) <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
+        model.AddIndicatorConstraint(s_h, read_sum >= 1);
+        model.AddIndicatorConstraint(s_h, read_sum <= 0, true);
+    }
 
     // CONSTRAINT: read assignment (flow)
     for (const auto& [read_id,f]: vars.read_flow){
@@ -117,11 +127,16 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         }
     }
 
-    // OBJECTIVE: accumulate n cost sum
-    for (const auto& [hap_id,h]: vars.haps){
+    for (const auto& [hap_id,vsh_sum]: hap_vsh_sums){
+        auto& h = vars.haps.at(hap_id);
+
+        // CONSTRAINT: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
+        model.AddIndicatorConstraint(h, vsh_sum >= 1);
+        model.AddIndicatorConstraint(h, vsh_sum <= 0, true);
+
+        // OBJECTIVE: accumulate n cost sum
         vars.cost_n += h;
     }
-
 }
 
 
