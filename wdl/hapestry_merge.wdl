@@ -98,7 +98,6 @@ task merge {
         --min_read_hap_identity ~{min_read_hap_identity} \
         --d_weight ~{d_weight} \
         --n_threads ~{n_threads} \
-        --write_hap_vcf \
         ~{if force_unique_reads then "--force_unique_reads" else ""} \
         ~{if bam_not_hardclipped then "--bam_not_hardclipped" else ""} \
         ~{if skip_solve then "--skip_solve" else ""} \
