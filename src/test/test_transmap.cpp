@@ -12,6 +12,80 @@ using sv_merge::TransMap;
 using sv_merge::HeteroNode;
 
 
+void test_transmap_detangle_retangle() {
+    TransMap transmap;
+
+    transmap.add_read("read_01");
+    transmap.add_sample("HG001");
+
+    transmap.add_read("read_02");
+    transmap.add_sample("HG002");
+
+    transmap.add_path("a");
+    transmap.add_path("b");
+
+    transmap.add_edge("read_01", "HG001");
+    transmap.add_edge("read_02", "HG002");
+
+    transmap.add_edge("read_01", "a", 2);
+    transmap.add_edge("read_01", "b", 1);
+
+    transmap.add_edge("read_02", "a", 1);
+    transmap.add_edge("read_02", "b", 2);
+
+
+    // Add a final read->path that is already detangled (should be unchanged by the operation)
+    transmap.add_read("read_03");
+    transmap.add_path("c");
+    transmap.add_edge("read_03", "HG002");
+    transmap.add_edge("read_03", "c", 2);
+
+    auto transmap_copy = transmap;
+
+    unordered_map<string,string> hapmap;
+
+    cerr << "ORIGINAL" << '\n';
+
+    transmap.for_edge_in_bfs(
+    TransMap::sample_node_name,
+    0,
+    [&](const HeteroNode& node){return true;},
+    [&](const HeteroNode& a_node, int64_t a_id, const HeteroNode& b_node, int64_t b_id) {
+        cerr << a_node.name << ',' << string(1, a_node.type) << " --> " << b_node.name << ',' << string(1,b_node.type) << '\n';
+    });
+
+    transmap.detangle_sample_paths(hapmap);
+
+    cerr << "DETANGLED" << '\n';
+
+    transmap.for_edge_in_bfs(
+        TransMap::sample_node_name,
+        0,
+        [&](const HeteroNode& node){return true;},
+        [&](const HeteroNode& a_node, int64_t a_id, const HeteroNode& b_node, int64_t b_id) {
+            cerr << a_node.name << ',' << string(1, a_node.type) << " --> " << b_node.name << ',' << string(1,b_node.type) << '\n';
+    });
+
+    transmap.retangle_sample_paths(hapmap);
+
+    cerr << "RETANGLED" << '\n';
+
+    transmap.for_edge_in_bfs(
+        TransMap::sample_node_name,
+        0,
+        [&](const HeteroNode& node){return true;},
+        [&](const HeteroNode& a_node, int64_t a_id, const HeteroNode& b_node, int64_t b_id) {
+            cerr << a_node.name << ',' << string(1, a_node.type) << " --> " << b_node.name << ',' << string(1,b_node.type) << '\n';
+    });
+
+    if (transmap_copy != transmap) {
+        throw runtime_error("FAIL: detangle not reversible");
+    }
+    else {
+        cerr << "PASS" << '\n';
+    }
+}
+
 
 int main(){
     TransMap transmap;
@@ -29,6 +103,7 @@ int main(){
 
     transmap.add_edge("read_01", "HG001");
     transmap.add_edge("read_02", "HG002");
+
     transmap.add_edge("read_03", "HG002");
 
     transmap.add_edge("read_01", "a", 2);
@@ -259,7 +334,7 @@ int main(){
 
     // first iterate nodes and verify that read_01 is not present
     bool read_found = false;
-    transmap.for_each_read([&](const string& name, int64_t id){
+    transmap.for_each_read([&](const string& name, int64_t _){
         if (name == "read_01"){
             read_found = true;
         }
@@ -288,4 +363,5 @@ int main(){
         throw runtime_error("FAIL: read_01 was not removed");
     }
 
+    test_transmap_detangle_retangle();
 }

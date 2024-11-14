@@ -1,5 +1,8 @@
 #pragma once
 
+// To get the pair hash fn, we use the external lib, otherwise is declared twice
+#include "bdsg/internal/hash_map.hpp"
+
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
@@ -20,6 +23,8 @@ using std::string;
 using std::queue;
 using std::pair;
 using std::cerr;
+using std::min;
+using std::max;
 
 
 namespace sv_merge {
@@ -92,6 +97,12 @@ public:
             float min_edge_weight,
             const function<bool(const T& node)>& criteria,
             const function<void(const T& node, int64_t id)>& f) const;
+
+    void for_edge_in_bfs(
+            const string& start_name,
+            float min_edge_weight,
+            const function<bool(const T& node)>& criteria,
+            const function<void(const T& a, int64_t a_id, const T& b, int64_t b_id)>& f) const;
 
     /// Local iterators
     void for_each_neighbor(const string& name, const function<void(const T& neighbor, int64_t id)>& f) const;
@@ -507,6 +518,42 @@ template<class T> void HeteroGraph<T>::for_node_in_bfs(
             if (visited.find(n_other) == visited.end() and criteria(nodes.at(n_other)) == true) {
                 q.emplace(n_other);
                 visited.emplace(n_other);
+            }
+        }
+    }
+}
+
+
+template<class T> void HeteroGraph<T>::for_edge_in_bfs(
+        const string& start_name,
+        float min_edge_weight,
+        const function<bool(const T& node)>& criteria,
+        const function<void(const T& a, int64_t a_id, const T& b, int64_t b_id)>& f) const{
+    auto start_id = name_to_id(start_name);
+
+    unordered_set<pair <int64_t, int64_t> > visited;
+    queue<int64_t> q;
+
+    q.emplace(start_id);
+
+    while (not q.empty()){
+        auto n = q.front();
+        q.pop();
+
+        // Iterate all types indiscriminately
+        for (const auto& [n_other,w]: edges.at(n)) {
+            if (w < min_edge_weight){
+                continue;
+            }
+
+            // Canonical representation of edge
+            pair<int64_t,int64_t> e = {min(n,n_other), max(n,n_other)};
+
+            if (not visited.contains(e) and criteria(nodes.at(n_other)) == true) {
+                q.emplace(n_other);
+                visited.emplace(e);
+
+                f(nodes.at(e.first), e.first, nodes.at(e.second), e.second);
             }
         }
     }
