@@ -111,8 +111,11 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         auto& s_h = vars.sample_hap.at(sample_hap);
 
         // CONSTRAINT: sum(vrh) <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
-        model.AddIndicatorConstraint(s_h, read_sum >= 1);
-        model.AddIndicatorConstraint(s_h, read_sum <= 0, true);
+        // model.AddIndicatorConstraint(s_h, read_sum >= 1);
+        // model.AddIndicatorConstraint(s_h, read_sum <= 0, true);
+
+        model.AddLinearConstraint(read_sum >= s_h);
+        model.AddLinearConstraint(read_sum <= read_sum.terms().size()*s_h);
     }
 
     // CONSTRAINT: read assignment (flow)
@@ -131,8 +134,11 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
         auto& h = vars.haps.at(hap_id);
 
         // CONSTRAINT: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
-        model.AddIndicatorConstraint(h, vsh_sum >= 1);
-        model.AddIndicatorConstraint(h, vsh_sum <= 0, true);
+        // model.AddIndicatorConstraint(h, vsh_sum >= 1);
+        // model.AddIndicatorConstraint(h, vsh_sum <= 0, true);
+
+        model.AddLinearConstraint(vsh_sum >= h);
+        model.AddLinearConstraint(vsh_sum <= vsh_sum.terms().size()*h);
 
         // OBJECTIVE: accumulate n cost sum
         vars.cost_n += h;
