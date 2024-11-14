@@ -110,7 +110,7 @@ task merge {
 
        # Ensure write buffers are flushed to disk
        sync
-       tree ~{output_dir}/ > files.txt
+#       tree ~{output_dir}/ > files.txt
 
        # tarball only the csv files in the output subdirectories
        find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
