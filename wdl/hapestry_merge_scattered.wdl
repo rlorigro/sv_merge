@@ -328,6 +328,7 @@ workflow hapestry_merge_scattered {
         Boolean samplewise = false
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
+        Boolean prune_with_d_min = false
 
         String docker
         File? monitoring_script
@@ -355,6 +356,7 @@ workflow hapestry_merge_scattered {
         samplewise: "Solve each sample independently"
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
+        prune_with_d_min: "Use initial solution of d_min to prune haps before starting final joint solution"
         tandems_bed: "BED file of tandem repeats"
     }
 
@@ -403,6 +405,7 @@ workflow hapestry_merge_scattered {
                 samplewise = samplewise,
                 quadratic_objective = quadratic_objective,
                 rescale_weights = rescale_weights,
+                prune_with_d_min = prune_with_d_min,
                 docker = docker,
                 monitoring_script = monitoring_script,
                 runtime_attributes = merge_runtime_attributes,

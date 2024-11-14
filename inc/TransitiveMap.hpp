@@ -35,12 +35,12 @@ class TransMap {
     // Pains me to add yet another map but here it is
     unordered_map<int64_t,bool> sequence_reversals;
 
-    string sample_node_name;
-    string read_node_name;
-    string path_node_name;
-    string variant_node_name;
-
 public:
+    static const string sample_node_name;
+    static const string read_node_name;
+    static const string path_node_name;
+    static const string variant_node_name;
+
     TransMap();
 
     /// Building
@@ -64,6 +64,11 @@ public:
 
     /// Accessing
     bool empty() const;
+
+    size_t get_read_count() const;
+    size_t get_path_count() const;
+    size_t get_sample_count() const;
+
     int64_t get_id(const string& name) const;
     pair<bool,int64_t> try_get_id(const string& name) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
@@ -85,6 +90,7 @@ public:
     size_t get_sequence_size(const string& name) const;
 
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const;
+    void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id, float w)>& f) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
@@ -94,6 +100,7 @@ public:
 
     void get_read_sample(const string& read_name, string& result) const;
     void get_read_sample(int64_t read_id, string& result) const;
+    int64_t get_read_sample(int64_t read_id) const;
 
     void for_each_read_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read_of_sample(int64_t sample_id, const function<void(int64_t read_id)>& f) const;
@@ -103,6 +110,7 @@ public:
     string get_sample_of_read(const string& read_name) const;
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_sample_of_path(int64_t id, const function<void(const string& name, int64_t id)>& f) const;
 
     void for_each_path_of_sample(const string& sample_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_path_of_sample(int64_t sample_id, const function<void(const string& name, int64_t id)>& f) const;
@@ -120,15 +128,33 @@ public:
             const function<bool(const HeteroNode& node)>& criteria,
             const function<void(const HeteroNode& node, int64_t id)>& f) const;
 
+    void for_edge_in_bfs(
+            const string& start_name,
+            float min_edge_weight,
+            const function<bool(const HeteroNode& node)>& criteria,
+            const function<void(const HeteroNode& a, int64_t a_id, const HeteroNode& b, int64_t b_id)>& f) const;
+
     /// Writing
     void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;
 
     /// Clearing
     void clear_non_samples();
 
-    // Copying
+    /// Copying/subsetting
     void extract_sample_as_transmap(const string& sample_name, TransMap& result);
+
+    /// Reversible modifications
+
+    // Restructure the transmap by duplicating any paths/haps that are used by multiple samples, so that the resulting
+    // transmap is essentially a collection of independent sample->read->hap mappings. For this process to be reversible
+    // it requires that we keep track of which parent path corresponded to which duplicated child path. We don't
+    // store this in the Transmap members because it is rarely used and would be a waste.
+    void detangle_sample_paths(unordered_map<string,string>& hapmap);
+    void retangle_sample_paths(const unordered_map<string,string>& hapmap);
 };
 
+
+/// WARNING: DOES NOT COMPARE EDGE WEIGHTS, ONLY COMPARES EDGE PRESENCE/ABSENCE
+bool operator==(const TransMap& a, const TransMap& b);
 
 }

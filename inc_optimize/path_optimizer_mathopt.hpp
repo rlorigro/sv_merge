@@ -114,6 +114,19 @@ TerminationReason optimize_reads_with_d_plus_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
+        bool use_ploidy_constraint = true,
+        double d_min = -1,
+        double n_max = -1
+        );
+
+TerminationReason prune_paths_with_d_min(
+        TransMap& transmap,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type,
+        double& d_min_result,
+        double& n_max_result,
         bool use_ploidy_constraint = true
         );
 
