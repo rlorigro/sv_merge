@@ -7,8 +7,9 @@
 #include <thread>
 #include <map>
 
-using std::map;
 using std::ofstream;
+using std::tuple;
+using std::map;
 
 
 namespace sv_merge{
@@ -43,7 +44,7 @@ string termination_reason_to_string(const TerminationReason& reason){
         return "OtherError";
     }
     else{
-        throw runtime_error("ERROR: unrecongnized TerminationReason");
+        throw runtime_error("ERROR: unrecognized TerminationReason");
     }
 }
 
@@ -1328,6 +1329,130 @@ TerminationReason optimize_read_feasibility(
 
     return result.termination.reason;
 }
+
+
+TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir){
+
+    TerminationReason termination_reason;
+
+    double d_min = -1;
+    double n_max = -1;
+
+    // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
+    termination_reason = optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    if (config.prune_with_d_min) {
+        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type, d_min, n_max);
+    }
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    // Then optimize the reads with the joint model
+    if (config.use_quadratic_objective) {
+        // TODO: implement latest simplifications on bound-finding/normalization?
+        // This solver is not realistically practical given the time it takes to run
+        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+    }
+    else {
+        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type, true, d_min, n_max);
+    }
+
+    return termination_reason;
+}
+
+
+TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir) {
+
+    vector <pair<int64_t,int64_t> > edges_to_remove;
+    TerminationReason termination_reason = TerminationReason::kOptimal;
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        TransMap submap;
+        transmap.extract_sample_as_transmap(sample_name, submap);
+
+        termination_reason = optimize(transmap, config, subdir);
+
+        // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
+
+        // TODO handle this more smarter.. what about kFeasible?
+        if (termination_reason != TerminationReason::kOptimal) {
+            return;
+        }
+
+        // Find edges in transmap that weren't part of the samplewise solution before continuing to next sample
+        transmap.for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+            transmap.for_each_path_of_read(read_id, [&](const string& path_name, int64_t path_id) {
+                // Convert names to submap IDs
+                auto a = submap.get_id(read_name);
+                auto b = submap.get_id(path_name);
+
+                if (not submap.has_edge(a, b)) {
+                    edges_to_remove.emplace_back(a,b);
+                }
+            });
+        });
+    });
+
+    for (const auto& [a,b]: edges_to_remove) {
+        transmap.remove_edge(a, b);
+    }
+
+    return termination_reason;
+}
+
+
+/// Rescale edge weights for each read as quadratic function of distance from best weight
+void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max){
+    unordered_map<int64_t,float> best_weights;
+
+    // First find the best weight for each read
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
+        auto result = best_weights.find(read_id);
+
+        if (result == best_weights.end()) {
+            best_weights[read_id] = weight;
+        }
+        else {
+            best_weights[read_id] = min(result->second, weight);
+        }
+    });
+
+    vector<tuple<int64_t,int64_t,float> > edges_to_add;
+
+    // Rescale the weights
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
+        float best = best_weights[read_id];
+        float w = round(pow((weight - best), 1.2) + 1);
+
+        if (w < domain_min) {
+            throw runtime_error("ERROR: weight rescaling resulted in weight below minimum: " + to_string(w));
+        }
+
+        // if exceeds max, then just clip it (for the sanity of building the model without int overflow)
+        if (w > domain_max) {
+            w = domain_max;
+        }
+
+//        cerr << "rescaling: " << read_id << ',' << path_id << ' ' << weight << ' ' << best << ' ' << w << '\n';
+
+        edges_to_add.emplace_back(read_id, path_id, w);
+    });
+
+    // Update the DS
+    for (const auto& [read_id, path_id, weight]: edges_to_add){
+        // Will overwrite the edge if it already exists
+        transmap.add_edge(read_id, path_id, weight);
+    }
+}
+
+
+
 
 
 }

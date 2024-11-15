@@ -37,7 +37,28 @@ using operations_research::math_opt::VariableMap;
 
 namespace sv_merge {
 
+
+class OptimizerConfig {
+public:
+        OptimizerConfig() = default;
+
+        size_t solver_timeout = 30*60;
+        float min_read_hap_identity = 0.5;
+        float d_weight = 1.0;
+        bool skip_solve = false;
+        bool rescale_weights = false;
+        bool use_quadratic_objective = false;
+        bool use_golden_search = false;
+        bool samplewise = false;
+        bool prune_with_d_min = false;
+        bool use_ploidy_constraint = true;
+        size_t max_reads_per_sample = 0;
+        SolverType solver_type = SolverType::kGscip;
+};
+
+
 string termination_reason_to_string(const TerminationReason& reason);
+
 
 /// Data class to contain the variables of the ILP, int64_t IDs intended to be reused from the TransMap
 class PathVariables{
@@ -147,5 +168,11 @@ TerminationReason optimize_read_feasibility(
         path output_dir,
         const SolverType& solver_type
 );
+
+TerminationReason optimize(TransMap& transmap,const OptimizerConfig& config,path subdir);
+
+TerminationReason optimize_samplewise(TransMap& transmap,const OptimizerConfig& config,path subdir);
+
+void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max);
 
 }
