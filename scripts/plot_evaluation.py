@@ -135,7 +135,7 @@ class ComplexRadar():
         self.ax.fill(self.angle, np.r_[sdata, sdata[0]], *args, **kw)
 
 
-def plot_6_major_distributions(histograms: dict, title, colors):
+def plot_6_major_distributions(histograms: dict, title, colors, output_dir=None):
     axes_locations = {
         "alignment_identity_avg": (0,0),
         "haplotype_coverage_avg": (0,1),
@@ -162,6 +162,7 @@ def plot_6_major_distributions(histograms: dict, title, colors):
 
     # Show the full cumulative distribution for the following stats:
     figure,axes = pyplot.subplots(nrows=2, ncols=3)
+    figure.set_size_inches(12,8)
 
     for s,(sample_label,series) in enumerate(histograms.items()):
         for series_label,coord in axes_locations.items():
@@ -196,8 +197,13 @@ def plot_6_major_distributions(histograms: dict, title, colors):
 
     figure.suptitle(title)
 
-    pyplot.show()
-    pyplot.close()
+    if output_dir is None:
+        pyplot.show()
+        pyplot.close()
+    else:
+        out_path = os.path.join(output_dir, title + ".png")
+        print("SAVING: " + out_path)
+        pyplot.savefig(out_path, dpi=300)
 
 
 def plot_all(histograms: dict, colors):
@@ -324,6 +330,10 @@ def load_dir(input_dir: str, data: defaultdict[lambda: defaultdict[list]]):
     for d,sample_label in enumerate(os.listdir(input_dir)):
         subdirectory_path = os.path.join(input_dir, sample_label)
 
+        if not os.path.isdir(subdirectory_path):
+            print("WARNING: skipping non-directory: " + subdirectory_path)
+            continue
+
         for f,filename in enumerate(os.listdir(subdirectory_path)):
             if ".txt" not in filename:
                 continue
@@ -354,77 +364,7 @@ def load_dir(input_dir: str, data: defaultdict[lambda: defaultdict[list]]):
 
     return data
 
-
-def evaluate(input_dir):
-    # c6,c3,c1,c8,c9,c0,c4,
-    colors = {
-        'bcftools': "C0",
-        'truvari': "C9",
-        'svmerger': "C2",
-        'jasmine': "C1",
-        'svimmer': "C3",
-        'sniffles_joint': "C6",
-        'dipcall': "C4",
-        'reference': "gray",
-    }
-
-    # Arbitrary histogram bounds TODO: determine n_haps automatically
-    n_haps = 95
-    n_node_max = 300
-    length_max = 8000
-
-    data_ranges = {
-        "alignment_identity_avg": [0,1],
-        "cluster_alignment_identity_avg": [0,1],
-        "cluster_coverage_avg": [0,1],
-        "haplotype_coverage_avg": [0,1],
-        "n_alignments": [0,n_node_max],
-        "n_haplotype_clusters": [0,n_haps],
-        "n_haplotypes": [0,n_haps],
-        "n_nonref_haplotypes": [0,n_haps],
-        "nonref_alignment_identity_avg": [0,1],
-        "nonref_edges": [0,n_node_max],
-        "nonref_edges_covered": [0,1],
-        "nonref_haplotype_coverage_avg": [0,1],
-        "nonref_nodes": [0,n_node_max],
-        "nonref_nodes_bps": [0,length_max],
-        "nonref_nodes_bps_covered": [0,1],
-        "nonref_nodes_fully_covered": [0,1],
-        "nonref_nodes_partially_covered": [0,1],
-        "supported_del": [0,1],
-        "supported_dup": [0,1],
-        "supported_ins": [0,1],
-        "supported_inv": [0,1],
-        "supported_vcf_records": [0,1],
-        "sv_length_supported": [0,length_max],
-        "sv_length_unsupported": [0,length_max],
-        "unsupported_del": [0,1],
-        "unsupported_dup": [0,1],
-        "unsupported_ins": [0,1],
-        "unsupported_inv": [0,1],
-        "unsupported_vcf_records": [0,1],
-    }
-
-    data = defaultdict(dict)
-    data = load_dir(input_dir=input_dir, data=data)
-
-    histograms = defaultdict(dict)
-
-    for sample_label in data.keys():
-        for series_label,values in data[sample_label].items():
-            range = data_ranges[series_label]
-            h,bins = numpy.histogram(values, 300, range)
-            h = h/h.sum()
-
-            bins = numpy.cumsum(numpy.diff(bins))
-
-            histograms[sample_label][series_label] = (h,bins)
-
-    # TODO: ratio of supported/unsupported vars by length
-    plot_6_major_distributions(data, title=os.path.basename(input_dir), colors=colors)
-
-
-def plot_radar(data, data_ranges, title, colors):
+def plot_radar(data, data_ranges, title, colors, output_dir=None):
     radar_series_labels = [
         "alignment_identity_avg",
         "haplotype_coverage_avg",
@@ -457,7 +397,14 @@ def plot_radar(data, data_ranges, title, colors):
         print(sample)
         print(radar_series_labels)
         print(y)
-        radar.plot(y, label=sample, linewidth=3.2, alpha=0.7, color=colors[sample])
+
+        c = "red"
+        if sample not in colors:
+            sys.stderr.write("WARNING: could not find color for %s, using default of red\n" % sample)
+        else:
+            c = colors[sample]
+
+        radar.plot(y, label=sample, linewidth=3.2, alpha=0.7, color=c)
         # radar.fill(y, alpha=0.05, color=colors[sample])
 
     # axes.legend()
@@ -465,12 +412,17 @@ def plot_radar(data, data_ranges, title, colors):
     fig.suptitle(title)
 
     fig.set_size_inches(8,8)
-    pyplot.savefig("radar.png", dpi=300)
-    pyplot.show()
-    pyplot.close()
+
+    if output_dir is None:
+        pyplot.show()
+        pyplot.close()
+    else:
+        out_path = os.path.join(output_dir, title + ".png")
+        print("SAVING: " + out_path)
+        pyplot.savefig(out_path, dpi=300)
 
 
-def evaluate_subdirs(parent_dir: str, use_radar: bool):
+def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_fig: bool):
     # Arbitrary histogram bounds TODO: determine n_haps automatically
     n_haps = 95
     n_node_max = 300
@@ -522,6 +474,9 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
         'dipcall': "C4",
         'reference': "gray",
         'merged_hap': "gray",
+        'merged': "blue",
+        'hapestry': "red",
+        'null': "gray",
     }
 
     # data = defaultdict(lambda: defaultdict(list))
@@ -544,16 +499,39 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
         │    │    │    ├── n_alignments.txt
     '''
 
-    for subdir in os.listdir(parent_dir):
-        subdir_path = os.path.join(parent_dir, subdir)
+    print(parent_dir, subdirs)
 
-        if not os.path.isdir(subdir_path):
-            continue
+    if subdirs is None:
+        subdirs = list()
 
+        for s in os.listdir(parent_dir):
+            s = os.path.join(parent_dir, s)
+
+            if not os.path.isdir(s):
+                continue
+
+            subdirs.append(s)
+    else:
+        parent_dir = subdirs[0]
+
+    print(parent_dir, subdirs)
+
+    fig_dir = None
+
+    if save_fig:
+        fig_dir = parent_dir
+
+    print(fig_dir)
+
+    for subdir_path in subdirs:
         for stratification_label in os.listdir(subdir_path):
             stratification_dir = os.path.join(subdir_path, stratification_label)
 
-            print("Loading data: ", subdir, stratification_label)
+            if not os.path.isdir(stratification_dir):
+                print("WARNING: skipping non-directory: " + stratification_dir)
+                continue
+
+            print("Loading data: ", os.path.basename(subdir_path), stratification_label)
             data_per_stratification[stratification_label] = load_dir(
                 input_dir=stratification_dir,
                 data=data_per_stratification[stratification_label]
@@ -577,7 +555,8 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
             plot_6_major_distributions(
                 histograms_per_stratification[stratification_label],
                 title=stratification_label,
-                colors=colors
+                colors=colors,
+                output_dir=fig_dir
             )
 
     else:
@@ -603,7 +582,8 @@ def evaluate_subdirs(parent_dir: str, use_radar: bool):
                 data=averages_per_stratification[stratification_label],
                 data_ranges=empirical_data_ranges,
                 title=stratification_label,
-                colors=colors
+                colors=colors,
+                output_dir=fig_dir
             )
 
 
@@ -625,6 +605,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "-s","--save_fig",
+        required=False,
+        action='store_true',
+        help="If invoked, save the figure to the input/parent dir instead of launching interactive GUI"
+    )
+
+    parser.add_argument(
         "-r","--radar",
         action=argparse.BooleanOptionalAction,
         help="If invoked, produce radar plots on this data"
@@ -633,13 +620,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     has_input_dir = len(args.input_dir) != 0 if args.input_dir is not None else False
-    parent_dir = len(args.parent_dir) != 0 if args.parent_dir is not None else False
+    has_parent_dir = len(args.parent_dir) != 0 if args.parent_dir is not None else False
 
-    if has_input_dir == parent_dir == 0:
+    if has_input_dir == has_parent_dir == 0:
         exit("ERROR: must provide one of input_dir or parent_dir but not both")
 
-    if has_input_dir:
-        evaluate(args.input_dir)
-    else:
-        evaluate_subdirs(args.parent_dir, args.radar)
+    evaluate_subdirs(subdirs=[args.input_dir] if args.input_dir is not None else None, parent_dir=args.parent_dir, use_radar=args.radar, save_fig=args.save_fig)
 
