@@ -506,16 +506,62 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
 }
 
 
+void write_region_subsequences_to_file(const TransMap& t, const path& output_fasta) {
+    string s;
+
+    ofstream file(output_fasta);
+
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        file << '>' << name << '\n';
+        file << s << '\n';
+    });
+}
+
+
+void write_deduplicated_region_subsequences_to_file(const TransMap& t, const path& output_fasta) {
+    unordered_map<string,int64_t> counter;
+    string s;
+
+    // Decompress and count the reads
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        counter[s]++;
+    });
+
+    ofstream file(output_fasta);
+
+    // Write arbitrary read names to the FASTA, and keep track of their count (in case needed for coverage later)
+    size_t i = 0;
+    for (const auto& [seq, n]: counter) {
+        file << '>' << i << '_' << n << '\n';
+        file << seq << '\n';
+
+        i++;
+    }
+}
+
+
 void write_region_subsequences_to_file_thread_fn(
         const unordered_map<Region,TransMap>& region_transmaps,
         const vector<Region>& regions,
         const path& output_dir,
         const path& filename,
         const int32_t flank_length,
+        bool deduplicate_reads,
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
-    string s;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -526,18 +572,13 @@ void write_region_subsequences_to_file_thread_fn(
         create_directories(output_subdir);
 
         path output_fasta = output_subdir / filename;
-        ofstream file(output_fasta);
 
-        t.for_each_read([&](const string& name, int64_t id){
-            t.get_sequence(id,s);
-
-            if (s.empty()){
-                return;
-            }
-
-            file << '>' << name << '\n';
-            file << s << '\n';
-        });
+        if (deduplicate_reads) {
+            write_deduplicated_region_subsequences_to_file(t, output_fasta);
+        }
+        else {
+            write_region_subsequences_to_file(t, output_fasta);
+        }
 
         i = job_index.fetch_add(1);
     }
@@ -597,7 +638,6 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
             // Arbitrarily reassign the path to the first path with the same sequence
             path_coverage[result->second]++;
         }
-
     });
 }
 
@@ -1193,8 +1233,13 @@ void merge_thread_fn(
             }
         }
 
+        t.reset();
+
         // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
+        time_csv = t.to_csv();
+
+        write_time_log(subdir, "align_reads_to_paths", time_csv, true);
 
         // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
         path output_csv = subdir / "reads_to_paths.csv";
@@ -1677,6 +1722,7 @@ void hapestry(
                                          std::cref(staging_dir),
                                          std::cref(fasta_filename),
                                          flank_length,
+                                         true,
                                          std::ref(job_index)
                     );
                 } catch (const exception &e) {
