@@ -1721,7 +1721,7 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--solver_timeout",
-            optimizer_config.solver_timeout,
+            optimizer_config.timeout_sec,
             "Abort the optimizer after this many seconds, use 0 for no limit");
 
     app.add_option(
@@ -1743,7 +1743,9 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
-    app.add_flag("--use_gurobi", use_gurobi, "Invoke this to add more logging and output");
+    app.add_flag("--use_gurobi", use_gurobi, "Invoke this to use Gurobi instead of SCIP. License must be in conventional location.");
+
+    app.add_flag("--use_sum_constraints", optimizer_config.use_sum_constraints, "Invoke this to use sum constraints instead of independent implications");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
