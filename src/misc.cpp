@@ -173,7 +173,7 @@ bool run_command(string command, bool redirect_stderr, float timeout){
 
 
 uint64_t get_peak_memory_usage() {
-    uint64_t peakMemoryUsage = 0ULL;
+    uint64_t peak_memory_usage = 0ULL;
 
     ifstream procStats("/proc/self/status");
     if (procStats) {
@@ -182,17 +182,17 @@ uint64_t get_peak_memory_usage() {
             if (string::npos == line.find("VmHWM")) {
                 continue;
             }
-            size_t pos = line.find(":");
+            size_t pos = line.find(':');
             while (pos < line.size() && !isdigit(line[pos])) {
                 pos++;
             }
             char* end;
-            peakMemoryUsage = std::strtoull(line.c_str() + pos, &end, 10);
+            peak_memory_usage = std::strtoull(line.c_str() + pos, &end, 10);
             break;
         }
     }
 
-    return peakMemoryUsage;
+    return peak_memory_usage;
 }
 
 

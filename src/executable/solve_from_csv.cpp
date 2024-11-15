@@ -5,10 +5,8 @@ using std::runtime_error;
 using std::cerr;
 
 #include "path_optimizer_mathopt.hpp"
-//#include "gurobi_manager.hpp"
 #include "TransitiveMap.hpp"
 #include "interval_tree.hpp"
-#include "VariantGraph.hpp"
 #include "VcfReader.hpp"
 #include "fasta.hpp"
 #include "Timer.hpp"
@@ -16,7 +14,6 @@ using std::cerr;
 #include "fetch.hpp"
 #include "misc.hpp"
 #include "gaf.hpp"
-#include "bed.hpp"
 
 using sv_merge::get_uuid;
 using lib_interval_tree::interval_tree_t;
@@ -63,62 +60,7 @@ using std::ref;
 using namespace sv_merge;
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search, bool use_read_model = false){
-    // Make tmp dir
-    path output_dir = "/tmp/" + get_uuid();
-
-    if (not exists(output_dir)){
-        create_directories(output_dir);
-    }
-    else{
-        throw runtime_error("Directory already exists: " + output_dir.string());
-    }
-
-    if (use_read_model){
-        cerr << "Using read model" << '\n';
-
-        // Print the read to path edges
-        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
-            cerr << "Sample: " << sample_name << '\n';
-            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
-                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
-                    cerr << read_id << " -> " << path_id << '\n';
-                });
-            });
-        });
-
-        optimize_read_feasibility(
-                transmap,
-                n_threads,
-                0,
-                output_dir,
-                solver_type
-        );
-
-        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
-            cerr << "Sample: " << sample_name << '\n';
-            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
-                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
-                    cerr << read_id << " -> " << path_id << '\n';
-                });
-            });
-        });
-
-    }
-
-    if (use_golden_search){
-        cerr << "Using golden search...\n";
-        optimize_reads_with_d_and_n_using_golden_search(transmap, 1, 1, n_threads, output_dir, solver_type, use_ploidy_constraint);
-    }
-    else {
-        cerr << "NOT using golden search...\n";
-        cerr << n_threads << " threads\n";
-        optimize_reads_with_d_and_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
-    }
-}
-
-
-void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_per_sample, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search, bool use_read_model){
+void solve_from_csv(path csv, const OptimizerConfig& config, size_t max_reads_per_sample){
     TransMap transmap;
 
     ifstream csv_file(csv);
@@ -127,15 +69,23 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
         throw runtime_error("Could not open CSV file " + csv.string());
     }
 
+    bool skip_header = true;
+
     for_each_row_in_csv(csv, [&](const vector<string>& items){
-        if (items.size() != 4){
-            throw runtime_error("ERROR: CSV row does not have 3 items: " + csv.string());
+        if (skip_header) {
+            skip_header = false;
+            return;
         }
 
+        if (items.size() != 6){
+            throw runtime_error("ERROR: CSV row does not have 6 items: " + csv.string());
+        }
+
+        // sample,read,read_length,path,path_length,weight
         const string& sample = items[0];
         const string& read = items[1];
-        const string& path = items[2];
-        float weight = stof(items[3]);
+        const string& path = items[3];
+        float weight = stof(items[5]);
 
         if (not transmap.has_node(sample)){
             transmap.add_sample(sample);
@@ -171,79 +121,18 @@ void solve_from_csv(path csv, const SolverType& solver_type, size_t max_reads_pe
         transmap.remove_edge(edge.first, edge.second);
     }
 
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
-}
+    // Make tmp dir
+    path output_dir = "/tmp/" + get_uuid();
 
-
-void solve_from_csv_samplewise(path csv, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_golden_search = false, bool use_read_model = false){
-    TransMap transmap;
-
-    ifstream csv_file(csv);
-
-    if (use_golden_search){
-        cerr << "Using golden search...\n";
+    if (not exists(output_dir)){
+        create_directories(output_dir);
+        cerr << output_dir << '\n';
     }
     else{
-        cerr << "NOT using golden search...\n";
+        throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
-    if (not csv_file.is_open() or csv_file.bad()){
-        throw runtime_error("Could not open CSV file " + csv.string());
-    }
-
-    string prev_sample;
-    vector <vector <string> > sample_data;
-
-    for_each_row_in_csv(csv, [&](const vector<string>& items){
-        if (items.size() != 4){
-            throw runtime_error("ERROR: CSV row does not have 3 items: " + csv.string());
-        }
-
-        const string& sample = items[0];
-        const string& read = items[1];
-        const string& hap = items[2];
-        float weight = stof(items[3]);
-
-        if (sample != prev_sample and not sample_data.empty()){
-            cerr << "Sample: " << prev_sample << '\n';
-            optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
-            if (transmap.empty()){
-                cerr << "WARNING: no result for sample: " << prev_sample << '\n';
-                for (const auto& item: sample_data){
-                    for (const string& x: item){
-                        cerr << x << ',';
-                    }
-                    cerr << '\n';
-                }
-            }
-
-            transmap = {};
-            sample_data.clear();
-        }
-
-        sample_data.emplace_back(items);
-
-        if (not transmap.has_node(sample)){
-            transmap.add_sample(sample);
-        }
-
-        if (not transmap.has_node(read)){
-            transmap.add_read(read);
-        }
-
-        if (not transmap.has_node(hap)){
-            transmap.add_path(hap);
-        }
-
-//        cerr << "adding edge: " << read << ',' << hap << ',' << weight << '\n';
-        transmap.add_edge(read, hap, weight);
-        transmap.add_edge(sample, read);
-
-        prev_sample = sample;
-    });
-
-    cerr << n_threads << " threads\n";
-    optimize(transmap, solver_type, n_threads, use_ploidy_constraint, use_golden_search, use_read_model);
+    optimize(transmap, config, output_dir);
 }
 
 
@@ -252,67 +141,63 @@ int main(int argc, char** argv){
 
     path input_csv;
     string solver;
-    SolverType solver_type;
-    bool samplewise = false;
-    bool use_ploidy_constraint = true;
-    bool use_golden_search = false;
-    bool use_read_model = false;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
     size_t n_threads = 1;
 
+    path windows_bed;
+    path tandem_bed;
+    string bam_csv;
+    path ref_fasta;
+    path vcf;
+
+    OptimizerConfig optimizer_config;
+
+    app.add_option("--d_weight", optimizer_config.d_weight, "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term");
+
+    app.add_flag("--rescale_weights", optimizer_config.rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
+
+    app.add_flag("--quadratic_objective", optimizer_config.use_quadratic_objective, "Invoke this to use quadratic objective which minimizes the square distance from the 'utopia point'. May incur large run time cost.");
+
+    app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
+
+    app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
+
     app.add_option("-i,--input", input_csv, "Input CSV file with sample-read-path data for optimizer")->required();
+
     app.add_option("--solver", solver, "Solver to use, must be one of: scip, glop, pdlp")->required();
-    app.add_flag("-s,--samplewise", samplewise, "Optimize each sample separately (default: optimize all samples together)");
-    app.add_flag("!--no_ploidy", use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
-    app.add_flag("-g,--use_golden_search", use_golden_search, "If invoked, use explicit n-centric optimization with golden search to find joint minimum instead of encoding joint objective in the solver.");
-    app.add_flag("-r,--use_read_model", use_read_model, "If invoked, use read removal model to resolve infeasibility on the sample level before optimizing. Compatible with both default and samplewise solver");
+
+    app.add_flag("!--no_ploidy", optimizer_config.use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
+
+    app.add_flag("-g,--use_golden_search", optimizer_config.use_golden_search, "If invoked, use explicit n-centric optimization with golden search to find joint minimum instead of encoding joint objective in the solver.");
+
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
+
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
 
     CLI11_PARSE(app, argc, argv);
 
     if (solver == "scip"){
-        solver_type = SolverType::kGscip;
+        optimizer_config.solver_type = SolverType::kGscip;
     }
     else if (solver == "glop"){
-        solver_type = SolverType::kGlop;
+        optimizer_config.solver_type = SolverType::kGlop;
     }
     else if (solver == "pdlp"){
-        solver_type = SolverType::kPdlp;
+        optimizer_config.solver_type = SolverType::kPdlp;
     }
     else if (solver == "gurobi"){
-        solver_type = SolverType::kGurobi;
+        optimizer_config.solver_type = SolverType::kGurobi;
     }
     else{
         throw runtime_error("ERROR: unknown solver: " + solver);
     }
 
-    if (use_ploidy_constraint){
+    if (optimizer_config.use_ploidy_constraint){
         cerr << "Using ploidy constraint...\n";
     }
     else{
         cerr << "NOT using ploidy constraint...\n";
     }
 
-    if (samplewise){
-        solve_from_csv_samplewise(
-                input_csv,
-                solver_type,
-                n_threads,
-                use_ploidy_constraint,
-                use_golden_search,
-                use_read_model
-        );
-    }
-    else{
-        solve_from_csv(
-                input_csv,
-                solver_type,
-                max_reads_per_sample,
-                n_threads,
-                use_ploidy_constraint,
-                use_golden_search,
-                use_read_model
-        );
-    }
+    solve_from_csv(input_csv, optimizer_config, max_reads_per_sample);
 }

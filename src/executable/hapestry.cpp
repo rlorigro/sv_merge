@@ -62,22 +62,6 @@ bool HAPESTRY_DEBUG = false;
 using namespace wfa;
 
 
-class OptimizerConfig {
-public:
-    OptimizerConfig() = default;
-
-    size_t solver_timeout = 30*60;
-    float min_read_hap_identity = 0.5;
-    float d_weight = 1.0;
-    bool skip_solve = false;
-    bool rescale_weights = false;
-    bool use_quadratic_objective = false;
-    bool samplewise = false;
-    bool prune_with_d_min = false;
-    SolverType solver_type = SolverType::kGscip;
-};
-
-
 void cross_align_sample_reads(TransMap& transmap, int64_t score_threshold, const string& sample_name){
     WFAlignerGapAffine aligner(4,6,2,WFAligner::Alignment,WFAligner::MemoryHigh);
 
@@ -506,16 +490,62 @@ void align_read_path_edges_of_transmap(TransMap& transmap, const VariantGraph& v
 }
 
 
+void write_region_subsequences_to_file(const TransMap& t, const path& output_fasta) {
+    string s;
+
+    ofstream file(output_fasta);
+
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        file << '>' << name << '\n';
+        file << s << '\n';
+    });
+}
+
+
+void write_deduplicated_region_subsequences_to_file(const TransMap& t, const path& output_fasta) {
+    unordered_map<string,int64_t> counter;
+    string s;
+
+    // Decompress and count the reads
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        counter[s]++;
+    });
+
+    ofstream file(output_fasta);
+
+    // Write arbitrary read names to the FASTA, and keep track of their count (in case needed for coverage later)
+    size_t i = 0;
+    for (const auto& [seq, n]: counter) {
+        file << '>' << i << '_' << n << '\n';
+        file << seq << '\n';
+
+        i++;
+    }
+}
+
+
 void write_region_subsequences_to_file_thread_fn(
         const unordered_map<Region,TransMap>& region_transmaps,
         const vector<Region>& regions,
         const path& output_dir,
         const path& filename,
         const int32_t flank_length,
+        bool deduplicate_reads,
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
-    string s;
 
     while (i < regions.size()){
         const auto& region = regions.at(i);
@@ -526,18 +556,13 @@ void write_region_subsequences_to_file_thread_fn(
         create_directories(output_subdir);
 
         path output_fasta = output_subdir / filename;
-        ofstream file(output_fasta);
 
-        t.for_each_read([&](const string& name, int64_t id){
-            t.get_sequence(id,s);
-
-            if (s.empty()){
-                return;
-            }
-
-            file << '>' << name << '\n';
-            file << s << '\n';
-        });
+        if (deduplicate_reads) {
+            write_deduplicated_region_subsequences_to_file(t, output_fasta);
+        }
+        else {
+            write_region_subsequences_to_file(t, output_fasta);
+        }
 
         i = job_index.fetch_add(1);
     }
@@ -597,7 +622,6 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
             // Arbitrarily reassign the path to the first path with the same sequence
             path_coverage[result->second]++;
         }
-
     });
 }
 
@@ -938,132 +962,6 @@ void write_sample_path_divergence(VariantGraph& variant_graph, const TransMap& t
     }
 }
 
-/// Rescale edge weights for each read as quadratic function of distance from best weight
-void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max){
-    unordered_map<int64_t,float> best_weights;
-
-    // First find the best weight for each read
-    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
-        auto result = best_weights.find(read_id);
-
-        if (result == best_weights.end()) {
-            best_weights[read_id] = weight;
-        }
-        else {
-            best_weights[read_id] = min(result->second, weight);
-        }
-    });
-
-    vector<tuple<int64_t,int64_t,float> > edges_to_add;
-
-    // Rescale the weights
-    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight) {
-        float best = best_weights[read_id];
-        float w = round(pow((weight - best), 1.2) + 1);
-
-        if (w < domain_min) {
-            throw runtime_error("ERROR: weight rescaling resulted in weight below minimum: " + to_string(w));
-        }
-
-        // if exceeds max, then just clip it (for the sanity of building the model without int overflow)
-        if (w > domain_max) {
-            w = domain_max;
-        }
-
-//        cerr << "rescaling: " << read_id << ',' << path_id << ' ' << weight << ' ' << best << ' ' << w << '\n';
-
-        edges_to_add.emplace_back(read_id, path_id, w);
-    });
-
-    // Update the DS
-    for (const auto& [read_id, path_id, weight]: edges_to_add){
-        // Will overwrite the edge if it already exists
-        transmap.add_edge(read_id, path_id, weight);
-    }
-}
-
-
-TerminationReason optimize(
-    TransMap& transmap,
-    const OptimizerConfig& config,
-    path subdir
-){
-    TerminationReason termination_reason;
-
-    double d_min = -1;
-    double n_max = -1;
-
-    // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
-    termination_reason = optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
-
-    if (termination_reason != TerminationReason::kOptimal) {
-        return termination_reason;
-    }
-
-    if (config.prune_with_d_min) {
-        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type, d_min, n_max);
-    }
-
-    if (termination_reason != TerminationReason::kOptimal) {
-        return termination_reason;
-    }
-
-    // Then optimize the reads with the joint model
-    if (config.use_quadratic_objective) {
-        // TODO: implement latest simplifications on bound-finding/normalization?
-        // This solver is not realistically practical given the time it takes to run
-        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
-    }
-    else {
-        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type, true, d_min, n_max);
-    }
-
-    return termination_reason;
-}
-
-
-TerminationReason optimize_samplewise(
-    TransMap& transmap,
-    const OptimizerConfig& config,
-    path subdir
-) {
-    vector <pair<int64_t,int64_t> > edges_to_remove;
-    TerminationReason termination_reason = TerminationReason::kOptimal;
-
-    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
-        TransMap submap;
-        transmap.extract_sample_as_transmap(sample_name, submap);
-
-        termination_reason = optimize(transmap, config, subdir);
-
-        // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
-
-        // TODO handle this more smarter.. what about kFeasible?
-        if (termination_reason != TerminationReason::kOptimal) {
-            return;
-        }
-
-        // Find edges in transmap that weren't part of the samplewise solution before continuing to next sample
-        transmap.for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
-            transmap.for_each_path_of_read(read_id, [&](const string& path_name, int64_t path_id) {
-                // Convert names to submap IDs
-                auto a = submap.get_id(read_name);
-                auto b = submap.get_id(path_name);
-
-                if (not submap.has_edge(a, b)) {
-                    edges_to_remove.emplace_back(a,b);
-                }
-            });
-        });
-    });
-
-    for (const auto& [a,b]: edges_to_remove) {
-        transmap.remove_edge(a, b);
-    }
-
-    return termination_reason;
-}
-
 
 /**
  * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
@@ -1193,8 +1091,13 @@ void merge_thread_fn(
             }
         }
 
+        t.reset();
+
         // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
+        time_csv = t.to_csv();
+
+        write_time_log(subdir, "align_reads_to_paths", time_csv, true);
 
         // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
         path output_csv = subdir / "reads_to_paths.csv";
@@ -1677,6 +1580,7 @@ void hapestry(
                                          std::cref(staging_dir),
                                          std::cref(fasta_filename),
                                          flank_length,
+                                         true,
                                          std::ref(job_index)
                     );
                 } catch (const exception &e) {

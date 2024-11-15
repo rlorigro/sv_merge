@@ -14,7 +14,7 @@ def aggregate_logs(parent_dirs, times_by_name):
                 file_path = os.path.join(root, file)
                 print(file_path)
 
-                if "log.csv" in file_path:
+                if "log.csv" in file_path and not "eval" in file_path:
                     with open(file_path, 'r') as file:
                         for l,line in enumerate(file):
                             if l == 0:
@@ -27,33 +27,17 @@ def aggregate_logs(parent_dirs, times_by_name):
 
 
 def main():
-    gurobi_dirs = [
+    gurobi_defaults = [
         "/home/ryan/data/test_hapestry/run/dev_small_test_gurobi"
     ]
-
-    gurobi_samplewise_dirs = [
-        "/home/ryan/data/test_hapestry/run/dev_small_test_samplewise_gurobi"
+    gurobi_dedupe = [
+        "/home/ryan/data/test_hapestry/run/dev_small_test_gurobi_dedupe"
     ]
 
-    scip_dirs = [
-        "/home/ryan/data/test_hapestry/run/dev_small_test_samplewise"
-    ]
+    times = defaultdict(lambda: defaultdict(list))
 
-    scip_samplewise_dirs = [
-        "/home/ryan/data/test_hapestry/run/dev_small_test"
-    ]
-
-
-    times = dict()
-    times["gurobi"] = defaultdict(list)
-    times["gurobi_samplewise"] = defaultdict(list)
-    times["scip"] = defaultdict(list)
-    times["scip_samplewise"] = defaultdict(list)
-
-    aggregate_logs(parent_dirs=gurobi_dirs, times_by_name=times["gurobi"])
-    aggregate_logs(parent_dirs=gurobi_samplewise_dirs, times_by_name=times["gurobi_samplewise"])
-    aggregate_logs(parent_dirs=scip_dirs, times_by_name=times["scip"])
-    aggregate_logs(parent_dirs=scip_samplewise_dirs, times_by_name=times["scip_samplewise"])
+    aggregate_logs(parent_dirs=gurobi_defaults, times_by_name=times["gurobi_defaults"])
+    aggregate_logs(parent_dirs=gurobi_dedupe, times_by_name=times["gurobi_dedupe"])
 
     fig = pyplot.figure()
     ax = pyplot.axes()
@@ -61,6 +45,7 @@ def main():
 
     colors = {
         "graphaligner": "#5F18A0",
+        "align_reads_to_paths": "#3222A5",
         "feasibility": "#EDBF15",
         "n_min": "#698C00",
         "d_given_n": "#88B107",
@@ -71,6 +56,7 @@ def main():
         "optimize_n_given_d_min": "#C2EB42",
         "optimize_d_plus_n": "#D3F56B",
         "optimize_n_d_quadratic": "#D3F56B",
+        "optimize_d_initial": "red",
     }
 
     x_ticks = list()
