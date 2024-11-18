@@ -40,6 +40,7 @@ task merge {
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
+        Boolean upload_debug_data = false
 
         String docker = "fcunial/hapestry:merge"
         File? monitoring_script
@@ -108,20 +109,26 @@ task merge {
         ~{if prune_with_d_min then "--prune_with_d_min" else ""} \
         ~{if defined(gurobi_license) then "--use_gurobi" else ""}
 
-       # Ensure write buffers are flushed to disk
-       sync
-       tree ~{output_dir}/ > files.txt
+        # Ensure write buffers are flushed to disk
+        sync
 
-       # tarball only the csv files in the output subdirectories
-       find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
-       tar -cvzf ~{output_dir}/non_sequence_data.tar.gz -T list.txt
-       rm -f list.txt
-       find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) > list.txt
-       tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
-       rm -f list.txt
+        if ~{upload_debug_data}; then
+            # tarball only the csv files in the output subdirectories
+            find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
+            tar -cvzf ~{output_dir}/non_sequence_data.tar.gz -T list.txt
+            rm -f list.txt
+            find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) > list.txt
+            tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
+            rm -f list.txt
 
-       # Ensure write buffers are flushed to disk
-       sync
+            # Ensure write buffers are flushed to disk
+            sync
+        else
+            # Only get the VCF files from the top level output dir
+            find ~{output_dir}/run/ -name "*.vcf" -maxdepth 1 > list.txt
+            tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
+            rm -f list.txt
+        fi
 
         # if the outputs are empty, create empty placeholders
         if [ ! -s ~{output_dir}/non_sequence_data.tar.gz ]; then
@@ -131,7 +138,6 @@ task merge {
             tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
         fi
 
-        pwd
         ls -lh ~{output_dir}/run/ | grep "bed"
 
         # tarball just the BED files in the top level output directory
