@@ -707,13 +707,13 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         }
     }
     cerr << "Read clusters: " << to_string(n_clusters) << " N. reads: " << to_string(n_reads) << "\n";
-    cerr << "Read-hap weights after compression: \n";
-    for (i=0; i<n_reads; i++) {
-        read_id=node_ids.at(i);
-        cerr << "read=" << to_string(read_id) << " representative=" << to_string(representative.at(i)) << " weights=";
-        for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
-        cerr << "\n";
-    }
+//    cerr << "Read-hap weights after compression: \n";
+//    for (i=0; i<n_reads; i++) {
+//        read_id=node_ids.at(i);
+//        cerr << "read=" << to_string(read_id) << " representative=" << to_string(representative.at(i)) << " weights=";
+//        for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
+//        cerr << "\n";
+//    }
 
     // Updating read-hap weights
     for (i=0; i<n_reads; i++) {
