@@ -144,7 +144,8 @@ RUN wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.7.tar.gz
 RUN tar -xvzf v2.1.7.tar.gz
 WORKDIR mimalloc-2.1.7/
 WORKDIR out/release
-RUN cmake ../..
+# "toplevel" install needed for headers to be found in mimalloc
+RUN cmake ../.. -DMI_INSTALL_TOPLEVEL=ON
 RUN make -j 32
 RUN make install
 WORKDIR ${work_dir}
