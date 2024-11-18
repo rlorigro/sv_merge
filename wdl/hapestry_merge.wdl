@@ -134,6 +134,7 @@ task merge {
         if [ ! -s ~{output_dir}/non_sequence_data.tar.gz ]; then
             tar -cvzf ~{output_dir}/non_sequence_data.tar.gz --files-from /dev/null
         fi
+
         if [ ! -s ~{output_dir}/sequence_data.tar.gz ]; then
             tar -cvzf ~{output_dir}/sequence_data.tar.gz --files-from /dev/null
         fi
@@ -180,7 +181,6 @@ task merge {
     output {
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
-        File files_list = "files.txt"
         File beds_tarball = output_dir + "/beds.tar.gz"
         File? monitoring_log = "monitoring.log"
     }
