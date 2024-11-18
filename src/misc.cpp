@@ -1,5 +1,6 @@
 #include "misc.hpp"
 
+#include "mimalloc-new-delete.h"
 #include <fstream>
 #include <string>
 #include <iostream>

@@ -134,6 +134,16 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- mimalloc ---------------- #
+# ------------------------------------------ #
+##############################################
+
+find_package(mimalloc 2.1 REQUIRED)
+
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ------------------ WFA2 ------------------ #
 # ------------------------------------------ #
 ##############################################
@@ -593,6 +603,7 @@ foreach(FILENAME_PREFIX ${TESTS})
             divsufsort
             libhandlegraph
             libsdsl
+            mimalloc
     )
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
@@ -645,6 +656,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
             divsufsort
             libhandlegraph
             libsdsl
+            mimalloc
     )
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
