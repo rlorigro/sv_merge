@@ -136,19 +136,22 @@ RUN mv gurobi1101/ /opt/
 # This is where the license will be placed during runtime
 RUN mkdir /opt/gurobi
 
-RUN wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.7.tar.gz \
- && tar -xvzf v2.1.7.tar.gz \
- && cd mimalloc-2.1.7/ \
- && mkdir -p out/release \
- && cd out/release \
- && cmake ../.. \
- && make -j 32 \
- && make install
-
-# HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=849aea44e00bacb73b1dc26cfff98f0507a48d8f
+
+# MIMALLOC
+RUN wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.7.tar.gz
+RUN tar -xvzf v2.1.7.tar.gz
+WORKDIR mimalloc-2.1.7/
+WORKDIR out/release
+RUN cmake ../..
+RUN make -j 32
+RUN make install
+WORKDIR ${work_dir}
+
+# HAPESTRY
+# MIMALLOC BRANCH COMMIT
+ARG HAPESTRY_COMMIT=3a6542a8f5d9667044e1150aafccbb4097ce4787
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
