@@ -1154,6 +1154,11 @@ TerminationReason optimize_reads_with_d_plus_n(
     n = vars.cost_n.Evaluate(result_n_d.variable_values());
     d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
+cerr << "Optimal n=" << to_string(n) << " Optimal d=" << to_string(d) << '\n';
+cerr << "Objective=" << to_string(result_n_d.objective_value()) << '\n';
+cerr << "d_min=" << to_string(d_min) << '\n';
+cerr << "n_max=" << to_string(n_max) << '\n';
+
     if (integral) {
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }

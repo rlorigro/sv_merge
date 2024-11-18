@@ -311,6 +311,14 @@ void TransMap::for_each_sample(const function<void(const string& name, int64_t i
 }
 
 
+bool TransMap::contains_sample(const string& sample_name) const {
+    graph.for_each_neighbor_of_type(sample_node_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
+        if (neighbor.name==sample_name) return true;
+    });
+    return false;
+}
+
+
 void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(id, type, [&](int64_t id){
         f(id);
@@ -554,6 +562,76 @@ bool TransMap::are_edges_distinct() const {
 }
 
 
+void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const {
+    size_t set_size;
+    int64_t id, type, component_id;
+    string sample_name, s_name;
+    vector<int64_t> stack;
+    unordered_set<int64_t> set;
+    unordered_map<int64_t, int64_t> read_component, path_component;
+
+    // Computing connected components and building the corresponding transmaps
+    maps.clear();
+    component_id=-1;
+    for_each_read([&](const string& read_name, int64_t read_id) {
+        if (read_component.contains((read_id))) return;
+        read_component.emplace(read_id,++component_id);
+        TransMap new_map;
+        maps.push_back(new_map);
+        new_map.add_read(read_name);
+        sample_name=get_sample_of_read(read_name);
+        new_map.add_sample(sample_name);
+        new_map.add_edge(read_name,sample_name);
+        stack.clear(); stack.emplace_back(read_id); stack.emplace_back(0);
+        while (!stack.empty()) {
+            type=stack.at(stack.size()-1); stack.pop_back();
+            id=stack.at(stack.size()-1); stack.pop_back();
+            if (type==0) {
+                const string& r_name = graph.get_node(id).name;
+                for_each_path_of_read(id, [&](int64_t p_id) {
+                    if (path_component.contains(p_id)) return;
+                    path_component.emplace(p_id,component_id);
+                    stack.emplace_back(p_id); stack.emplace_back(1);
+                    const string& p_name = graph.get_node(p_id).name;
+                    new_map.add_path(p_name);
+                    new_map.add_edge(r_name,p_name);
+                });
+            }
+            else {
+                const string& p_name = graph.get_node(id).name;
+                for_each_read_of_path(id, [&](int64_t r_id) {
+                    if (read_component.contains(r_id)) return;
+                    read_component.emplace(r_id,component_id);
+                    stack.emplace_back(r_id); stack.emplace_back(0);
+                    const string& r_name = graph.get_node(r_id).name;
+                    new_map.add_read(r_name);
+                    new_map.add_edge(r_name,p_name);
+                    s_name=get_sample_of_read(r_name);
+                    if (!new_map.contains_sample(s_name)) {
+                        new_map.add_sample(s_name);
+                        new_map.add_edge(s_name,r_name);
+                    }
+                });
+            }
+        }
+    });
+    cerr << "Number of components: " << to_string(component_id+1) << '\n';
+
+    // Collecting samples assigned to 2 components
+    partitioned_samples.clear();
+    for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        set.clear();
+        for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
+            set.emplace(read_component.at(read_id));
+        });
+        set_size=set.size();
+        if (set_size>2) throw runtime_error("partition> ERROR: the reads of sample"+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
+        else if (set_size==2) partitioned_samples.emplace_back(sample_name);
+    });
+    cerr << "Number of samples assigned to 2 components: " << to_string(partitioned_samples.size()) << '\n';
+}
+
+
 /**
  * Currently implemented as a quadratic scan, probably too slow for large cohorts.
  */
@@ -589,7 +667,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         node_ids.emplace_back(read_id);
         i++;
         graph.for_each_neighbor_of_type(read_id,'P',[&](int64_t path_id) {
-            // For every read, its neighbors lie in the same global order.
+            // For each read, its neighbors lie in the same global order.
             auto [success, weight] = try_get_edge_weight(read_id, path_id);
             neighbors.at(i).emplace_back(path_id);
             weights.at(i).emplace_back(weight);
@@ -597,42 +675,7 @@ void TransMap::compress(float weight_quantum, uint64_t mode) {
         });
     });
 
-
-/*
-    cerr << "Read-hap weights before compression: \n";
-    for (i=0; i<n_reads; i++) {
-        read_id=node_ids.at(i);
-        cerr << "read=" << to_string(read_id) << " weights=";
-        for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
-        cerr << "\n";
-    }
-*/
-
-    cerr << "HG01175 before compression: \n";
-    for_each_sample([&](const string& sample_name, int64_t sample_id) {
-        if (sample_name!="HG01175") return;
-        for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
-            for_each_path_of_read(read_id, [&](int64_t path_id) {
-                auto [success, weight] = try_get_edge_weight(read_id, path_id);
-                string path_name = get_node(path_id).name;
-                cerr << sample_name << "," << read_name << "," << path_name << "," << to_string(weight) << '\n';
-            });
-        });
-    });
-
-
-
-
-
-
     // Clustering reads; adding sample-read edges; removing redundant reads; computing new read-hap weights.
-
-
-vector<int64_t> representative;
-representative.reserve(n_reads);
-for (i=0; i<n_reads; i++) representative.emplace_back();
-
-
     is_redundant.reserve(n_reads);
     for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
     if (mode==3) {
@@ -645,17 +688,9 @@ for (i=0; i<n_reads; i++) representative.emplace_back();
         n_clusters++;
         if (mode==3) cluster_size.at(i)=1;
         read_id=node_ids.at(i); length=neighbors.at(i).size();
-
-
-representative.at(i)=read_id;
-
-
         for (j=i+1; j<n_reads; j++) {
             if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
             is_redundant.at(j)=true;
-
-representative.at(j)=read_id;
-
             if (mode==3) cluster_size.at(i)++;
             for (k=0; k<length; k++) {
                 switch (mode) {
@@ -723,37 +758,6 @@ representative.at(j)=read_id;
     }
     neighbors.clear(); is_redundant.clear(); node_ids.clear();
     cerr << "Sample clusters: " << to_string(n_clusters) << " N. samples: " << to_string(n_samples) << "\n";
-
-
-
-
-    cerr << "Elements in transmap after compression: \n";
-    int64_t x = 0;
-    for_each_sample([&](string sample_name, int64_t sample_id) { x++; });
-    cerr << "Transmap samples: " << to_string(x) << "\n";
-    x=0;
-    for_each_read([&](string read_name, int64_t read_id) { x++; });
-    cerr << "Transmap reads: " << to_string(x) << "\n";
-    x=0;
-    for_each_path([&](string path_name, int64_t path_id) { x++; });
-    cerr << "Transmap paths: " << to_string(x) << "\n";
-
-
-
-
-    cerr << "HG01175 after compression: \n";
-    for_each_sample([&](const string& sample_name, int64_t sample_id) {
-        if (sample_name!="HG01175") return;
-        for_each_read_of_sample(sample_name, [&](const string& read_name, int64_t read_id) {
-            for_each_path_of_read(read_id, [&](int64_t path_id) {
-                auto [success, weight] = try_get_edge_weight(read_id, path_id);
-                string path_name = get_node(path_id).name;
-                cerr << sample_name << "," << read_name << "," << path_name << "," << to_string(weight) << '\n';
-            });
-        });
-    });
-
-
 }
 
 

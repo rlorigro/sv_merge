@@ -150,22 +150,29 @@ size_t solve_from_csv(
 
     // Construct a random seed that is based on the csv file
     auto h = std::hash<std::string>{}(csv.string());
-
-    if (compress_transmap) {
-        cerr << "All edges distinct before compression? " << to_string(transmap.are_edges_distinct()) << "\n";
-        cerr << "Compressing the transmap... ";
-        transmap.compress(0,2);
-        cerr << "done\n";
-        cerr << "All edges distinct after compression? " << to_string(transmap.are_edges_distinct()) << "\n";
-    }
     string tokens = csv.string();
     size_t q = tokens.find_last_of("/");
     size_t p = tokens.substr(0,q).find_last_of("/");
-    optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir/tokens.substr(p+1,q-p-1));
     if (compress_transmap) {
-        cerr << "Decompressing the transmap... ";
-        transmap.decompress_samples();
-        cerr << "done\n";
+        vector<TransMap> maps;
+        vector<string> partitioned_samples;
+        transmap.partition(maps,partitioned_samples);
+        for (i=0; i<maps.size(); i++) optimize(maps.at(i), solver_type, 1, use_ploidy_constraint, output_dir/tokens.substr(p+1,q-p-1)/('_'+to_string(i)));
+
+
+//        cerr << "All edges distinct before compression? " << to_string(transmap.are_edges_distinct()) << "\n";
+//        cerr << "Compressing the transmap... ";
+//        transmap.compress(0,2);
+//        cerr << "done\n";
+//        cerr << "All edges distinct after compression? " << to_string(transmap.are_edges_distinct()) << "\n";
+
+
+    }
+    else optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir/tokens.substr(p+1,q-p-1));
+    if (compress_transmap) {
+//        cerr << "Decompressing the transmap... ";
+//        transmap.decompress_samples();
+//        cerr << "done\n";
     }
 
     return i-1;

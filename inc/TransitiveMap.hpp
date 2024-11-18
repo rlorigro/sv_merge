@@ -42,7 +42,7 @@ class TransMap {
 
     /**
      * For every original sample, the sample it was compressed into. Used only by procedures `compress()` and
-     * `decomrpess()`.
+     * `decompress()`.
      */
     unordered_map<string,string> sample_to_compressed_sample;
 
@@ -90,6 +90,7 @@ public:
     void for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t id)>& f) const;
 
     void for_each_sample(const function<void(const string& name, int64_t id)>& f) const;
+    bool contains_sample(const string& sample_name) const;
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, const string& sequence)>& f) const;
     void for_each_read_id(const function<void(int64_t id)>& f) const;
@@ -135,6 +136,14 @@ public:
     void clear_non_samples();
 
     /// Compressing
+
+    /**
+     * Splits the read-path graph into its connected components.
+     *
+     * @param maps output array, with one transmap per connected component;
+     * @param partitioned_samples output array, lists the samples whose reads were assigned to 2 transmaps.
+     */
+    void partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const;
 
     /**
      * Two reads are considered identical iff they connect to the same haplotypes with the same weights (possibly
