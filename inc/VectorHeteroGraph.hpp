@@ -80,6 +80,7 @@ public:
     pair<bool,int64_t> try_name_to_id(const string& name) const;
 
     const T& get_node(const string& name) const;
+    vector<pair<int64_t,float>> get_edges(int64_t id) const;
     T& get_node(const string& name);
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
@@ -175,6 +176,11 @@ template<class T> int64_t HeteroGraph<T>::get_node_count() const{
 
 template<class T> const T& HeteroGraph<T>::get_node(int64_t id) const{
     return nodes.at(id);
+}
+
+
+template<class T> vector<pair<int64_t,float>> HeteroGraph<T>::get_edges(int64_t node_id) const {
+    return edges.at(node_id);
 }
 
 

@@ -312,9 +312,11 @@ void TransMap::for_each_sample(const function<void(const string& name, int64_t i
 
 
 bool TransMap::contains_sample(const string& sample_name) const {
-    graph.for_each_neighbor_of_type(sample_node_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
-        if (neighbor.name==sample_name) return true;
-    });
+    const auto result = graph.get_edges(graph.name_to_id(sample_node_name));
+    for (const auto& [id_b, w]: result) {
+        const auto& node = graph.get_node(id_b);
+        if (node.type=='S' && node.name==sample_name) return true;
+    }
     return false;
 }
 
