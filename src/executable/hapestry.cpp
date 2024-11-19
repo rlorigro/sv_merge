@@ -1380,8 +1380,15 @@ void concatenate_output_vcfs(
     path fail_regions_bed_path = output_dir / ("windows_" + fail_log_suffix + ".bed");
     ofstream fail_regions_file(fail_regions_bed_path);
 
+    path fail_regions_flanked_bed_path = output_dir / ("windows_" + fail_log_suffix + "_flanked.bed");
+    ofstream fail_regions_flanked_file(fail_regions_flanked_bed_path);
+
     if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
         throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
+    }
+
+    if (not (fail_regions_flanked_file.is_open() and fail_regions_flanked_file.good())) {
+        throw runtime_error("ERROR: could not write file: " + fail_regions_flanked_bed_path.string());
     }
 
     // Copy over the mutable parts of the header and then the main contents of the filtered VCF
@@ -1393,7 +1400,8 @@ void concatenate_output_vcfs(
         // Skip if the file does not exist
         if (not exists(sub_vcf)){
             // Log that this region did not contain any solution
-            fail_regions_file << region.to_bed() << '\n';
+            fail_regions_file << region.to_unflanked_string('\t',flank_length) << '\n';
+            fail_regions_flanked_file << region.to_bed() << '\n';
             continue;
         }
 
