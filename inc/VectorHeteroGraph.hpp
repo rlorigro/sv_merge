@@ -85,6 +85,7 @@ public:
     const T& get_node(int64_t id) const;
     T& get_node(int64_t id);
     int64_t get_node_count() const;
+    int64_t get_edge_count() const;
     int64_t get_edge_count(int64_t id) const;
     pair<bool,float> try_get_edge_weight(int64_t id_a, int64_t id_b) const;
 
@@ -171,6 +172,11 @@ template<class T> T& HeteroGraph<T>::get_node(int64_t id) {
 
 template<class T> int64_t HeteroGraph<T>::get_node_count() const{
     return nodes.size();
+}
+
+
+template<class T> int64_t HeteroGraph<T>::get_edge_count() const {
+    return edges.size();
 }
 
 

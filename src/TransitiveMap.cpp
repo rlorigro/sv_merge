@@ -559,16 +559,22 @@ int64_t TransMap::get_n_paths() const {
 }
 
 
+int64_t TransMap::get_n_edges() const {
+    return graph.get_edge_count();
+}
+
+
 bool TransMap::are_edges_distinct() const {
     return graph.are_edges_distinct();
 }
 
 
 void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const {
+    size_t i;
     size_t set_size;
     int64_t id, type, component_id;
     string sample_name, s_name;
-    vector<int64_t> stack;
+    vector<int64_t> stack, component_size;
     unordered_set<int64_t> set;
     unordered_map<int64_t, int64_t> read_component, path_component;
 
@@ -616,8 +622,14 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
                 });
             }
         }
+        component_size.emplace_back(new_map.get_n_reads());
+        component_size.emplace_back(new_map.get_n_paths());
+        component_size.emplace_back(new_map.get_n_samples());
+        component_size.emplace_back(new_map.get_n_edges());
     });
     cerr << "Number of components: " << to_string(component_id+1) << '\n';
+    cerr << "Component \t n_reads \t n_paths \t n_samples \t n_edges\n";
+    for (i=0; i<component_size.size(); i+=4) cerr << to_string(i) << '\t' << to_string(component_size.at(i)) << '\t' << to_string(component_size.at(i+1)) << '\t' << to_string(component_size.at(i+2)) << '\t' << to_string(component_size.at(i+3)) << '\n';
 
     // Collecting samples assigned to 2 components
     partitioned_samples.clear();

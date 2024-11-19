@@ -127,6 +127,7 @@ public:
     int64_t get_n_reads() const;
     int64_t get_n_samples() const;
     int64_t get_n_paths() const;
+    int64_t get_n_edges() const;
 
 
     /// Writing
@@ -140,7 +141,8 @@ public:
     /**
      * Splits the read-path graph into its connected components.
      *
-     * @param maps output array, with one transmap per connected component;
+     * @param maps output array, with one transmap per connected component; every transmap contains the corresponding
+     * samples;
      * @param partitioned_samples output array, lists the samples whose reads were assigned to 2 transmaps.
      */
     void partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const;
