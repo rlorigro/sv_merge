@@ -629,7 +629,7 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
     });
     cerr << "Number of components: " << to_string(component_id+1) << '\n';
     cerr << "Component \t n_reads \t n_paths \t n_samples \t n_edges\n";
-    for (i=0; i<component_size.size(); i+=4) cerr << to_string(i) << '\t' << to_string(component_size.at(i)) << '\t' << to_string(component_size.at(i+1)) << '\t' << to_string(component_size.at(i+2)) << '\t' << to_string(component_size.at(i+3)) << '\n';
+    for (i=0; i<component_size.size(); i+=4) cerr << to_string(i/4) << '\t' << to_string(component_size.at(i)) << '\t' << to_string(component_size.at(i+1)) << '\t' << to_string(component_size.at(i+2)) << '\t' << to_string(component_size.at(i+3)) << '\n';
 
     // Collecting samples assigned to 2 components
     partitioned_samples.clear();
