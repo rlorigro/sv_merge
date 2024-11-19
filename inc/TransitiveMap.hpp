@@ -148,6 +148,16 @@ public:
     void partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const;
 
     /**
+     * @return a transmap with the following connected components (id, n_reads, n_paths, n_samples, n_edges):
+     * 0, 2, 1, 2, 2
+     * 1, 2, 1, 2, 2
+     * 2, 3, 1, 2, 3
+     * 3, 2, 1, 1, 2
+     * One sample is partitioned into 3 components.
+     */
+    static TransMap partition_get_test_transmap();
+
+    /**
      * Two reads are considered identical iff they connect to the same haplotypes with the same weights (possibly
      * after quantization). The procedure collapses all identical reads onto a single node, which becomes connected to
      * all the samples of the reads in its equivalence class (breaking the assumption that a read is connected to just

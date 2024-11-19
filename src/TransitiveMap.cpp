@@ -639,10 +639,38 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
             set.emplace(read_component.at(read_id));
         });
         set_size=set.size();
-        if (set_size>2) throw runtime_error("partition> ERROR: the reads of sample"+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
+        if (set_size>2) throw runtime_error("ERROR: the reads of sample"+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
         else if (set_size==2) partitioned_samples.emplace_back(sample_name);
     });
     cerr << "Number of samples assigned to 2 components: " << to_string(partitioned_samples.size()) << '\n';
+}
+
+
+TransMap TransMap::partition_get_test_transmap() {
+    TransMap out;
+    out.add_sample("sample1");
+    out.add_read("s1r1"); out.add_read("s1r2"); out.add_read("s1r3");
+    out.add_edge("sample1","s1r1"); out.add_edge("sample1","s1r2"); out.add_edge("sample1","s1r3");
+    out.add_sample("sample2");
+    out.add_read("s2r1"); out.add_read("s2r2"); out.add_read("s2r3");
+    out.add_edge("sample2","s2r1"); out.add_edge("sample2","s2r2"); out.add_edge("sample2","s2r3");
+    out.add_sample("sample3");
+    out.add_read("s3r1"); out.add_read("s3r2"); out.add_read("s3r3");
+    out.add_edge("sample3","s3r1"); out.add_edge("sample3","s3r2"); out.add_edge("sample3","s3r3");
+
+    out.add_path("path1"); out.add_path("path2"); out.add_path("path3");
+    out.add_edge("s1r1","path1");
+    out.add_edge("s1r2","path2");
+    out.add_edge("s1r3","path3");
+
+    out.add_edge("s2r1","path2");
+    out.add_edge("s2r2","path3");
+    out.add_edge("s2r3","path3");
+
+    out.add_edge("s3r1","path1");
+    out.add_edge("s3r2","path4");
+    out.add_edge("s3r3","path4");
+    return out;
 }
 
 
