@@ -133,7 +133,7 @@ size_t solve_from_csv(
 
 
 
-transmap=Transmap::partition_get_test_transmap();
+transmap=TransMap::partition_get_test_transmap();
 
 
 

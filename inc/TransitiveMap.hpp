@@ -149,10 +149,10 @@ public:
 
     /**
      * @return a transmap with the following connected components (id, n_reads, n_paths, n_samples, n_edges):
-     * 0, 2, 1, 2, 2
-     * 1, 2, 1, 2, 2
-     * 2, 3, 1, 2, 3
-     * 3, 2, 1, 1, 2
+     * 0, 2, 1, 2, 9
+     * 1, 2, 1, 2, 9
+     * 2, 3, 1, 2, 12
+     * 3, 2, 1, 1, 8
      * One sample is partitioned into 3 components.
      */
     static TransMap partition_get_test_transmap();

@@ -615,10 +615,8 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
                     new_map.add_read(r_name);
                     new_map.add_edge(r_name,p_name);
                     s_name=get_sample_of_read(r_name);
-                    if (!new_map.contains_sample(s_name)) {
-                        new_map.add_sample(s_name);
-                        new_map.add_edge(s_name,r_name);
-                    }
+                    if (!new_map.contains_sample(s_name)) new_map.add_sample(s_name);
+                    new_map.add_edge(s_name,r_name);
                 });
             }
         }
@@ -639,7 +637,7 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
             set.emplace(read_component.at(read_id));
         });
         set_size=set.size();
-        if (set_size>2) throw runtime_error("ERROR: the reads of sample"+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
+        if (set_size>2) throw runtime_error("ERROR: the reads of sample "+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
         else if (set_size==2) partitioned_samples.emplace_back(sample_name);
     });
     cerr << "Number of samples assigned to 2 components: " << to_string(partitioned_samples.size()) << '\n';
@@ -658,7 +656,7 @@ TransMap TransMap::partition_get_test_transmap() {
     out.add_read("s3r1"); out.add_read("s3r2"); out.add_read("s3r3");
     out.add_edge("sample3","s3r1"); out.add_edge("sample3","s3r2"); out.add_edge("sample3","s3r3");
 
-    out.add_path("path1"); out.add_path("path2"); out.add_path("path3");
+    out.add_path("path1"); out.add_path("path2"); out.add_path("path3"); out.add_path("path3");
     out.add_edge("s1r1","path1");
     out.add_edge("s1r2","path2");
     out.add_edge("s1r3","path3");

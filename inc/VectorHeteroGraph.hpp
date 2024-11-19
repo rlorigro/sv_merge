@@ -176,7 +176,9 @@ template<class T> int64_t HeteroGraph<T>::get_node_count() const{
 
 
 template<class T> int64_t HeteroGraph<T>::get_edge_count() const {
-    return edges.size();
+    int64_t out = 0;
+    for (const auto& [id_a,item]: edges) { out+=(int64_t)item.size(); }
+    return out/2;
 }
 
 
