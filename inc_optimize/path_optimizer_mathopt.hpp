@@ -50,7 +50,7 @@ public:
         bool rescale_weights = false;
         bool use_quadratic_objective = false;
         bool use_golden_search = false;
-        bool use_sum_constraints = false;
+        bool use_sum_constraints = true;
         bool samplewise = false;
         bool prune_with_d_min = false;
         bool use_ploidy_constraint = true;

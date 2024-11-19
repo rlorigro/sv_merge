@@ -1753,7 +1753,7 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--use_gurobi", use_gurobi, "Invoke this to use Gurobi instead of SCIP. License must be in conventional location.");
 
-    app.add_flag("--use_sum_constraints", optimizer_config.use_sum_constraints, "Invoke this to use sum constraints instead of independent implications");
+    app.add_flag("!--no_sum_constraints", optimizer_config.use_sum_constraints, "Invoke this to use independent implications instead of sum constraints for at-most-one indicators");
 
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
