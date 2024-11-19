@@ -584,8 +584,8 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
     for_each_read([&](const string& read_name, int64_t read_id) {
         if (read_component.contains((read_id))) return;
         read_component.emplace(read_id,++component_id);
-        TransMap new_map;
-        maps.push_back(new_map);
+        maps.emplace_back();
+        TransMap& new_map = maps.back();
         new_map.add_read(read_name);
         sample_name=get_sample_of_read(read_name);
         new_map.add_sample(sample_name);
