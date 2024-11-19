@@ -132,7 +132,12 @@ void solve_from_csv(path csv, const OptimizerConfig& config, size_t max_reads_pe
         throw runtime_error("Directory already exists: " + output_dir.string());
     }
 
+    Timer t;
+
     optimize(transmap, config, output_dir);
+
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+    cerr << t << "Done" << '\n';
 }
 
 
@@ -151,6 +156,12 @@ int main(int argc, char** argv){
     path vcf;
 
     OptimizerConfig optimizer_config;
+    optimizer_config.timeout_sec = 10*60;
+
+    app.add_option(
+            "--solver_timeout",
+            optimizer_config.timeout_sec,
+            "Abort the optimizer after this many seconds, use 0 for no limit");
 
     app.add_option("--d_weight", optimizer_config.d_weight, "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term");
 
@@ -169,6 +180,8 @@ int main(int argc, char** argv){
     app.add_flag("!--no_ploidy", optimizer_config.use_ploidy_constraint, "If invoked, do not enforce a ploidy <= 2 constraint per sample (w.r.t. paths).");
 
     app.add_flag("-g,--use_golden_search", optimizer_config.use_golden_search, "If invoked, use explicit n-centric optimization with golden search to find joint minimum instead of encoding joint objective in the solver.");
+
+    app.add_flag("--use_sum_constraints", optimizer_config.use_sum_constraints, "Invoke this to use sum constraints instead of independent implications");
 
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
 
