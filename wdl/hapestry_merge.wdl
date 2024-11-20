@@ -40,6 +40,7 @@ task merge {
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
+        Boolean skip_nonessential_logs = false
         Boolean upload_debug_data = false
 
         String docker = "fcunial/hapestry:merge"
@@ -107,6 +108,7 @@ task merge {
         ~{if quadratic_objective then "--quadratic_objective" else ""} \
         ~{if rescale_weights then "--rescale_weights" else ""} \
         ~{if prune_with_d_min then "--prune_with_d_min" else ""} \
+        ~{if skip_nonessential_logs then "--skip_nonessential_logs" else ""} \
         ~{if defined(gurobi_license) then "--use_gurobi" else ""}
 
         # Ensure write buffers are flushed to disk
@@ -164,6 +166,7 @@ task merge {
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         prune_with_d_min: "Use initial solution of d_min to prune haps before starting final joint solution"
+        skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         tandems_bed: "BED file of tandem repeats"
         windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
@@ -213,6 +216,7 @@ workflow hapestry_merge {
         Boolean quadratic_objective = false
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
+        Boolean skip_nonessential_logs = false
 
         String docker
         File? monitoring_script
@@ -239,6 +243,7 @@ workflow hapestry_merge {
         quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         prune_with_d_min: "Use initial solution of d_min to prune unused haplotypes before starting final joint model"
+        skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         tandems_bed: "BED file of tandem repeats"
         windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
@@ -267,6 +272,7 @@ workflow hapestry_merge {
             quadratic_objective = quadratic_objective,
             rescale_weights = rescale_weights,
             prune_with_d_min = prune_with_d_min,
+            skip_nonessential_logs = skip_nonessential_logs,
             docker = docker,
             monitoring_script = monitoring_script,
             runtime_attributes = merge_runtime_attributes

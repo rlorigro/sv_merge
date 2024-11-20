@@ -295,19 +295,23 @@ void parse_read_model_solution(
     const VariableMap<double>& result_var_map,
     const PathVariables& vars,
     TransMap& transmap,
-    path output_dir)
+    path output_dir
+    )
 {
+    ofstream file;
 
-    // Open a file
-    path out_path = output_dir/"solution.csv";
-    ofstream file(out_path);
+    if (not output_dir.empty()){
+        // Open a file
+        path out_path = output_dir/"solution.csv";
+        file.open(out_path);
 
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        if (not file.is_open() or not file.good()){
+            throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        }
+
+        // Write header
+        file << "sample,read,path" << '\n';
     }
-
-    // Write header
-    file << "sample,read,path" << '\n';
 
     unordered_set <pair <int64_t, int64_t> > to_be_removed;
 
@@ -321,7 +325,7 @@ void parse_read_model_solution(
                     if (var.is_integer()){
                         auto is_assigned = bool(int64_t(round(result_var_map.at(var))));
 
-                        if (is_assigned){
+                        if (is_assigned and not output_dir.empty()){
                             file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
                         }
                         else{
@@ -1017,7 +1021,8 @@ TerminationReason optimize_reads_with_d_and_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint
+        bool use_ploidy_constraint,
+        bool write_solution
         ){
 
     TerminationReason termination_reason;
@@ -1113,6 +1118,10 @@ TerminationReason optimize_reads_with_d_and_n(
     d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     if (integral) {
+        if (not write_solution) {
+            output_dir.clear();
+        }
+
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }
     else{
@@ -1228,7 +1237,8 @@ TerminationReason optimize_reads_with_d_plus_n(
         path output_dir,
         const OptimizerConfig& config,
         double d_min,
-        double n_max
+        double n_max,
+        bool write_solution
         ){
 
     Model model;
@@ -1333,6 +1343,10 @@ TerminationReason optimize_reads_with_d_plus_n(
     double d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     if (integral) {
+        if (not write_solution) {
+            output_dir.clear();
+        }
+
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }
     else{
@@ -1429,7 +1443,7 @@ TerminationReason optimize_read_feasibility(
 }
 
 
-TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir){
+TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
 
     TerminationReason termination_reason;
 
@@ -1465,7 +1479,7 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
 }
 
 
-TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir) {
+TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution) {
 
     vector <pair<int64_t,int64_t> > edges_to_remove;
     TerminationReason termination_reason = TerminationReason::kOptimal;
@@ -1474,7 +1488,7 @@ TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig&
         TransMap submap;
         transmap.extract_sample_as_transmap(sample_name, submap);
 
-        termination_reason = optimize(transmap, config, subdir);
+        termination_reason = optimize(transmap, config, subdir, write_solution);
 
         // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
 

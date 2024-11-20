@@ -56,6 +56,20 @@ void write_time_log(path output_dir, const string& name, const string& time_csv,
 }
 
 
+/**
+ * Append a log file and write the header if it hasn't been written yet
+ * @param output_dir
+ * @param name
+ * @param timer timer which has been running for the period of the task to be logged (will be polled immediately)
+ * @param success whether or not the task timed out
+ */
+void write_time_log(path output_dir, const string& name, const Timer& timer, bool success, const string& notes){
+    string time_csv = timer.to_csv();
+
+    write_time_log(output_dir, name, time_csv, success, notes);
+}
+
+
 void run_command(string& command, string& result, bool trim_result){
     result.clear();
 

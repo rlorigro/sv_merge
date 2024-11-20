@@ -126,7 +126,8 @@ TerminationReason optimize_reads_with_d_and_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint = true
+        bool use_ploidy_constraint = true,
+        bool write_solution = false
         );
 
 TerminationReason optimize_reads_with_d_plus_n(
@@ -135,7 +136,8 @@ TerminationReason optimize_reads_with_d_plus_n(
         path output_dir,
         const OptimizerConfig& config,
         double d_min = -1,
-        double n_max = -1
+        double n_max = -1,
+        bool write_solution = false
         );
 
 TerminationReason prune_paths_with_d_min(
@@ -165,9 +167,9 @@ TerminationReason optimize_read_feasibility(
         const SolverType& solver_type
 );
 
-TerminationReason optimize(TransMap& transmap,const OptimizerConfig& config,path subdir);
+TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
-TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir);
+TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
 void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max);
 
