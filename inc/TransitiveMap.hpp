@@ -139,7 +139,8 @@ public:
     /// Compressing
 
     /**
-     * Splits the read-path graph into its connected components.
+     * Splits the read-path graph into its connected components (which are at least as many as the connected components
+     * of the sample-path graph).
      *
      * @param maps output array, with one transmap per connected component; every transmap contains the corresponding
      * samples;

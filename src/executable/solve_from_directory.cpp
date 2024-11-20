@@ -130,14 +130,6 @@ size_t solve_from_csv(
         i++;
     });
 
-
-
-
-transmap=TransMap::partition_get_test_transmap();
-
-
-
-
     vector <pair <int64_t, int64_t> > edges_to_remove;
 
     if (max_reads_per_sample != numeric_limits<size_t>::max()){

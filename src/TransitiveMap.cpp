@@ -602,7 +602,7 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
                     stack.emplace_back(p_id); stack.emplace_back(1);
                     const string& p_name = graph.get_node(p_id).name;
                     new_map.add_path(p_name);
-                    new_map.add_edge(r_name,p_name);
+                    new_map.add_edge(r_name,p_name,try_get_edge_weight(id,p_id).second);
                 });
             }
             else {
@@ -613,7 +613,7 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
                     stack.emplace_back(r_id); stack.emplace_back(0);
                     const string& r_name = graph.get_node(r_id).name;
                     new_map.add_read(r_name);
-                    new_map.add_edge(r_name,p_name);
+                    new_map.add_edge(r_name,p_name,try_get_edge_weight(id,r_id).second);
                     s_name=get_sample_of_read(r_name);
                     if (!new_map.contains_sample(s_name)) new_map.add_sample(s_name);
                     new_map.add_edge(s_name,r_name);
@@ -656,7 +656,7 @@ TransMap TransMap::partition_get_test_transmap() {
     out.add_read("s3r1"); out.add_read("s3r2"); out.add_read("s3r3");
     out.add_edge("sample3","s3r1"); out.add_edge("sample3","s3r2"); out.add_edge("sample3","s3r3");
 
-    out.add_path("path1"); out.add_path("path2"); out.add_path("path3"); out.add_path("path3");
+    out.add_path("path1"); out.add_path("path2"); out.add_path("path3"); out.add_path("path4");
     out.add_edge("s1r1","path1");
     out.add_edge("s1r2","path2");
     out.add_edge("s1r3","path3");
