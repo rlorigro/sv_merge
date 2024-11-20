@@ -41,10 +41,11 @@ class TransMap {
     string variant_node_name;
 
     /**
-     * For every original sample, the sample it was compressed into. Used only by procedures `compress()` and
-     * `decompress()`.
+     * Data structures used by compression/decompression.
      */
-    unordered_map<string,string> sample_to_compressed_sample;
+    unordered_map<int64_t, int64_t> node_to_cluster;
+    unordered_map<string,string> sample_to_identical_sample;
+    unordered_map<string, pair<string,vector<int64_t>>> sample_to_container_sample;
 
 public:
     TransMap();
@@ -159,26 +160,31 @@ public:
     static TransMap partition_get_test_transmap();
 
     /**
-     * Two reads are considered identical iff they connect to the same haplotypes with the same weights (possibly
-     * after quantization). The procedure collapses all identical reads onto a single node, which becomes connected to
-     * all the samples of the reads in its equivalence class (breaking the assumption that a read is connected to just
-     * one sample).
-     *
-     * Two samples are considered identical iff their reads belong to the same set of read clusters (regardless of
-     * how many reads in each sample belong to each cluster). Only one sample per equivalence class is kept, and the
-     * mapping is stored in object variable `sample_to_compressed_sample`.
-     *
-     * Remark: the procedure assumes that haplotypes are already distinct from previous steps, and it does not try to
-     * compress them.
-     *
-     * Remark: the procedure sets object variables `n_reads, n_read_clusters, n_samples, n_sample_clusters`.
+     * Two reads are considered identical iff they belong to the same sample and they connect to the same haplotypes
+     * with the same weights (possibly after quantization). The procedure collapses all identical reads onto a single
+     * node.
      *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
      * exactly;
      * @param mode the weight of every read-hap edge is set to the max (mode=0), min (mode=1), sum (mode=2) or avg
-     * (mode=3) of all the edges that were collapsed onto it.
+     * (mode=3) of all the edges that were collapsed onto it;
+     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
+     * order that is the same for every node.
      */
-    void compress(float weight_quantum, uint64_t mode);
+    void compress_reads(float weight_quantum, uint64_t mode, bool sort_edges = true, bool verbose = false);
+
+    /**
+     * Two samples are considered identical iff there is a bijection between equivalent reads: only one sample per
+     * equivalence class is kept. A sample is contained in another sample iff there is an injection between equivalent
+     * reads: every contained sample is discarded.
+     *
+     * Remark: the procedure sets object variables `sample_to_identical_sample, sample_to_container_sample,
+     * node_to_cluster`.
+     *
+     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
+     * order that is the same for every node.
+     */
+    void compress_samples(float weight_quantum, bool sort_edges = true);
 
     /**
      * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample`. The rest of
