@@ -158,7 +158,7 @@ size_t solve_from_csv(
         vector<string> partitioned_samples;
         transmap.partition(maps,partitioned_samples);
         for (i=0; i<maps.size(); i++) {
-            maps.at(i).compress_reads(0,0,true,true);
+            maps.at(i).compress_reads(0,0,true,false);
             maps.at(i).compress_samples(0,true);
             optimize(maps.at(i), solver_type, 1, use_ploidy_constraint, output_dir/(tokens.substr(p+1,q-p-1)+'_'+to_string(i)));
         }

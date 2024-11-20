@@ -756,7 +756,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
         }
     }
     compared_weights.clear();
-    cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) << '\n';
+    cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) <<  " (after compressing reads)\n";
     if (verbose) {
         cerr << "Read-hap weights after compression: \n";
         for (i = 0; i < n_reads; i++) {
@@ -860,7 +860,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         }
         if (sample_to_identical_sample.contains(sample_name)) { i=next_i; continue; }
         for (j=0; j<n_clusters; j++) cluster_size.at(j)=0;
-        for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j))++;
+        for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j)-1)++;
         j=next_i;
         while (j<n_reads) {
             s_name=sample_names.at(j);
@@ -871,7 +871,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             }
             if (sample_to_identical_sample.contains(s_name)) { j=next_j; continue; }
             for (k=0; k<n_clusters; k++) cluster_size_prime.at(k)=0;
-            for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k))++;
+            for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             if (cluster_size_prime==cluster_size) {
                 s_id=get_id(s_name);
                 for_each_read_of_sample(s_id, [&](int64_t read_id) { remove_node(read_id); });
@@ -897,7 +897,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         }
         if (sample_to_container_sample.contains(sample_name)) { i=next_i; continue; }
         for (j=0; j<n_clusters; j++) cluster_size.at(j)=0;
-        for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j))++;
+        for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j)-1)++;
         j=next_i;
         while (j<n_reads) {
             s_name=sample_names.at(j);
@@ -908,7 +908,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             }
             if (sample_to_container_sample.contains(s_name)) { j=next_j; continue; }
             for (k=0; k<n_clusters; k++) cluster_size_prime.at(k)=0;
-            for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k))++;
+            for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             contained=true;
             for (k=0; k<n_clusters; k++) {
                 if (cluster_size.at(k)>cluster_size_prime.at(k)) { contained=false; break; }
