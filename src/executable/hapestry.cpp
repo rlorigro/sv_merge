@@ -319,6 +319,8 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         }
     }
 
+    unordered_map<string, unordered_set<int64_t> > deduplicated_reads;
+
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector <int64_t> reads_to_be_removed;
     vector<interval_t> empty_intervals;
@@ -326,8 +328,14 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     string cigar;
     string read_sequence;
 
-    transmap.for_each_read([&](const string& read_name, int64_t id){
+    transmap.for_each_read([&](const string& read_name, int64_t id) {
         transmap.get_sequence(id, read_sequence);
+
+        deduplicated_reads[read_sequence].insert(id);
+    });
+
+
+    for (const auto& [read_sequence, read_ids]: deduplicated_reads){
         bool has_alignment = false;
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
@@ -343,33 +351,42 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
                 auto int_score = int64_t(round(non_match_portion*1000)) + 1;
 
-                // Avoid adding while iterating
-                edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
-                has_alignment = true;
+                // For all reads that had this identical sequence, update the transmap edges
+                for (auto id: read_ids) {
+                    // Avoid adding while iterating
+                    edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+                    has_alignment = true;
+                }
             }
 
             // Write out the full alignments for debugging
             if (HAPESTRY_DEBUG) {
-                string sample_name = transmap.get_sample_of_read(read_name);
-                write_alignment_debug_info(
-                        variant_graph,
-                        sample_name,
-                        read_name,
-                        path_name,
-                        path_sequence,
-                        read_sequence,
-                        cigar,
-                        path_evaluation_window,
-                        non_match_portion,
-                        output_dir
-                    );
+                for (auto id: read_ids) {
+                    auto read_name = transmap.get_node(id).name;
+
+                    string sample_name = transmap.get_sample_of_read(read_name);
+                    write_alignment_debug_info(
+                            variant_graph,
+                            sample_name,
+                            read_name,
+                            path_name,
+                            path_sequence,
+                            read_sequence,
+                            cigar,
+                            path_evaluation_window,
+                            non_match_portion,
+                            output_dir
+                        );
+                }
             }
         }
 
         if (not has_alignment) {
-            reads_to_be_removed.emplace_back(id);;
+            for (auto id: read_ids){
+                reads_to_be_removed.emplace_back(id);;
+            }
         }
-    });
+    }
 
     for (auto [a,b,score]: edges_to_add){
         transmap.add_edge(a,b,score);

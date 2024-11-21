@@ -28,47 +28,21 @@ def aggregate_logs(parent_dirs, times_by_name):
 
 
 def main():
-    # with_csvs = [
-    #     "/home/ryan/data/test_hapestry/run/1074_skip_logs/with_csv"
-    # ]
-    #
-    # skip_csvs = [
-    #     "/home/ryan/data/test_hapestry/run/1074_skip_logs/skip_csv"
-    # ]
+    test_1074= [
+        "/home/ryan/data/test_hapestry/run/1074_skip_logs/output"
+    ]
 
-    test_local = [
+    test_local= [
         "/home/ryan/data/test_hapestry/run/test_logs"
     ]
 
     times = defaultdict(lambda: defaultdict(list))
 
+    # aggregate_logs(parent_dirs=test_1074, times_by_name=times["test_1074"])
     aggregate_logs(parent_dirs=test_local, times_by_name=times["test_local"])
-    # aggregate_logs(parent_dirs=skip_csvs, times_by_name=times["skip_csvs"])
 
     fig = pyplot.figure()
     ax = pyplot.axes()
-
-
-    # colors = {
-    #     "graphaligner": "#5F18A0",
-    #     "variant_graph": "#AF0F87",
-    #     "rescale_weights": "#19529C",
-    #     "write_to_hap_vcf": "#0D9B77",
-    #     "write_to_vcf": "#4FB69C",
-    #     "align_reads_to_paths": "#3222A5",
-    #     "feasibility": "#EDBF15",
-    #     "n_min": "#698C00",
-    #     "d_given_n": "#88B107",
-    #     "d_given_n_min": "#88B107",
-    #     "optimize_d": "#AFE213",
-    #     "d_min": "#AFE213",
-    #     "optimize_n_given_d": "#C2EB42",
-    #     "optimize_n_given_d_min": "#D3F56B",
-    #     "optimize_d_plus_n": "#C2EB42",
-    #     "optimize_n_d_quadratic": "#D3F56B",
-    #     "optimize_d_initial": "red",
-    #     "window_total": "gray"
-    # }
 
     names = [
         # "variant_graph",
@@ -93,7 +67,7 @@ def main():
 
     observed = set()
 
-    colormap = matplotlib.colormaps["hsv"]
+    colormap = matplotlib.colormaps["nipy_spectral"]
 
     shuffled_indexes = list(range(0,len(names)))
     # random.shuffle(shuffled_indexes)
@@ -107,9 +81,13 @@ def main():
             y = float(y/60)
             x = s + 0.5
 
-            l = [name if name != "confident" else "graphaligner"]
+            l = str(n) + "_" + name
 
-            color_index = float(shuffled_indexes[n])/float(len(names))
+            color_index = (float(shuffled_indexes[n]) + 1) /float(len(names))
+
+            print(n, len(names) , color_index)
+
+            # color_index = float(n)/float(len(names)-1)
             color = colormap(color_index)
 
             b = bottom
@@ -127,19 +105,23 @@ def main():
             else:
                 p = ax.bar(x, y, w, bottom=b, color=color, zorder=z)
 
-            x_ticks.append(x)
-            x_labels.append(solver)
-
             if "total" not in name:
+                x_t = (float(x) - w/2.0) + (color_index * w/1.0)
+                y_t = (b + b + y) / 2
+                ax.text(x_t, y_t, "-" + str(n) + "-",va='center', ha='center')
+
+                x_ticks.append(x)
+                x_labels.append(solver)
+
                 bottom += y
 
     pyplot.xticks(x_ticks, x_labels, rotation=45, ha="right")
-    pyplot.tight_layout()
 
     ax.set_xlabel("Solver")
     ax.set_ylabel("Time (m)")
 
-    pyplot.legend()
+    pyplot.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    pyplot.tight_layout()
 
     pyplot.show()
     pyplot.close()
