@@ -1396,13 +1396,8 @@ TerminationReason optimize_read_feasibility(
     SolveArguments args;
     ReadVariables vars;
 
-    int64_t r_in = 0;
+    int64_t r_in = int64_t(transmap.get_read_count());
     int64_t r_out = 0;
-
-    // Count the reads before optimizing feasibility
-    transmap.for_each_read([&](const string& name, int64_t id){
-      r_in++;
-    });
 
     args.parameters.threads = n_threads;
 
@@ -1461,9 +1456,7 @@ TerminationReason optimize_read_feasibility(
     }
 
     // Count the remaining reads
-    transmap.for_each_read([&](const string& name, int64_t id){
-      r_out++;
-    });
+    r_out = int64_t(transmap.get_read_count());
 
     // Append log line to output file which contains the result of each optimization
     string notes = termination_reason_to_string(result.termination.reason) + ";n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=" + to_string(r_out);
