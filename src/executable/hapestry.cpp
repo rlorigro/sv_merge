@@ -1002,6 +1002,9 @@ void merge_thread_fn(
 
     // Thread jobs are regions
     while (i < regions.size()) {
+        t.reset();
+        t_total.reset();
+
         const auto &region = regions.at(i);
         auto& transmap = region_transmaps.at(region);
 
@@ -1093,8 +1096,9 @@ void merge_thread_fn(
             }
         }
 
-        // Align all reads to all candidate paths and update transmap
         t.reset();
+
+        // Align all reads to all candidate paths and update transmap
         align_reads_vs_paths(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
         write_time_log(subdir, "align_reads_to_paths", t, true);
@@ -1121,13 +1125,13 @@ void merge_thread_fn(
                     unordered_map<string,string> hapmap;
                     transmap.detangle_sample_paths(hapmap);
 
-                    termination_reason = optimize(transmap, opt_config, subdir);
+                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
 
                     // Reverse the detangling step
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, opt_config, subdir);
+                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
                 }
 
                 // Handle timeout case (do nothing)
@@ -1140,8 +1144,6 @@ void merge_thread_fn(
                 }
                 // Normal operation, solver succeeded
                 else {
-                    t.reset();
-
                     vector<int64_t> unused_paths;
 
                     transmap.for_each_path([&](const string& path_name, int64_t path_id) {
@@ -1182,13 +1184,10 @@ void merge_thread_fn(
                     path output_path = subdir / "solution.vcf";
 
                     write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
-                    write_time_log(subdir, "write_to_vcf", t, true);
 
                     output_path = subdir / "solution_haps.vcf";
 
                     if (hapestry_config.write_hap_vcf) {
-                        t.reset();
-
                         write_solution_as_hap_vcf(
                             variant_graph,
                             transmap,
@@ -1198,8 +1197,6 @@ void merge_thread_fn(
                             region,
                             flank_length
                         );
-
-                        write_time_log(subdir, "write_to_hap_vcf", t, true);
                     }
                 }
             }

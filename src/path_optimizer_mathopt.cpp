@@ -980,7 +980,7 @@ void optimize_reads_with_d_and_n_using_golden_search(
 
 void write_optimization_log(
     const TerminationReason& termination_reason,
-    const std::chrono::milliseconds& duration,
+    const milliseconds& duration,
     const TransMap& transmap,
     const string& name,
     path output_dir
@@ -1140,6 +1140,7 @@ TerminationReason prune_paths_with_d_min(
         double& d_min_result,
         double& n_max_result
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
@@ -1163,6 +1164,8 @@ TerminationReason prune_paths_with_d_min(
 
     // Construct the model using the Transmap
     construct_joint_n_d_model(transmap, model, vars, integral, config.use_ploidy_constraint);
+    write_time_log(output_dir, "optimize_d_prune_construct", t, true);
+    t.reset();
 
     // First find one extreme of the pareto set (D_MIN)
     model.Minimize(vars.cost_d);
@@ -1171,9 +1174,14 @@ TerminationReason prune_paths_with_d_min(
 
     const auto result = response.value();
     termination_reason = result.termination.reason;
-    duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
-    write_optimization_log(termination_reason, duration, transmap, "optimize_d_initial", output_dir);
+    // Record duration reported by MathOpt and the total time outside of that duration
+    duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+
+    write_time_log(output_dir, "optimize_d_prune_init", initialize_time, true);
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_prune", output_dir);
+    t.reset();
 
     // EXIT EARLY
     if (termination_reason != TerminationReason::kOptimal){
@@ -1223,6 +1231,8 @@ TerminationReason prune_paths_with_d_min(
         transmap.remove_node(path_id);
     }
 
+    write_time_log(output_dir, "optimize_d_prune_parse", t, true);
+
     return termination_reason;
 
 }
@@ -1240,6 +1250,7 @@ TerminationReason optimize_reads_with_d_plus_n(
         double n_max,
         bool write_solution
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
@@ -1269,6 +1280,9 @@ TerminationReason optimize_reads_with_d_plus_n(
         construct_joint_n_d_model(transmap, model, vars, integral, config.use_ploidy_constraint);
     }
 
+    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    t.reset();
+
     // ---- First find one extreme of the pareto set (D_MIN) ----
 
     // If d_min or n_max are not provided, find them from scratch
@@ -1283,12 +1297,15 @@ TerminationReason optimize_reads_with_d_plus_n(
         termination_reason = result.termination.reason;
         duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
+        auto initialize_time = t.elapsed_milliseconds() - duration;
+        write_time_log(output_dir, "optimize_d_init", initialize_time, true);
+        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+        t.reset();
+
         // Check if the first solution is feasible/optimal
         if (termination_reason != TerminationReason::kOptimal){
             return termination_reason;
         }
-
-        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
         // Ideally we would minimize( n | d=d_min ) but we are choosing to be lazy here because it is a costly step
         d_min = round(vars.cost_d.Evaluate(result.variable_values()));
@@ -1331,7 +1348,10 @@ TerminationReason optimize_reads_with_d_plus_n(
     duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
     termination_reason = result_n_d.termination.reason;
 
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+    write_time_log(output_dir, "optimize_d_plus_n_init", initialize_time, true);
     write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
+    t.reset();
 
     // Check if the final solution is optimal
     if (termination_reason != TerminationReason::kOptimal){
@@ -1344,14 +1364,17 @@ TerminationReason optimize_reads_with_d_plus_n(
 
     if (integral) {
         if (not write_solution) {
-            output_dir.clear();
+            parse_read_model_solution(result_n_d, vars, transmap, "");
         }
-
-        parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+        else {
+            parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+        }
     }
     else{
         throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
+
+    write_time_log(output_dir, "optimize_d_plus_n_parse", t, true);
 
     return termination_reason;
 }
@@ -1367,6 +1390,7 @@ TerminationReason optimize_read_feasibility(
         path output_dir,
         const SolverType& solver_type
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
@@ -1397,6 +1421,8 @@ TerminationReason optimize_read_feasibility(
     }
 
     construct_r_model(transmap, model, vars, integral);
+    write_time_log(output_dir, "feasibility_construct", t, true);
+    t.reset();
 
     model.Maximize(vars.cost_r);
 
@@ -1419,6 +1445,10 @@ TerminationReason optimize_read_feasibility(
 
         return result.termination.reason;
     }
+
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+    write_time_log(output_dir, "feasibility_init", initialize_time, true);
+    t.reset();
 
     // Infer the optimal r value of the feasibility solution
     r = vars.cost_r.Evaluate(result.variable_values());
@@ -1469,10 +1499,10 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
     if (config.use_quadratic_objective) {
         // TODO: implement latest simplifications on bound-finding/normalization?
         // This solver is not realistically practical given the time it takes to run
-        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.timeout_sec, subdir, config.solver_type);
+        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.timeout_sec, subdir, config.solver_type, write_solution);
     }
     else {
-        termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max);
+        termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max, write_solution);
     }
 
     return termination_reason;

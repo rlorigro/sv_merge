@@ -38,7 +38,7 @@ namespace sv_merge{
  * @param time_csv result of calling Timer::to_csv() immediately after task exits
  * @param success whether or not the task timed out
  */
-void write_time_log(path output_dir, const string& name, const string& time_csv, bool success, const string& notes){
+void write_time_log(const path& output_dir, const string& name, const string& time_csv, bool success, const string& notes){
     // Begin the logging process
     path log_path = output_dir / "log.csv";
 
@@ -63,8 +63,23 @@ void write_time_log(path output_dir, const string& name, const string& time_csv,
  * @param timer timer which has been running for the period of the task to be logged (will be polled immediately)
  * @param success whether or not the task timed out
  */
-void write_time_log(path output_dir, const string& name, const Timer& timer, bool success, const string& notes){
+void write_time_log(const path& output_dir, const string& name, const Timer& timer, bool success, const string& notes){
     string time_csv = timer.to_csv();
+
+    write_time_log(output_dir, name, time_csv, success, notes);
+}
+
+
+/**
+ * Append a log file and write the header if it hasn't been written yet
+ * @param output_dir
+ * @param name
+ * @param duration time of task in milliseconds
+ * @param success whether or not the task timed out
+ */
+void write_time_log(const path& output_dir, const string& name, const milliseconds& duration, bool success, const string& notes){
+    string time_csv;
+    duration_to_csv(duration, time_csv);
 
     write_time_log(output_dir, name, time_csv, success, notes);
 }
