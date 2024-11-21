@@ -154,14 +154,20 @@ size_t solve_from_csv(
     size_t q = tokens.find_last_of("/");
     size_t p = tokens.substr(0,q).find_last_of("/");
     if (compress_transmap) {
-        vector<TransMap> maps;
-        vector<string> partitioned_samples;
-        transmap.partition(maps,partitioned_samples);
-        for (i=0; i<maps.size(); i++) {
-            maps.at(i).compress_reads(0,0,true,false);
-            maps.at(i).compress_samples(0,true);
-            optimize(maps.at(i), solver_type, 1, use_ploidy_constraint, output_dir/(tokens.substr(p+1,q-p-1)+'_'+to_string(i)));
-        }
+        //transmap.compress_reads(0,2,true,false);
+        transmap.compress_samples(0,true);
+        optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir/(tokens.substr(p+1,q-p-1)));
+
+
+
+//        vector<TransMap> maps;
+//        vector<string> partitioned_samples;
+//        transmap.partition(maps,partitioned_samples);
+//        for (i=0; i<maps.size(); i++) {
+//            maps.at(i).compress_reads(0,0,true,false);
+//            maps.at(i).compress_samples(0,true);
+//            optimize(maps.at(i), solver_type, 1, use_ploidy_constraint, output_dir/(tokens.substr(p+1,q-p-1)+'_'+to_string(i)));
+//        }
 
 
 //        cerr << "All edges distinct before compression? " << to_string(transmap.are_edges_distinct()) << "\n";

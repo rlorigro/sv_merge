@@ -175,8 +175,9 @@ public:
 
     /**
      * Two samples are considered identical iff there is a bijection between equivalent reads: only one sample per
-     * equivalence class is kept. A sample is contained in another sample iff there is an injection between equivalent
-     * reads: every contained sample is discarded.
+     * equivalence class is kept, and edge weights are summed. A sample is contained in another sample iff there is an
+     * injection between equivalent reads: every contained sample such that all its reads have only one assignment is
+     * collapsed into a container sample.
      *
      * Remark: the procedure sets object variables `sample_to_identical_sample, sample_to_container_sample,
      * node_to_cluster`.

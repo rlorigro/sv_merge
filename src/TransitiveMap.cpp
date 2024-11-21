@@ -690,15 +690,15 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
 
     // Collecting all read-haplotype edges, with reads grouped by sample.
     neighbors.reserve(n_reads);
-    for (i = 0; i < n_reads; i++) neighbors.emplace_back();
+    for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
-    for (i = 0; i < n_reads; i++) weights.emplace_back();
-    if (weight_quantum != 0) {
+    for (i=0; i<n_reads; i++) weights.emplace_back();
+    if (weight_quantum!=0) {
         compared_weights.reserve(n_reads);
-        for (i = 0; i < n_reads; i++) compared_weights.emplace_back();
+        for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     }
     node_ids.reserve(n_reads); sample_names.reserve(n_reads);
-    i = -1;
+    i=-1;
     for_each_sample([&](const string &sample_name, int64_t sample_id) {
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             node_ids.emplace_back(read_id);
@@ -709,46 +709,55 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
                 auto [success, weight] = try_get_edge_weight(read_id, path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
-                if (weight_quantum != 0) compared_weights.at(i).emplace_back((int64_t) floor(weight / weight_quantum));
+                if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
             });
         });
     });
+    if (verbose) {
+        cerr << "Read-hap weights before compression: \n";
+        for (i=0; i<n_reads; i++) {
+            read_id=node_ids.at(i);
+            cerr << "read=" << to_string(read_id) << " weights=";
+            for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
+            cerr << '\n';
+        }
+    }
 
     // Clustering reads; removing redundant reads; computing new read-hap weights.
     is_redundant.reserve(n_reads);
-    for (i = 0; i < n_reads; i++) is_redundant.emplace_back(false);
-    if (mode == 3) {
+    for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
+    if (mode==3) {
         cluster_size.reserve(n_reads);
-        for (i = 0; i < n_reads; i++) cluster_size.emplace_back(0);
+        for (i=0; i<n_reads; i++) cluster_size.emplace_back(0);
     }
-    n_clusters = 0;
-    for (i = 0; i < n_reads; i++) {
+    n_clusters=0;
+    for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
         n_clusters++;
-        if (mode == 3) cluster_size.at(i) = 1;
-        read_id = node_ids.at(i);
-        length = neighbors.at(i).size();
-        for (j = i + 1; j < n_reads; j++) {
-            if (sample_names.at(j) != sample_names.at(i)) break;
-            if (is_redundant.at(j) || neighbors.at(j) != neighbors.at(i) ||
-                (weight_quantum == 0 && weights.at(j) != weights.at(i)) ||
-                (weight_quantum != 0 && compared_weights.at(j) != compared_weights.at(i)))
+        if (mode==3) cluster_size.at(i)=1;
+        read_id=node_ids.at(i);
+        length=neighbors.at(i).size();
+        for (j=i+1; j<n_reads; j++) {
+            if (sample_names.at(j)!=sample_names.at(i)) break;
+            if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) ||
+                (weight_quantum==0 && weights.at(j)!=weights.at(i)) ||
+                (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i)))
                 continue;
-            is_redundant.at(j) = true;
-            if (mode == 3) cluster_size.at(i)++;
-            for (k = 0; k < length; k++) {
+            is_redundant.at(j)=true;
+            if (mode==3) cluster_size.at(i)++;
+            for (k=0; k<length; k++) {
                 switch (mode) {
                     case 0:
-                        weights.at(i).at(k) = std::max(weights.at(i).at(k), weights.at(j).at(k));
+                        weights.at(i).at(k)=std::max(weights.at(i).at(k),weights.at(j).at(k));
                         break;
                     case 1:
-                        weights.at(i).at(k) = std::min(weights.at(i).at(k), weights.at(j).at(k));
+                        weights.at(i).at(k)=std::min(weights.at(i).at(k),weights.at(j).at(k));
                         break;
                     case 2:
-                        weights.at(i).at(k) = weights.at(i).at(k) + weights.at(j).at(k);
+                        weights.at(i).at(k)=weights.at(i).at(k)+weights.at(j).at(k);
                         break;
                     case 3:
-                        weights.at(i).at(k) = weights.at(i).at(k) + weights.at(j).at(k);
+                        weights.at(i).at(k)=weights.at(i).at(k)+weights.at(j).at(k);
                         break;
                 }
             }
@@ -759,25 +768,24 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) <<  " (after compressing reads)\n";
     if (verbose) {
         cerr << "Read-hap weights after compression: \n";
-        for (i = 0; i < n_reads; i++) {
-            read_id = node_ids.at(i);
+        for (i=0; i<n_reads; i++) {
+            read_id=node_ids.at(i);
             cerr << "read=" << to_string(read_id) << " weights=";
-            for (j = 0; j < weights.at(i).size(); j++)
-                cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
+            for (j=0; j<weights.at(i).size(); j++) cerr << "(" << to_string(neighbors.at(i).at(j)) << "," << to_string(weights.at(i).at(j)) << "), ";
             cerr << '\n';
         }
     }
 
     // Updating read-hap weights
-    for (i = 0; i < n_reads; i++) {
+    for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
-        if (mode == 3) {
-            length = weights.at(i).size();
-            for (j = 0; j < length; j++) weights.at(i).at(j) /= cluster_size.at(i);
+        if (mode==3) {
+            length=weights.at(i).size();
+            for (j=0; j<length; j++) weights.at(i).at(j)/=cluster_size.at(i);
         }
-        read_id = node_ids.at(i);
-        length = neighbors.at(i).size();
-        for (j = 0; j < length; j++) graph.update_edge_weight(read_id, neighbors.at(i).at(j), weights.at(i).at(j));
+        read_id=node_ids.at(i);
+        length=neighbors.at(i).size();
+        for (j=0; j<length; j++) graph.update_edge_weight(read_id, neighbors.at(i).at(j), weights.at(i).at(j));
     }
 }
 
@@ -789,14 +797,15 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     const int64_t n_reads = get_n_reads();
     int64_t n_samples = get_n_samples();
 
-    bool contained;
-    int64_t i, j, k;
-    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j;
+    bool contained, trivial;
+    size_t length;
+    int64_t i, j, k, h;
+    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id;
     string sample_name, s_name;
     vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime;
     vector<string> sample_names;
     vector<vector<int64_t>> neighbors, compared_weights;
-    vector<vector<float>> weights;
+    vector<vector<float>> weights, new_weights;
 
     // Making sure that the neighbors of all nodes lie in the same global order
     if (sort_edges) graph.sort_adjacency_lists();
@@ -810,6 +819,8 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         compared_weights.reserve(n_reads);
         for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     }
+    new_weights.reserve(n_reads);
+    for (i=0; i<n_reads; i++) new_weights.emplace_back();
     node_ids.reserve(n_reads); sample_names.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
@@ -822,6 +833,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
                 if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
+                new_weights.at(i).emplace_back(weight);
             });
         });
     });
@@ -840,7 +852,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             cluster_ids.at(j)=n_clusters;
         }
     }
-    compared_weights.clear(); weights.clear(); neighbors.clear();
+    compared_weights.clear();
     cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) << " (across all samples)\n";
 
     cluster_size.reserve(n_clusters);
@@ -852,7 +864,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     sample_to_identical_sample.clear();
     i=0;
     while (i<n_reads) {
-        sample_name=sample_names.at(i);
+        sample_name=sample_names.at(i); sample_id=get_id(sample_name);
         next_i=i+1;
         while (next_i<n_reads) {
             if (sample_names.at(next_i)!=sample_name) break;
@@ -876,6 +888,10 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 s_id=get_id(s_name);
                 for_each_read_of_sample(s_id, [&](int64_t read_id) { remove_node(read_id); });
                 remove_node(s_id);
+                for (k=i; k<next_i; k++) {
+                    length=new_weights.at(k).size();
+                    for (h=0; h<length; h++) new_weights.at(k).at(h)+=weights.at(k).at(h);
+                }
                 sample_to_identical_sample.emplace(s_name,sample_name);
             }
             j=next_j;
@@ -885,7 +901,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     cerr << "n_samples_before=" << to_string(n_samples) << " -> n_samples_after=" << to_string(get_n_samples()) << " (identical samples removal)\n";
     n_samples=get_n_samples();
 
-    // Removing contained samples
+    // Removing contained samples whose assignment is trivial
     sample_to_container_sample.clear();
     i=0;
     while (i<n_reads) {
@@ -896,6 +912,11 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             next_i++;
         }
         if (sample_to_container_sample.contains(sample_name)) { i=next_i; continue; }
+        trivial=true;
+        for (j=i; j<next_i; j++) {
+            if (neighbors.at(j).size()>1) { trivial=false; break; }
+        }
+        if (!trivial) { i=next_i; continue; }
         for (j=0; j<n_clusters; j++) cluster_size.at(j)=0;
         for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j)-1)++;
         j=next_i;
@@ -917,13 +938,34 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 for_each_read_of_sample(sample_id, [&](int64_t read_id) { remove_node(read_id); });
                 remove_node(sample_id);
                 sample_to_container_sample.emplace(sample_name,make_pair(s_name,cluster_size));
+                for (k=i; k<next_i; k++) {
+                    cluster_id=cluster_ids.at(k);
+                    if (cluster_size.at(cluster_id-1)==0) continue;
+                    cluster_size.at(cluster_id-1)--;
+                    for (h=j; h<next_j; h++) {
+                        if (cluster_ids.at(h)==cluster_id) {
+                            new_weights.at(h).at(0)+=weights.at(k).at(0);
+                            break;
+                        }
+                    }
+                }
                 break;
             }
             j=next_j;
         }
         i=next_i;
     }
-    cerr << "n_samples_before=" << to_string(n_samples) << " -> n_samples_after=" << to_string(get_n_samples()) << " (contained samples removal)\n";
+    cerr << "n_samples_before=" << to_string(n_samples) << " -> n_samples_after=" << to_string(get_n_samples()) << " (trivial contained samples removal)\n";
+
+    // Updating edge weights
+    weights.clear();
+    for (i=0; i<n_reads; i++) {
+        if (sample_to_identical_sample.contains(sample_names.at(i)) || sample_to_container_sample.contains(sample_names.at(i))) continue;
+        read_id=node_ids.at(i);
+        length=neighbors.at(i).size();
+        for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),new_weights.at(i).at(j));
+    }
+    new_weights.clear(); neighbors.clear();
 
     // Preparing object variable `node_to_cluster` for decompression.
     node_to_cluster.clear();
@@ -963,7 +1005,7 @@ void TransMap::decompress_samples() {
             }
         });
     }
-    sample_to_container_sample.clear();
+    sample_to_container_sample.clear(); node_to_cluster.clear();
 }
 
 
