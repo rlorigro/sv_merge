@@ -9,6 +9,7 @@
 #include <utility>
 #include <string>
 #include <vector>
+#include <tuple>
 
 using std::unordered_map;
 using std::unordered_set;
@@ -17,6 +18,7 @@ using std::vector;
 using std::string;
 using std::pair;
 using std::byte;
+using std::tuple;
 
 
 namespace sv_merge {
@@ -41,11 +43,9 @@ class TransMap {
     string variant_node_name;
 
     /**
-     * Data structures used by compression/decompression.
+     * Data structures used by compression/decompression procedures.
      */
-    unordered_map<int64_t, int64_t> node_to_cluster;
-    unordered_map<string,string> sample_to_identical_sample;
-    unordered_map<string, pair<string,vector<int64_t>>> sample_to_container_sample;
+    unordered_map<string,pair<string,int64_t>> sample_to_sample;
 
 public:
     TransMap();
@@ -186,6 +186,12 @@ public:
      * order that is the same for every node.
      */
     void compress_samples(float weight_quantum, bool sort_edges = true);
+
+    /**
+     * Adds every weight of every record in `weights[from_first..from_last]` to a distinct record in
+     * `weights[to_first..to_last]` with the same cluster ID.
+     */
+    void compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used);
 
     /**
      * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample`. The rest of

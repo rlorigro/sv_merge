@@ -361,6 +361,7 @@ template<class T> void HeteroGraph<T>::remove_node(int64_t id){
         remove_edge(edge.first, edge.second);
     }
 
+    id_map.erase(nodes.at(id).name);
     nodes.erase(id);
 }
 
