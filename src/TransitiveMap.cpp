@@ -672,19 +672,14 @@ TransMap TransMap::partition_get_test_transmap() {
 }
 
 
-/**
- * -----------> USE NODE IDS RATHER THAN NODE NAMES EVERYWHERE
- */
 void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edges, bool verbose) {
     const int64_t n_reads = get_n_reads();
-    const int64_t n_samples = get_n_samples();
 
     size_t length;
     int64_t i, j, k;
-    int64_t read_id, n_clusters;
-    vector<bool> is_redundant;
-    vector<int64_t> node_ids, cluster_representative, cluster_size, to_remove;
-    vector<string> sample_names;
+    int64_t read_id, sample_id, n_clusters;
+    vector<bool> is_redundant, is_representative;
+    vector<int64_t> node_ids, cluster_representative, cluster_size, sample_ids;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights;
 
@@ -700,12 +695,12 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
         compared_weights.reserve(n_reads);
         for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     }
-    node_ids.reserve(n_reads); sample_names.reserve(n_reads);
+    node_ids.reserve(n_reads); sample_ids.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string &sample_name, int64_t sample_id) {
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             node_ids.emplace_back(read_id);
-            sample_names.emplace_back(sample_name);
+            sample_ids.emplace_back(get_id(sample_name));
             i++;
             graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t path_id) {
                 // For each read, its neighbors lie in the same global order.
@@ -729,6 +724,8 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     // Clustering reads; removing redundant reads; computing new read-hap weights.
     is_redundant.reserve(n_reads);
     for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
+    is_representative.reserve(n_reads);
+    for (i=0; i<n_reads; i++) is_representative.emplace_back(false);
     if (mode==3) {
         cluster_size.reserve(n_reads);
         for (i=0; i<n_reads; i++) cluster_size.emplace_back(0);
@@ -741,12 +738,9 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
         read_id=node_ids.at(i);
         length=neighbors.at(i).size();
         for (j=i+1; j<n_reads; j++) {
-            if (sample_names.at(j)!=sample_names.at(i)) break;
-            if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) ||
-                (weight_quantum==0 && weights.at(j)!=weights.at(i)) ||
-                (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i)))
-                continue;
-            is_redundant.at(j)=true;
+            if (sample_ids.at(j)!=sample_ids.at(i)) break;
+            if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
+            is_redundant.at(j)=true; is_representative.at(i)=true;
             if (mode==3) cluster_size.at(i)++;
             for (k=0; k<length; k++) {
                 switch (mode) {
@@ -757,14 +751,13 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
                         weights.at(i).at(k)=std::min(weights.at(i).at(k),weights.at(j).at(k));
                         break;
                     case 2:
-                        weights.at(i).at(k)=weights.at(i).at(k)+weights.at(j).at(k);
+                        weights.at(i).at(k)+=weights.at(j).at(k);
                         break;
                     case 3:
-                        weights.at(i).at(k)=weights.at(i).at(k)+weights.at(j).at(k);
+                        weights.at(i).at(k)+=weights.at(j).at(k);
                         break;
                 }
             }
-            to_remove.emplace_back(node_ids.at(j));
         }
     }
     compared_weights.clear();
@@ -781,23 +774,22 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
 
     // Updating the transmap
     for (i=0; i<n_reads; i++) {
-        if (is_redundant.at(i)) continue;
+        if (is_redundant.at(i) || !is_representative.at(i)) continue;
         if (mode==3) {
             length=weights.at(i).size();
             for (j=0; j<length; j++) weights.at(i).at(j)/=cluster_size.at(i);
         }
-        read_id=node_ids.at(i);
-        length=neighbors.at(i).size();
+        read_id=node_ids.at(i); length=neighbors.at(i).size();
         for (j=0; j<length; j++) graph.update_edge_weight(read_id, neighbors.at(i).at(j), weights.at(i).at(j));
     }
-    for (auto node_id: to_remove) remove_node(node_id);
+    for (i=0; i<n_reads; i++) {
+        if (is_redundant.at(i)) remove_node(node_ids.at(i));
+    }
 }
 
 
 /**
  * Implemented as a quadratic scan over all the reads in the cohort. Might be too slow for large cohorts.
- *
- * -----------> USE NODE IDS RATHER THAN NODE NAMES EVERYWHERE
  */
 void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     const int64_t n_reads = get_n_reads();
@@ -806,15 +798,13 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     bool contained, trivial;
     size_t length;
     int64_t i, j, k, h;
-    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id;
+    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id, contained_id, container_id;
     int64_t contained_first, contained_last, container_first, container_last;
-    string sample_name, s_name, contained_name, container_name;
     vector<bool> used;
-    vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime, to_remove;
-    vector<string> sample_names, to_update;
+    vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime, to_remove, sample_ids, to_update;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights;
-    unordered_map<string, tuple<string,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
+    unordered_map<int64_t,tuple<int64_t,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
 
     // Making sure that the neighbors of all nodes lie in the same global order
     if (sort_edges) graph.sort_adjacency_lists();
@@ -828,15 +818,15 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         compared_weights.reserve(n_reads);
         for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     }
-    node_ids.reserve(n_reads); sample_names.reserve(n_reads);
+    node_ids.reserve(n_reads); sample_ids.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
-            node_ids.emplace_back(read_id); sample_names.emplace_back(sample_name);
+            node_ids.emplace_back(read_id); sample_ids.emplace_back(get_id(sample_name));
             i++;
             graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t path_id) {
                 // For each read, its neighbors lie in the same global order.
-                auto [success, weight] = try_get_edge_weight(read_id, path_id);
+                auto [success, weight] = try_get_edge_weight(read_id,path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
                 if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
@@ -870,31 +860,30 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     sample_to_identical_sample.clear();
     i=0;
     while (i<n_reads) {
-        sample_name=sample_names.at(i); sample_id=get_id(sample_name);
+        sample_id=sample_ids.at(i);
         next_i=i+1;
         while (next_i<n_reads) {
-            if (sample_names.at(next_i)!=sample_name) break;
+            if (sample_ids.at(next_i)!=sample_id) break;
             next_i++;
         }
-        if (sample_to_identical_sample.contains(sample_name)) { i=next_i; continue; }
+        if (sample_to_identical_sample.contains(sample_id)) { i=next_i; continue; }
         for (j=0; j<n_clusters; j++) cluster_size.at(j)=0;
         for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j)-1)++;
         j=next_i;
         while (j<n_reads) {
-            s_name=sample_names.at(j);
+            s_id=sample_ids.at(j);
             next_j=j+1;
             while (next_j<n_reads) {
-                if (sample_names.at(next_j)!=s_name) break;
+                if (sample_ids.at(next_j)!=s_id) break;
                 next_j++;
             }
-            if (sample_to_identical_sample.contains(s_name)) { j=next_j; continue; }
+            if (sample_to_identical_sample.contains(s_id)) { j=next_j; continue; }
             for (k=0; k<n_clusters; k++) cluster_size_prime.at(k)=0;
             for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             if (cluster_size_prime==cluster_size) {
-                s_id=get_id(s_name);
                 to_remove.emplace_back(s_id);
                 for_each_read_of_sample(s_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
-                sample_to_identical_sample.emplace(s_name,make_tuple(sample_name,j,next_j-1,i,next_i-1));
+                sample_to_identical_sample.emplace(s_id,std::make_tuple(sample_id,j,next_j-1,i,next_i-1));
             }
             j=next_j;
         }
@@ -906,13 +895,13 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     sample_to_container_sample.clear();
     i=0;
     while (i<n_reads) {
-        sample_name=sample_names.at(i); sample_id=get_id(sample_name);
+        sample_id=sample_ids.at(i);
         next_i=i+1;
         while (next_i<n_reads) {
-            if (sample_names.at(next_i)!=sample_name) break;
+            if (sample_ids.at(next_i)!=sample_id) break;
             next_i++;
         }
-        if (sample_to_identical_sample.contains(sample_name)) { i=next_i; continue; }
+        if (sample_to_identical_sample.contains(sample_id)) { i=next_i; continue; }
         trivial=true;
         for (j=i; j<next_i; j++) {
             if (neighbors.at(j).size()>1) { trivial=false; break; }
@@ -922,13 +911,13 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         for (j=i; j<next_i; j++) cluster_size.at(cluster_ids.at(j)-1)++;
         j=next_i;
         while (j<n_reads) {
-            s_name=sample_names.at(j);
+            s_id=sample_ids.at(j);
             next_j=j+1;
             while (next_j<n_reads) {
-                if (sample_names.at(next_j)!=s_name) break;
+                if (sample_ids.at(next_j)!=s_id) break;
                 next_j++;
             }
-            if (sample_to_identical_sample.contains(s_name)) { j=next_j; continue; }
+            if (sample_to_identical_sample.contains(s_id)) { j=next_j; continue; }
             for (k=0; k<n_clusters; k++) cluster_size_prime.at(k)=0;
             for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             contained=true;
@@ -938,7 +927,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             if (contained) {
                 to_remove.emplace_back(sample_id);
                 for_each_read_of_sample(sample_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
-                sample_to_container_sample.emplace(sample_name,make_tuple(s_name,i,next_i,j,next_j));
+                sample_to_container_sample.emplace(sample_id,std::make_tuple(s_id,i,next_i,j,next_j));
                 break;
             }
             j=next_j;
@@ -950,17 +939,17 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     // Updating weights along the containment forest
     for (auto& pair: sample_to_identical_sample) compress_samples_update_weights(std::get<1>(pair.second),std::get<2>(pair.second),std::get<3>(pair.second),std::get<4>(pair.second),cluster_ids,weights,used);
     for (auto& pair: sample_to_container_sample) {
-        contained_name=pair.first;
-        auto& t = sample_to_container_sample.at(contained_name);
-        container_name=std::get<0>(t);
+        contained_id=pair.first;
+        auto& t = sample_to_container_sample.at(contained_id);
+        container_id=std::get<0>(t);
         contained_first=std::get<1>(t); contained_last=std::get<2>(t);
         container_first=std::get<3>(t); container_last=std::get<4>(t);
         while (true) {
             compress_samples_update_weights(contained_first,contained_last,container_first,container_last,cluster_ids,weights,used);
-            if (!sample_to_container_sample.contains(container_name)) break;
-            t=sample_to_container_sample.at(container_name);
-            contained_name=container_name;
-            container_name=std::get<0>(t);
+            if (!sample_to_container_sample.contains(container_id)) break;
+            t=sample_to_container_sample.at(container_id);
+            contained_id=container_id;
+            container_id=std::get<0>(t);
             contained_first=std::get<1>(t); contained_last=std::get<2>(t);
             container_first=std::get<3>(t); container_last=std::get<4>(t);
         }
@@ -968,7 +957,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
 
     // Updating the transmap
     for (i=0; i<n_reads; i++) {
-        if (sample_to_identical_sample.contains(sample_names.at(i)) || sample_to_container_sample.contains(sample_names.at(i))) continue;
+        if (sample_to_identical_sample.contains(sample_ids.at(i)) || sample_to_container_sample.contains(sample_ids.at(i))) continue;
         read_id=node_ids.at(i);
         length=neighbors.at(i).size();
         for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),weights.at(i).at(j));
@@ -980,30 +969,30 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     sample_to_sample.clear();
     for (auto& pair: sample_to_identical_sample) {
         auto& t = sample_to_identical_sample.at(pair.first);
-        container_name=std::get<0>(t);
+        container_id=std::get<0>(t);
         length=std::get<2>(t)+1-std::get<1>(t);
         while (true) {
-            if (!sample_to_container_sample.contains(container_name)) break;
-            auto& t = sample_to_container_sample.at(container_name);
-            container_name=std::get<0>(t);
+            if (!sample_to_container_sample.contains(container_id)) break;
+            t=sample_to_container_sample.at(container_id);
+            container_id=std::get<0>(t);
         }
-        sample_to_sample.emplace(pair.first,make_pair(container_name,length));
+        sample_to_sample.emplace(get_node(pair.first).name,std::make_pair(container_id,length));
     }
     for (auto& pair: sample_to_container_sample) {
         auto& t = sample_to_container_sample.at(pair.first);
-        container_name=std::get<0>(t);
+        container_id=std::get<0>(t);
         length=std::get<2>(t)+1-std::get<1>(t);
         while (true) {
-            if (!sample_to_container_sample.contains(container_name)) break;
-            auto& t = sample_to_container_sample.at(container_name);
-            container_name=std::get<0>(t);
+            if (!sample_to_container_sample.contains(container_id)) break;
+            t=sample_to_container_sample.at(container_id);
+            container_id=std::get<0>(t);
         }
-        sample_to_sample.emplace(pair.first,make_pair(container_name,length));
+        sample_to_sample.emplace(get_node(pair.first).name,std::make_pair(container_id,length));
     }
 }
 
 
-void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used) {
+void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, const vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used) {
     int64_t i, j, k;
     int64_t cluster_id;
 
@@ -1022,18 +1011,19 @@ void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_
 
 
 void TransMap::decompress_samples() {
-    int64_t length;
+    int64_t sample_id, length;
     string sample_name;
 
     for (auto& pair: sample_to_sample) {
         sample_name=pair.first;
         add_sample(sample_name);
+        sample_id=get_id(sample_name);
         length=pair.second.second;
-        for_each_read_of_sample(pair.second.first, [&](const string& read_name, int64_t read_id) {
-            if (length==0) return;
-            add_edge(sample_name,read_name,0);  // Updates both sides of the edge
+        for (const auto& [read_id,read_weight]: graph.get_edges(pair.second.first)) {
+            add_edge(sample_id,read_id,0);  // Updates both sides of the edge
             length--;
-        });
+            if (length==0) break;
+        }
     }
     sample_to_sample.clear();
 }

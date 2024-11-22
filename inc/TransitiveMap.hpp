@@ -45,7 +45,7 @@ class TransMap {
     /**
      * Data structures used by compression/decompression procedures.
      */
-    unordered_map<string,pair<string,int64_t>> sample_to_sample;
+    unordered_map<string,pair<int64_t,int64_t>> sample_to_sample;
 
 public:
     TransMap();
@@ -191,13 +191,13 @@ public:
      * Adds every weight of every record in `weights[from_first..from_last]` to a distinct record in
      * `weights[to_first..to_last]` with the same cluster ID.
      */
-    void compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used);
+    static void compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, const vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used);
 
     /**
-     * Reintroduces a node for every compressed sample using object variable `sample_to_compressed_sample`. The rest of
-     * the graph remains compressed.
+     * Reintroduces a node for every compressed sample using object variable `sample_to_sample`. The rest of the graph
+     * remains compressed.
      *
-     * Remark: this procedure can be called only once, since `sample_to_compressed_sample` is cleared by it.
+     * Remark: this procedure can be called only once, since `sample_to_sample` is cleared by it.
      */
     void decompress_samples();
 
