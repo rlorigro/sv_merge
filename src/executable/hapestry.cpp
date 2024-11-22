@@ -328,12 +328,11 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     string cigar;
     string read_sequence;
 
+    // Deduplicate by hashing strings
     transmap.for_each_read([&](const string& read_name, int64_t id) {
         transmap.get_sequence(id, read_sequence);
-
         deduplicated_reads[read_sequence].insert(id);
     });
-
 
     for (const auto& [read_sequence, read_ids]: deduplicated_reads){
         bool has_alignment = false;
