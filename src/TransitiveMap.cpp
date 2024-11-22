@@ -680,7 +680,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     int64_t i, j, k;
     int64_t read_id, n_clusters;
     vector<bool> is_redundant;
-    vector<int64_t> node_ids, cluster_representative, cluster_size;
+    vector<int64_t> node_ids, cluster_representative, cluster_size, to_remove;
     vector<string> sample_names;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights;
@@ -761,7 +761,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
                         break;
                 }
             }
-            remove_node(node_ids.at(j));
+            to_remove.emplace_back(node_ids.at(j));
         }
     }
     compared_weights.clear();
@@ -776,7 +776,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
         }
     }
 
-    // Updating read-hap weights
+    // Updating the transmap
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
         if (mode==3) {
@@ -787,6 +787,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
         length=neighbors.at(i).size();
         for (j=0; j<length; j++) graph.update_edge_weight(read_id, neighbors.at(i).at(j), weights.at(i).at(j));
     }
+    for (auto node_id: to_remove) remove_node(node_id);
 }
 
 
@@ -802,7 +803,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     int64_t i, j, k, h;
     int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id;
     string sample_name, s_name;
-    vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime;
+    vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime, to_remove;
     vector<string> sample_names;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights, new_weights;
@@ -886,11 +887,12 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             if (cluster_size_prime==cluster_size) {
                 s_id=get_id(s_name);
-                for_each_read_of_sample(s_id, [&](int64_t read_id) { remove_node(read_id); });
-                remove_node(s_id);
+                to_remove.emplace_back(s_id);
+                for_each_read_of_sample(s_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
                 for (k=i; k<next_i; k++) {
                     length=new_weights.at(k).size();
                     for (h=0; h<length; h++) new_weights.at(k).at(h)+=weights.at(k).at(h);
+                    // ----> This is wrong for quantization, we should add the original weights of the collapsed samples instead.
                 }
                 sample_to_identical_sample.emplace(s_name,sample_name);
             }
@@ -911,7 +913,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             if (sample_names.at(next_i)!=sample_name) break;
             next_i++;
         }
-        if (sample_to_container_sample.contains(sample_name)) { i=next_i; continue; }
+        if (sample_to_identical_sample.contains(sample_name) || sample_to_container_sample.contains(sample_name)) { i=next_i; continue; }
         trivial=true;
         for (j=i; j<next_i; j++) {
             if (neighbors.at(j).size()>1) { trivial=false; break; }
@@ -927,7 +929,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 if (sample_names.at(next_j)!=s_name) break;
                 next_j++;
             }
-            if (sample_to_container_sample.contains(s_name)) { j=next_j; continue; }
+            if (sample_to_identical_sample.contains(s_name) || sample_to_container_sample.contains(s_name)) { j=next_j; continue; }
             for (k=0; k<n_clusters; k++) cluster_size_prime.at(k)=0;
             for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             contained=true;
@@ -935,8 +937,8 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 if (cluster_size.at(k)>cluster_size_prime.at(k)) { contained=false; break; }
             }
             if (contained) {
-                for_each_read_of_sample(sample_id, [&](int64_t read_id) { remove_node(read_id); });
-                remove_node(sample_id);
+                to_remove.emplace_back(sample_id);
+                for_each_read_of_sample(sample_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
                 sample_to_container_sample.emplace(sample_name,make_pair(s_name,cluster_size));
                 for (k=i; k<next_i; k++) {
                     cluster_id=cluster_ids.at(k);
@@ -957,7 +959,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     }
     cerr << "n_samples_before=" << to_string(n_samples) << " -> n_samples_after=" << to_string(get_n_samples()) << " (trivial contained samples removal)\n";
 
-    // Updating edge weights
+    // Updating the transmap
     weights.clear();
     for (i=0; i<n_reads; i++) {
         if (sample_to_identical_sample.contains(sample_names.at(i)) || sample_to_container_sample.contains(sample_names.at(i))) continue;
@@ -966,6 +968,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),new_weights.at(i).at(j));
     }
     new_weights.clear(); neighbors.clear();
+    for (auto node_id: to_remove) remove_node(node_id);
 
     // Preparing object variable `node_to_cluster` for decompression.
     node_to_cluster.clear();
