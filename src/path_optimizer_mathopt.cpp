@@ -134,6 +134,104 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
+void construct_joint_n_d_model_with_sum_constraints(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
+    // DEFINE: hap vars
+    transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
+        string name = "h" + std::to_string(hap_id);
+        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+    });
+
+    unordered_map <pair <int64_t,int64_t>, LinearExpression> sample_hap_read_sums;
+    unordered_map <int64_t, LinearExpression> hap_vsh_sums;
+
+    transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+        transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+            transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
+                string hap_name = transmap.get_node(hap_id).name;
+                string read_name = transmap.get_node(read_id).name;
+
+                // DEFINE: read-hap vars
+                string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
+                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
+                auto& r_h = result.first->second;
+
+                // DEFINE: flow
+                vars.read_flow[read_id] += r_h;
+
+                auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
+                if (not success){
+                    throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                }
+
+                // OBJECTIVE: accumulate d cost sum
+                vars.cost_d += w*r_h;
+
+                // Do only once for each unique pair of sample-hap
+                if (not vars.sample_hap.contains({sample_id, hap_id})){
+                    // DEFINE: sample-hap vars
+                    string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
+                    auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
+                    auto& s_h = result2.first->second;
+
+                    // DEFINE: ploidy
+                    vars.ploidy[sample_id] += s_h;
+
+                    // Accumulated sum for use later: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
+                    hap_vsh_sums[hap_id] += s_h;
+                }
+
+                sample_hap_read_sums[{sample_id, hap_id}] += r_h;
+            });
+        });
+    });
+
+    for (auto [sample_hap, read_sum]: sample_hap_read_sums) {
+        auto& s_h = vars.sample_hap.at(sample_hap);
+
+        // CONSTRAINT: sum(vrh) <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
+        // model.AddIndicatorConstraint(s_h, read_sum >= 1);
+        // model.AddIndicatorConstraint(s_h, read_sum <= 0, true);
+
+        model.AddLinearConstraint(read_sum >= s_h);
+        model.AddLinearConstraint(read_sum <= read_sum.terms().size()*s_h);
+    }
+
+    // CONSTRAINT: read assignment (flow)
+    for (const auto& [read_id,f]: vars.read_flow){
+        model.AddLinearConstraint(f == 1);
+    }
+
+    if (use_ploidy_constraint){
+        // CONSTRAINT: ploidy
+        for (const auto& [sample_id,p]: vars.ploidy){
+            model.AddLinearConstraint(p <= 2);
+        }
+    }
+
+    for (const auto& [hap_id,vsh_sum]: hap_vsh_sums){
+        auto& h = vars.haps.at(hap_id);
+
+        // CONSTRAINT: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
+        // model.AddIndicatorConstraint(h, vsh_sum >= 1);
+        // model.AddIndicatorConstraint(h, vsh_sum <= 0, true);
+
+        model.AddLinearConstraint(vsh_sum >= h);
+        model.AddLinearConstraint(vsh_sum <= vsh_sum.terms().size()*h);
+
+        // OBJECTIVE: accumulate n cost sum
+        vars.cost_n += h;
+    }
+}
+
+
+/**
+ * Construct a model such that each read must be assigned to exactly one path and each sample must have at most 2 paths.
+ * For the sake of modularity, no explicit call to CpModelBuilder::Minimize(vars.cost_n + vars.cost_d) is made here, it
+ * must be made after constructing the model.
+ * @param transmap - TransMap representing the relationship between samples, paths, and reads
+ * @param model - model to be constructed
+ * @param vars - container to hold ORTools objects which are filled in and queried later after solving
+ */
 void construct_r_model(const TransMap& transmap, Model& model, ReadVariables& vars, bool integral){
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
@@ -197,19 +295,23 @@ void parse_read_model_solution(
     const VariableMap<double>& result_var_map,
     const PathVariables& vars,
     TransMap& transmap,
-    path output_dir)
+    path output_dir
+    )
 {
+    ofstream file;
 
-    // Open a file
-    path out_path = output_dir/"solution.csv";
-    ofstream file(out_path);
+    if (not output_dir.empty()){
+        // Open a file
+        path out_path = output_dir/"solution.csv";
+        file.open(out_path);
 
-    if (not file.is_open() or not file.good()){
-        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        if (not file.is_open() or not file.good()){
+            throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        }
+
+        // Write header
+        file << "sample,read,path" << '\n';
     }
-
-    // Write header
-    file << "sample,read,path" << '\n';
 
     unordered_set <pair <int64_t, int64_t> > to_be_removed;
 
@@ -223,7 +325,7 @@ void parse_read_model_solution(
                     if (var.is_integer()){
                         auto is_assigned = bool(int64_t(round(result_var_map.at(var))));
 
-                        if (is_assigned){
+                        if (is_assigned and not output_dir.empty()){
                             file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
                         }
                         else{
@@ -878,7 +980,7 @@ void optimize_reads_with_d_and_n_using_golden_search(
 
 void write_optimization_log(
     const TerminationReason& termination_reason,
-    const std::chrono::milliseconds& duration,
+    const milliseconds& duration,
     const TransMap& transmap,
     const string& name,
     path output_dir
@@ -919,7 +1021,8 @@ TerminationReason optimize_reads_with_d_and_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint
+        bool use_ploidy_constraint,
+        bool write_solution
         ){
 
     TerminationReason termination_reason;
@@ -1015,6 +1118,10 @@ TerminationReason optimize_reads_with_d_and_n(
     d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     if (integral) {
+        if (not write_solution) {
+            output_dir.clear();
+        }
+
         parse_read_model_solution(result_n_d, vars, transmap, output_dir);
     }
     else{
@@ -1028,13 +1135,12 @@ TerminationReason optimize_reads_with_d_and_n(
 TerminationReason prune_paths_with_d_min(
         TransMap& transmap,
         size_t n_threads,
-        size_t time_limit_seconds,
         path output_dir,
-        const SolverType& solver_type,
+        const OptimizerConfig& config,
         double& d_min_result,
-        double& n_max_result,
-        bool use_ploidy_constraint
+        double& n_max_result
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
@@ -1044,30 +1150,38 @@ TerminationReason prune_paths_with_d_min(
 
     args.parameters.threads = n_threads;
 
-    if (time_limit_seconds > 0){
-        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    if (config.timeout_sec > 0){
+        args.parameters.time_limit = absl::Seconds(config.timeout_sec);
     }
     else{
         args.parameters.time_limit = absl::InfiniteDuration();
     }
 
     bool integral = true;
-    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+    if (config.solver_type == SolverType::kPdlp or config.solver_type == SolverType::kGlop){
         integral = false;
     }
 
-    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
+    // Construct the model using the Transmap
+    construct_joint_n_d_model(transmap, model, vars, integral, config.use_ploidy_constraint);
+    write_time_log(output_dir, "optimize_d_prune_construct", t, true);
+    t.reset();
 
     // First find one extreme of the pareto set (D_MIN)
     model.Minimize(vars.cost_d);
 
-    const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+    const absl::StatusOr<SolveResult> response = Solve(model, config.solver_type, args);
 
     const auto result = response.value();
     termination_reason = result.termination.reason;
-    duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
-    write_optimization_log(termination_reason, duration, transmap, "optimize_d_initial", output_dir);
+    // Record duration reported by MathOpt and the total time outside of that duration
+    duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+
+    write_time_log(output_dir, "optimize_d_prune_init", initialize_time, true);
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_prune", output_dir);
+    t.reset();
 
     // EXIT EARLY
     if (termination_reason != TerminationReason::kOptimal){
@@ -1117,6 +1231,8 @@ TerminationReason prune_paths_with_d_min(
         transmap.remove_node(path_id);
     }
 
+    write_time_log(output_dir, "optimize_d_prune_parse", t, true);
+
     return termination_reason;
 
 }
@@ -1127,16 +1243,14 @@ TerminationReason prune_paths_with_d_min(
  */
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
-        double d_weight,
-        double n_weight,
         size_t n_threads,
-        size_t time_limit_seconds,
         path output_dir,
-        const SolverType& solver_type,
-        bool use_ploidy_constraint,
+        const OptimizerConfig& config,
         double d_min,
-        double n_max
+        double n_max,
+        bool write_solution
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
@@ -1146,20 +1260,28 @@ TerminationReason optimize_reads_with_d_plus_n(
 
     bool integral = true;
 
-    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop){
+    if (config.solver_type == SolverType::kPdlp or config.solver_type == SolverType::kGlop){
         integral = false;
     }
 
     args.parameters.threads = n_threads;
 
-    if (time_limit_seconds > 0){
-        args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    if (config.timeout_sec > 0){
+        args.parameters.time_limit = absl::Seconds(config.timeout_sec);
     }
     else{
         args.parameters.time_limit = absl::InfiniteDuration();
     }
 
-    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
+    if (config.use_sum_constraints) {
+        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, integral, config.use_ploidy_constraint);
+    }
+    else {
+        construct_joint_n_d_model(transmap, model, vars, integral, config.use_ploidy_constraint);
+    }
+
+    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    t.reset();
 
     // ---- First find one extreme of the pareto set (D_MIN) ----
 
@@ -1169,18 +1291,21 @@ TerminationReason optimize_reads_with_d_plus_n(
         cerr << "no bounds given, re-optimizing for d_min: " << d_min << ' ' << n_max << '\n';
         model.Minimize(vars.cost_d);
 
-        const absl::StatusOr<SolveResult> response = Solve(model, solver_type, args);
+        const absl::StatusOr<SolveResult> response = Solve(model, config.solver_type, args);
 
         const auto result = response.value();
         termination_reason = result.termination.reason;
         duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
+        auto initialize_time = t.elapsed_milliseconds() - duration;
+        write_time_log(output_dir, "optimize_d_init", initialize_time, true);
+        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+        t.reset();
+
         // Check if the first solution is feasible/optimal
         if (termination_reason != TerminationReason::kOptimal){
             return termination_reason;
         }
-
-        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
         // Ideally we would minimize( n | d=d_min ) but we are choosing to be lazy here because it is a costly step
         d_min = round(vars.cost_d.Evaluate(result.variable_values()));
@@ -1214,16 +1339,19 @@ TerminationReason optimize_reads_with_d_plus_n(
 
     // --------------- Minimize joint model -------------------------
 
-    model.Minimize(d_norm*d_weight + n_norm*n_weight);
+    model.Minimize(d_norm*config.d_weight + n_norm*config.n_weight);
 
-    const absl::StatusOr<SolveResult> response_n_d = Solve(model, solver_type, args);
+    const absl::StatusOr<SolveResult> response_n_d = Solve(model, config.solver_type, args);
     const auto& result_n_d = response_n_d.value();
 
     // Write a log
     duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
     termination_reason = result_n_d.termination.reason;
 
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+    write_time_log(output_dir, "optimize_d_plus_n_init", initialize_time, true);
     write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
+    t.reset();
 
     // Check if the final solution is optimal
     if (termination_reason != TerminationReason::kOptimal){
@@ -1235,11 +1363,18 @@ TerminationReason optimize_reads_with_d_plus_n(
     double d = vars.cost_d.Evaluate(result_n_d.variable_values());
 
     if (integral) {
-        parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+        if (not write_solution) {
+            parse_read_model_solution(result_n_d, vars, transmap, "");
+        }
+        else {
+            parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+        }
     }
     else{
         throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
+
+    write_time_log(output_dir, "optimize_d_plus_n_parse", t, true);
 
     return termination_reason;
 }
@@ -1255,18 +1390,14 @@ TerminationReason optimize_read_feasibility(
         path output_dir,
         const SolverType& solver_type
         ){
+    Timer t;
 
     Model model;
     SolveArguments args;
     ReadVariables vars;
 
-    int64_t r_in = 0;
+    int64_t r_in = int64_t(transmap.get_read_count());
     int64_t r_out = 0;
-
-    // Count the reads before optimizing feasibility
-    transmap.for_each_read([&](const string& name, int64_t id){
-      r_in++;
-    });
 
     args.parameters.threads = n_threads;
 
@@ -1285,6 +1416,8 @@ TerminationReason optimize_read_feasibility(
     }
 
     construct_r_model(transmap, model, vars, integral);
+    write_time_log(output_dir, "feasibility_construct", t, true);
+    t.reset();
 
     model.Maximize(vars.cost_r);
 
@@ -1308,6 +1441,10 @@ TerminationReason optimize_read_feasibility(
         return result.termination.reason;
     }
 
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+    write_time_log(output_dir, "feasibility_init", initialize_time, true);
+    t.reset();
+
     // Infer the optimal r value of the feasibility solution
     r = vars.cost_r.Evaluate(result.variable_values());
 
@@ -1319,9 +1456,7 @@ TerminationReason optimize_read_feasibility(
     }
 
     // Count the remaining reads
-    transmap.for_each_read([&](const string& name, int64_t id){
-      r_out++;
-    });
+    r_out = int64_t(transmap.get_read_count());
 
     // Append log line to output file which contains the result of each optimization
     string notes = termination_reason_to_string(result.termination.reason) + ";n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=" + to_string(r_out);
@@ -1331,7 +1466,7 @@ TerminationReason optimize_read_feasibility(
 }
 
 
-TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir){
+TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
 
     TerminationReason termination_reason;
 
@@ -1339,14 +1474,14 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
     double n_max = -1;
 
     // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
-    termination_reason = optimize_read_feasibility(transmap, 1, config.solver_timeout, subdir, config.solver_type);
+    termination_reason = optimize_read_feasibility(transmap, 1, config.timeout_sec, subdir, config.solver_type);
 
     if (termination_reason != TerminationReason::kOptimal) {
         return termination_reason;
     }
 
     if (config.prune_with_d_min) {
-        termination_reason = prune_paths_with_d_min(transmap, 1, config.solver_timeout, subdir, config.solver_type, d_min, n_max);
+        termination_reason = prune_paths_with_d_min(transmap, 1, subdir, config, d_min, n_max);
     }
 
     if (termination_reason != TerminationReason::kOptimal) {
@@ -1357,17 +1492,17 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
     if (config.use_quadratic_objective) {
         // TODO: implement latest simplifications on bound-finding/normalization?
         // This solver is not realistically practical given the time it takes to run
-        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type);
+        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.timeout_sec, subdir, config.solver_type, write_solution);
     }
     else {
-        termination_reason = optimize_reads_with_d_plus_n(transmap, config.d_weight, 1, 1, config.solver_timeout, subdir, config.solver_type, true, d_min, n_max);
+        termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max, write_solution);
     }
 
     return termination_reason;
 }
 
 
-TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir) {
+TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution) {
 
     vector <pair<int64_t,int64_t> > edges_to_remove;
     TerminationReason termination_reason = TerminationReason::kOptimal;
@@ -1376,7 +1511,7 @@ TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig&
         TransMap submap;
         transmap.extract_sample_as_transmap(sample_name, submap);
 
-        termination_reason = optimize(transmap, config, subdir);
+        termination_reason = optimize(transmap, config, subdir, write_solution);
 
         // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
 

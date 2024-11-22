@@ -319,6 +319,8 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
         }
     }
 
+    unordered_map<string, unordered_set<int64_t> > deduplicated_reads;
+
     vector <tuple <int64_t,int64_t,float> > edges_to_add;
     vector <int64_t> reads_to_be_removed;
     vector<interval_t> empty_intervals;
@@ -326,8 +328,13 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
     string cigar;
     string read_sequence;
 
-    transmap.for_each_read([&](const string& read_name, int64_t id){
+    // Deduplicate by hashing strings
+    transmap.for_each_read([&](const string& read_name, int64_t id) {
         transmap.get_sequence(id, read_sequence);
+        deduplicated_reads[read_sequence].insert(id);
+    });
+
+    for (const auto& [read_sequence, read_ids]: deduplicated_reads){
         bool has_alignment = false;
 
         for (const auto& [path_name, path_sequence]: path_sequences) {
@@ -343,33 +350,42 @@ void align_reads_vs_paths(TransMap& transmap, const VariantGraph& variant_graph,
                 // Store the permil score as a rounded int, add 0.001 (1 permil) to avoid NaNs in the cost function
                 auto int_score = int64_t(round(non_match_portion*1000)) + 1;
 
-                // Avoid adding while iterating
-                edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
-                has_alignment = true;
+                // For all reads that had this identical sequence, update the transmap edges
+                for (auto id: read_ids) {
+                    // Avoid adding while iterating
+                    edges_to_add.emplace_back(id, transmap.get_id(path_name), int_score);
+                    has_alignment = true;
+                }
             }
 
             // Write out the full alignments for debugging
             if (HAPESTRY_DEBUG) {
-                string sample_name = transmap.get_sample_of_read(read_name);
-                write_alignment_debug_info(
-                        variant_graph,
-                        sample_name,
-                        read_name,
-                        path_name,
-                        path_sequence,
-                        read_sequence,
-                        cigar,
-                        path_evaluation_window,
-                        non_match_portion,
-                        output_dir
-                    );
+                for (auto id: read_ids) {
+                    auto read_name = transmap.get_node(id).name;
+
+                    string sample_name = transmap.get_sample_of_read(read_name);
+                    write_alignment_debug_info(
+                            variant_graph,
+                            sample_name,
+                            read_name,
+                            path_name,
+                            path_sequence,
+                            read_sequence,
+                            cigar,
+                            path_evaluation_window,
+                            non_match_portion,
+                            output_dir
+                        );
+                }
             }
         }
 
         if (not has_alignment) {
-            reads_to_be_removed.emplace_back(id);;
+            for (auto id: read_ids){
+                reads_to_be_removed.emplace_back(id);;
+            }
         }
-    });
+    }
 
     for (auto [a,b,score]: edges_to_add){
         transmap.add_edge(a,b,score);
@@ -963,10 +979,6 @@ void write_sample_path_divergence(VariantGraph& variant_graph, const TransMap& t
 }
 
 
-/**
- * @param min_sv_length only variants that affect at least this number of basepairs are associated with edges of the
- * graph.
- */
 void merge_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
@@ -975,13 +987,17 @@ void merge_thread_fn(
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
         const path& output_dir,
-        int32_t min_sv_length,
-        int32_t flank_length,
-        size_t graphaligner_timeout,
-        const OptimizerConfig& config,
-        bool write_hap_vcf,
+        const HapestryConfig& hapestry_config,
+        const OptimizerConfig& opt_config,
         atomic<size_t>& job_index
 ) {
+    // For brevity unpack some of these vars
+    auto flank_length = hapestry_config.flank_length;
+    auto min_sv_length = hapestry_config.min_sv_length;
+    auto graphaligner_timeout = hapestry_config.graphaligner_timeout;
+
+    Timer t;
+    Timer t_total;
 
     // TODO: make this a parameter
     int64_t min_path_coverage = 1;
@@ -1002,6 +1018,9 @@ void merge_thread_fn(
 
     // Thread jobs are regions
     while (i < regions.size()) {
+        t.reset();
+        t_total.reset();
+
         const auto &region = regions.at(i);
         auto& transmap = region_transmaps.at(region);
 
@@ -1014,6 +1033,7 @@ void merge_thread_fn(
         path gfa_path = subdir / "graph.gfa";
         path fasta_filename = subdir / "sequences.fasta";
 
+        t.reset();
         VariantGraph variant_graph(ref_sequences, contig_tandems, min_sv_length);
 
         // Check if the region actually contains any usable variants, and use corresponding build() functions
@@ -1024,26 +1044,29 @@ void merge_thread_fn(
             // VariantGraph assumes that the flank length needs to be added to the region
             variant_graph.build(region.name, region.start + flank_length, region.stop - flank_length, flank_length);
         }
+        write_time_log(subdir, "variant_graph", t, true);
 
         cerr << "WRITING GFA to file: " << gfa_path << '\n';
         variant_graph.to_gfa(gfa_path);
 
         // Write a simple csv for viewing in Bandage
-        path nodes_csv = subdir / "nodes.csv";
+        if (not hapestry_config.skip_nonessential_logs){
+            path nodes_csv = subdir / "nodes.csv";
 
-        ofstream nodes_file(nodes_csv);
+            ofstream nodes_file(nodes_csv);
 
-        nodes_file << "name,is_ref,color\n";
-        variant_graph.graph.for_each_handle([&](const handle_t& h){
-            nid_t id = variant_graph.graph.get_id(h);
-            bool is_ref = variant_graph.is_reference_node(id);
+            nodes_file << "name,is_ref,color\n";
+            variant_graph.graph.for_each_handle([&](const handle_t& h){
+                nid_t id = variant_graph.graph.get_id(h);
+                bool is_ref = variant_graph.is_reference_node(id);
 
-            string color = is_ref ? "#6495ED" : "#BEBEBE";
+                string color = is_ref ? "#6495ED" : "#BEBEBE";
 
-            nodes_file << id << ',' << is_ref << ',' << color << '\n';
-        });
+                nodes_file << id << ',' << is_ref << ',' << color << '\n';
+            });
 
-        nodes_file.close();
+            nodes_file.close();
+        }
 
         path gaf_path = subdir / "alignments.gaf";
 
@@ -1063,11 +1086,9 @@ void merge_thread_fn(
                          " -f " + fasta_path.string();
 
         // Run GraphAligner and check how long it takes, if it times out
-        Timer t;
         bool success = run_command(command, false, float(graphaligner_timeout));
-        string time_csv = t.to_csv();
 
-        write_time_log(subdir, "graphaligner", time_csv, success);
+        write_time_log(subdir, "graphaligner", t, success);
 
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
@@ -1094,36 +1115,39 @@ void merge_thread_fn(
         t.reset();
 
         // Align all reads to all candidate paths and update transmap
-        align_reads_vs_paths(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
-        time_csv = t.to_csv();
+        align_reads_vs_paths(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
-        write_time_log(subdir, "align_reads_to_paths", time_csv, true);
+        write_time_log(subdir, "align_reads_to_paths", t, true);
 
-        // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
-        path output_csv = subdir / "reads_to_paths.csv";
-        transmap.write_edge_info_to_csv(output_csv, variant_graph);
-
-        if (config.rescale_weights) {
-            // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
-            rescale_weights_as_quadratic_best_diff(transmap, 0, 2000);
+        if (not hapestry_config.skip_nonessential_logs){
+            // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
+            path output_csv = subdir / "reads_to_paths.csv";
+            transmap.write_edge_info_to_csv(output_csv, variant_graph);
         }
 
-        if (not config.skip_solve){
+        if (opt_config.rescale_weights) {
+            t.reset();
+            // Rescale the edge weights for each read as a quadratic function of the difference from the best weight
+            rescale_weights_as_quadratic_best_diff(transmap, 0, 2000);
+            write_time_log(subdir, "rescale_weights", t, true);
+        }
+
+        if (not opt_config.skip_solve){
             try {
                 TerminationReason termination_reason;
 
-                if (config.samplewise) {
+                if (opt_config.samplewise) {
                     // Split out all the paths per sample so that every sample is an independent connected component
                     unordered_map<string,string> hapmap;
                     transmap.detangle_sample_paths(hapmap);
 
-                    termination_reason = optimize(transmap, config, subdir);
+                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
 
                     // Reverse the detangling step
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, config, subdir);
+                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
                 }
 
                 // Handle timeout case (do nothing)
@@ -1179,7 +1203,7 @@ void merge_thread_fn(
 
                     output_path = subdir / "solution_haps.vcf";
 
-                    if (write_hap_vcf) {
+                    if (hapestry_config.write_hap_vcf) {
                         write_solution_as_hap_vcf(
                             variant_graph,
                             transmap,
@@ -1200,11 +1224,13 @@ void merge_thread_fn(
 
         if (HAPESTRY_DEBUG){
             write_sample_path_divergence(variant_graph, transmap, subdir);
-            align_read_path_edges_of_transmap(transmap, variant_graph, config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
+            align_read_path_edges_of_transmap(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
         }
 
         // Attempt to manually deallocate transmap for this region
         transmap = {};
+
+        write_time_log(subdir, "window_total", t_total, true);
 
         i = job_index.fetch_add(1);
     }
@@ -1223,14 +1249,12 @@ void merge_variants(
         const vector<Region>& regions,
         const path& vcf,
         size_t n_threads,
-        int32_t flank_length,
-        int32_t interval_max_length,
-        int32_t min_sv_length,
-        size_t graphaligner_timeout,
+        const HapestryConfig& config,
         const OptimizerConfig& optimizer_config,
-        bool write_hap_vcf,
-        const path& output_dir
+        const path& output_dir,
+        Timer& t
 ){
+    cerr << t << "Loading VCF records into windows" << '\n';
 
     unordered_map<Region,vector<VcfRecord> > region_records;
     region_records.reserve(regions.size());
@@ -1261,12 +1285,12 @@ void merge_variants(
 
         // For each overlapping region, put the VcfRecord in that region
         result->second.overlap_find_all({record_coord.first, record_coord.second}, [&](auto iter){
-            coord_t unflanked_window = {iter->low() + flank_length, iter->high() - flank_length};
+            coord_t unflanked_window = {iter->low() + config.flank_length, iter->high() - config.flank_length};
 
             // Skip large events in the population
             // TODO: address these as breakpoints in the VariantGraph and avoid constructing windows as intervals
             // for very large events
-            if (record_coord.second - record_coord.first > interval_max_length){
+            if (record_coord.second - record_coord.first > config.interval_max_length){
                 return true;
             }
 
@@ -1289,6 +1313,9 @@ void merge_variants(
         }
     }
 
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+    cerr << t << "Launching threads for graph alignment and optimization: " << vcf << '\n';
+
     // Convert VCFs to graphs and run graph aligner and build/solve the model for each region
     {
         // Thread-related variables
@@ -1302,19 +1329,16 @@ void merge_variants(
             try {
                 cerr << "launching: " << n << '\n';
                 threads.emplace_back(merge_thread_fn,
-                                     std::ref(region_records),
-                                     std::cref(contig_tandems),
-                                     std::ref(region_transmaps),
-                                     std::cref(ref_sequences),
-                                     std::cref(regions),
-                                     std::cref(vcf_reader),
-                                     std::cref(output_dir),
-                                     min_sv_length,  // Only SVs are associated with graph edges
-                                     flank_length,
-                                     graphaligner_timeout,
-                                     optimizer_config,
-                                     write_hap_vcf,
-                                     std::ref(job_index)
+                     std::ref(region_records),
+                     std::cref(contig_tandems),
+                     std::ref(region_transmaps),
+                     std::cref(ref_sequences),
+                     std::cref(regions),
+                     std::cref(vcf_reader),
+                     std::cref(output_dir),
+                     std::cref(config),
+                     std::cref(optimizer_config),
+                     std::ref(job_index)
                 );
             } catch (const exception &e) {
                 throw e;
@@ -1380,8 +1404,15 @@ void concatenate_output_vcfs(
     path fail_regions_bed_path = output_dir / ("windows_" + fail_log_suffix + ".bed");
     ofstream fail_regions_file(fail_regions_bed_path);
 
+    path fail_regions_flanked_bed_path = output_dir / ("windows_" + fail_log_suffix + "_flanked.bed");
+    ofstream fail_regions_flanked_file(fail_regions_flanked_bed_path);
+
     if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
         throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
+    }
+
+    if (not (fail_regions_flanked_file.is_open() and fail_regions_flanked_file.good())) {
+        throw runtime_error("ERROR: could not write file: " + fail_regions_flanked_bed_path.string());
     }
 
     // Copy over the mutable parts of the header and then the main contents of the filtered VCF
@@ -1393,7 +1424,8 @@ void concatenate_output_vcfs(
         // Skip if the file does not exist
         if (not exists(sub_vcf)){
             // Log that this region did not contain any solution
-            fail_regions_file << region.to_bed() << '\n';
+            fail_regions_file << region.to_unflanked_string('\t',flank_length) << '\n';
+            fail_regions_flanked_file << region.to_bed() << '\n';
             continue;
         }
 
@@ -1414,15 +1446,9 @@ void hapestry(
         path tandem_bed,
         path bam_csv,
         path ref_fasta,
-        int32_t flank_length,
-        int32_t interval_max_length,
-        int32_t min_sv_length,
         int32_t n_threads,
-        size_t graphaligner_timeout,
-        const OptimizerConfig& optimizer_config,
-        bool force_unique_reads,
-        bool bam_not_hardclipped,
-        bool write_hap_vcf
+        const HapestryConfig& hapestry_config,
+        const OptimizerConfig& optimizer_config
 ){
     Timer t;
 
@@ -1467,7 +1493,7 @@ void hapestry(
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
         path bed_log_path = output_dir / "windows_omitted.bed";
-        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, flank_length, interval_max_length, min_sv_length, regions, bed_log_path, false);
+        construct_windows_from_vcf_and_bed(ref_sequences, contig_tandems, {vcf}, hapestry_config.flank_length, hapestry_config.interval_max_length, hapestry_config.min_sv_length, regions, bed_log_path, false);
     }
     else {
         cerr << t << "Reading BED file" << '\n';
@@ -1491,8 +1517,8 @@ void hapestry(
         for (auto& r: regions) {
             output_bed_file << r.to_bed() << '\n';
 
-            r.start -= flank_length;
-            r.stop += flank_length;
+            r.start -= hapestry_config.flank_length;
+            r.stop += hapestry_config.flank_length;
 
             contig_interval_trees[r.name].insert({r.start, r.stop});
             output_bed_flanked_file << r.to_bed() << '\n';
@@ -1520,9 +1546,9 @@ void hapestry(
         // The container to store all fetched reads and their relationships to samples/paths
         unordered_map<Region,TransMap> region_transmaps;
 
-        auto max_length = size_t(float(interval_max_length) * 2.5);
+        auto max_length = size_t(float(hapestry_config.interval_max_length) * 2.5);
 
-        if (bam_not_hardclipped){
+        if (hapestry_config.bam_not_hardclipped){
             cerr << "Fetching from NON-hardclipped BAMs" << '\n';
             fetch_reads(
                     t,
@@ -1531,10 +1557,10 @@ void hapestry(
                     n_threads,
                     region_transmaps,
                     true,
-                    force_unique_reads,
+                    hapestry_config.force_unique_reads,
                     true,
                     false,
-                    flank_length
+                    hapestry_config.flank_length
             );
         }
         else{
@@ -1545,14 +1571,14 @@ void hapestry(
                     bam_csv,
                     n_threads,
                     max_length,
-                    flank_length,
+                    hapestry_config.flank_length,
                     region_transmaps,
                     true,
                     false,
                     false,
-                    force_unique_reads,
+                    hapestry_config.force_unique_reads,
                     true,
-                    flank_length
+                    hapestry_config.flank_length
             );
         }
 
@@ -1579,7 +1605,7 @@ void hapestry(
                                          std::cref(regions),
                                          std::cref(staging_dir),
                                          std::cref(fasta_filename),
-                                         flank_length,
+                                         hapestry_config.flank_length,
                                          true,
                                          std::ref(job_index)
                     );
@@ -1597,7 +1623,6 @@ void hapestry(
 
         // Generate GFAs/GAFs/CSVs and folder structure for every VCF * every region
         // TODO: create option to use /dev/shm/ as staging dir. Absolutely must delete the /dev/shm/ copy or warn the user at termination
-        cerr << t << "Launching threads for graph alignment and optimization: " << vcf << '\n';
 
         merge_variants(
                 contig_interval_trees,
@@ -1607,26 +1632,23 @@ void hapestry(
                 regions,
                 vcf,
                 n_threads,
-                flank_length,
-                interval_max_length,
-                min_sv_length,
-                graphaligner_timeout,
+                hapestry_config,
                 optimizer_config,
-                write_hap_vcf,
-                staging_dir
+                staging_dir,
+                t
         );
 
         auto vcf_prefix = get_vcf_name_prefix(vcf);
         path out_vcf = output_dir / ("merged.vcf");
 
         cerr << t << "Writing output VCF: " << out_vcf << '\n';
-        concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, flank_length);
+        concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, hapestry_config.flank_length);
 
         // Additionally write a window-length haplotype substitution VCF if the user requested one
-        if (write_hap_vcf) {
+        if (hapestry_config.write_hap_vcf) {
             out_vcf = output_dir / ("merged_hap.vcf");
             cerr << t << "Writing output VCF: " << out_vcf << '\n';
-            concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, flank_length, "failed_haps", "solution_haps");
+            concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, hapestry_config.flank_length, "failed_haps", "solution_haps");
         }
     }
     else{
@@ -1645,15 +1667,9 @@ int main (int argc, char* argv[]){
     string bam_csv;
     path ref_fasta;
     path vcf;
-    int32_t flank_length = 150;
-    int32_t interval_max_length = 15000;
-    int32_t min_sv_length = 20;
     int32_t n_threads = 1;
-    size_t graphaligner_timeout = 90;
     OptimizerConfig optimizer_config;
-    bool force_unique_reads = false;
-    bool bam_not_hardclipped = false;
-    bool write_hap_vcf = false;
+    HapestryConfig hapestry_config;
     bool use_gurobi = false;
 
     CLI::App app{"App description"};
@@ -1698,30 +1714,30 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--flank_length",
-            flank_length,
+            hapestry_config.flank_length,
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
     app.add_option(
             "--interval_max_length",
-            interval_max_length,
+            hapestry_config.interval_max_length,
             "How long a window can be in bp before it is skipped")
             ->required();
 
     app.add_option(
             "--min_sv_length",
-            min_sv_length,
+            hapestry_config.min_sv_length,
             "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output.")
             ->required();
 
     app.add_option(
             "--graphaligner_timeout",
-            graphaligner_timeout,
+            hapestry_config.graphaligner_timeout,
             "Abort graphaligner after this many seconds, and do not compute the remaining steps for that window");
 
     app.add_option(
             "--solver_timeout",
-            optimizer_config.solver_timeout,
+            optimizer_config.timeout_sec,
             "Abort the optimizer after this many seconds, use 0 for no limit");
 
     app.add_option(
@@ -1743,13 +1759,17 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
-    app.add_flag("--use_gurobi", use_gurobi, "Invoke this to add more logging and output");
+    app.add_flag("--use_gurobi", use_gurobi, "Invoke this to use Gurobi instead of SCIP. License must be in conventional location.");
 
-    app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
+    app.add_flag("!--no_sum_constraints", optimizer_config.use_sum_constraints, "Invoke this to use independent implications instead of sum constraints for at-most-one indicators");
 
-    app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
+    app.add_flag("--force_unique_reads", hapestry_config.force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
-    app.add_flag("--write_hap_vcf", write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
+    app.add_flag("--skip_nonessential_logs", hapestry_config.skip_nonessential_logs, "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv");
+
+    app.add_flag("--bam_not_hardclipped", hapestry_config.bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");
+
+    app.add_flag("--write_hap_vcf", hapestry_config.write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
 
     app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
 
@@ -1778,15 +1798,9 @@ int main (int argc, char* argv[]){
             tandem_bed,
             bam_csv,
             ref_fasta,
-            flank_length,
-            interval_max_length,
-            min_sv_length,
             n_threads,
-            graphaligner_timeout,
-            optimizer_config,
-            force_unique_reads,
-            bam_not_hardclipped,
-            write_hap_vcf
+            hapestry_config,
+            optimizer_config
     );
 
     return 0;

@@ -42,13 +42,15 @@ class OptimizerConfig {
 public:
         OptimizerConfig() = default;
 
-        size_t solver_timeout = 30*60;
+        size_t timeout_sec = 30*60;
         float min_read_hap_identity = 0.5;
         float d_weight = 1.0;
+        float n_weight = 1.0;
         bool skip_solve = false;
         bool rescale_weights = false;
         bool use_quadratic_objective = false;
         bool use_golden_search = false;
+        bool use_sum_constraints = true;
         bool samplewise = false;
         bool prune_with_d_min = false;
         bool use_ploidy_constraint = true;
@@ -124,32 +126,28 @@ TerminationReason optimize_reads_with_d_and_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint = true
+        bool use_ploidy_constraint = true,
+        bool write_solution = false
         );
 
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
-        double d_weight,
-        double n_weight,
         size_t n_threads,
-        size_t time_limit_seconds,
         path output_dir,
-        const SolverType& solver_type,
-        bool use_ploidy_constraint = true,
+        const OptimizerConfig& config,
         double d_min = -1,
-        double n_max = -1
+        double n_max = -1,
+        bool write_solution = false
         );
 
 TerminationReason prune_paths_with_d_min(
         TransMap& transmap,
         size_t n_threads,
-        size_t time_limit_seconds,
         path output_dir,
-        const SolverType& solver_type,
+        const OptimizerConfig& config,
         double& d_min_result,
-        double& n_max_result,
-        bool use_ploidy_constraint = true
-        );
+        double& n_max_result
+);
 
 void optimize_reads_with_d_and_n_using_golden_search(
         TransMap& transmap,
@@ -169,9 +167,9 @@ TerminationReason optimize_read_feasibility(
         const SolverType& solver_type
 );
 
-TerminationReason optimize(TransMap& transmap,const OptimizerConfig& config,path subdir);
+TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
-TerminationReason optimize_samplewise(TransMap& transmap,const OptimizerConfig& config,path subdir);
+TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
 void rescale_weights_as_quadratic_best_diff(TransMap& transmap, float domain_min, float domain_max);
 

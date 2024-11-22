@@ -1,5 +1,7 @@
 #pragma once
+
 #include "Region.hpp"
+#include "Timer.hpp"
 #include <unordered_set>
 #include <set>
 #include <utility>
@@ -24,6 +26,22 @@ using std::filesystem::path;
 
 namespace sv_merge{
 
+
+class HapestryConfig {
+public:
+    HapestryConfig() = default;
+
+    int32_t flank_length = 150;
+    int32_t interval_max_length = 15000;
+    int32_t min_sv_length = 20;
+    size_t graphaligner_timeout = 90;
+    bool force_unique_reads = false;
+    bool bam_not_hardclipped = false;
+    bool write_hap_vcf = false;
+    bool skip_nonessential_logs = false;
+};
+
+
 using coord_t = pair<int32_t,int32_t>;
 
 using named_coord_t = pair <string, coord_t>;
@@ -40,7 +58,11 @@ inline std::string& rtrim(std::string& s, const char* t = " \t\n\r\f\v");
 
 inline std::string& trim(std::string& s, const char* t = " \t\n\r\f\v");
 
-void write_time_log(path output_dir, const string& name, const string& time_csv, bool success, const string& notes = "NA");
+void write_time_log(const path& output_dir, const string& name, const string& time_csv, bool success, const string& notes = "NA");
+
+void write_time_log(const path& output_dir, const string& name, const Timer& timer, bool success, const string& notes = "NA");
+
+void write_time_log(const path& output_dir, const string& name, const milliseconds& duration, bool success, const string& notes = "NA");
 
 void run_command(string& command, string& result, bool trim_result=true);
 
