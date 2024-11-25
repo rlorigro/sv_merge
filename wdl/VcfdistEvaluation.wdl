@@ -122,6 +122,7 @@ workflow VcfdistEvaluation {
 task SubsetSampleFromVcf {
     input {
         File vcf
+        File? vcf_tbi
         String sample
         String region
         File reference_fasta_fai
@@ -132,15 +133,26 @@ task SubsetSampleFromVcf {
     command <<<
         set -euxo pipefail
 
-        bcftools index ~{vcf}
+        if ~{!defined(vcf_tbi)}; then
+            bcftools index --threads 4 ~{vcf}
+        fi
+
         bcftools view ~{vcf} \
+            -r ~{region} \
+            --threads 4 \
+            -Oz -o region.vcf.gz
+
+        bcftools view region.vcf.gz \
+            --threads 4 \
             -s ~{sample} \
             -r ~{region} \
             -Oz -o ~{sample}.subset.g.vcf.gz
+
         bcftools reheader ~{sample}.subset.g.vcf.gz \
             --fai ~{reference_fasta_fai} \
             -o ~{sample}.subset.reheadered.g.vcf.gz
-        bcftools index -t ~{sample}.subset.reheadered.g.vcf.gz
+
+        bcftools index --threads 4 -t ~{sample}.subset.reheadered.g.vcf.gz
     >>>
     
     output {
@@ -149,13 +161,13 @@ task SubsetSampleFromVcf {
     }
 
     runtime {
-        cpu: 1
+        cpu: 4
         memory: "64 GiB"
-        disks: "local-disk " + disk_size + " HDD"
+        disks: "local-disk " + disk_size + " SSD"
         bootDiskSizeGb: 10
         preemptible: 0
         maxRetries: 1
-        docker: "us.gcr.io/broad-dsp-lrma/lr-basic:0.1.1"
+        docker: "staphb/bcftools:1.20"
     }
 }
 
