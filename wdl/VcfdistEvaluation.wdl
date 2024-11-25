@@ -53,7 +53,9 @@ workflow VcfdistEvaluation {
     input {
         Array[String] samples
         File truth_vcf
+        File? truth_vcf_tbi
         File eval_vcf
+        File? eval_vcf_tbi
         String region
         File reference_fasta
         File reference_fasta_fai
@@ -73,6 +75,7 @@ workflow VcfdistEvaluation {
 
         call SubsetSampleFromVcf as SubsetSampleFromVcfEval { input:
             vcf = clean.output_vcf_gz,
+            vcf_tbi = clean.output_vcf_tbi,
             sample = sample,
             region = region,
             reference_fasta_fai = reference_fasta_fai
@@ -80,6 +83,7 @@ workflow VcfdistEvaluation {
 
         call SubsetSampleFromVcf as SubsetSampleFromVcfTruth { input:
             vcf = truth_vcf,
+            vcf_tbi = truth_vcf_tbi,
             sample = sample,
             region = region,
             reference_fasta_fai = reference_fasta_fai
