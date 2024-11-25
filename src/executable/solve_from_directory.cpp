@@ -181,7 +181,8 @@ size_t solve_from_csv(
     else optimize(transmap, solver_type, 1, use_ploidy_constraint, output_dir/tokens.substr(p+1,q-p-1));
     if (compress_transmap) {
         cerr << "Decompressing the transmap... ";
-        transmap.decompress_samples();
+        vector<bool> used;
+        transmap.decompress_samples(used);
         cerr << "done\n";
     }
 

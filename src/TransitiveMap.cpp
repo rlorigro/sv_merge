@@ -793,11 +793,10 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
  */
 void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     const int64_t n_reads = get_n_reads();
-    int64_t n_samples = get_n_samples();
 
     bool contained, trivial;
     size_t length;
-    int64_t i, j, k, h;
+    int64_t i, j, k;
     int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id, container_id;
     int64_t contained_first, contained_last, container_first, container_last;
     vector<bool> used;
@@ -891,7 +890,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     }
     cerr << "Removed " << to_string(sample_to_identical_sample.size()) << " identical samples\n";
 
-    // Removing contained samples where every read can be assigned to just one hap
+    // Removing contained samples where every read can be assigned to only one hap
     i=0;
     while (i<n_reads) {
         sample_id=sample_ids.at(i);
@@ -925,8 +924,8 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             }
             if (contained) {
                 to_remove.emplace_back(sample_id);
-                for (k=j; k<next_j; k++) to_remove.emplace_back(read_ids.at(k));
-                sample_to_container_sample.emplace(sample_id,std::make_tuple(s_id,i,next_i,j,next_j));
+                for (k=i; k<next_i; k++) to_remove.emplace_back(read_ids.at(k));
+                sample_to_container_sample.emplace(sample_id,std::make_tuple(s_id,i,next_i-1,j,next_j-1));
                 containers.emplace(s_id);
                 break;
             }
@@ -985,7 +984,7 @@ void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_
     for (i=from_first; i<=from_last; i++) {
         cluster_id=cluster_ids.at(i);
         for (j=to_first; j<=to_last; j++) {
-            if (used.at(j-to_first) || cluster_ids.at(i)!=cluster_id) continue;
+            if (used.at(j-to_first) || cluster_ids.at(j)!=cluster_id) continue;
             used.at(j-to_first)=true;
             for (k=0; k<weights.at(i).size(); k++) weights.at(j).at(k)+=weights.at(i).at(k);
             break;
@@ -1013,7 +1012,7 @@ void TransMap::decompress_samples(vector<bool>& used) {
         for (i=from_first; i<=from_last; i++) {
             cluster_id=cluster_ids.at(i);
             for (j=to_first; j<=to_last; j++) {
-                if (used.at(j-to_first) || cluster_ids.at(i)!=cluster_id) continue;
+                if (used.at(j-to_first) || cluster_ids.at(j)!=cluster_id) continue;
                 used.at(j-to_first)=true;
                 add_edge(sample_id,read_ids.at(j),0);  // Updates both sides of the edge
                 break;

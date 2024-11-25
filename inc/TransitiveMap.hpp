@@ -184,7 +184,7 @@ public:
      * Remark: there could be multiple haplotypes per sample, even though every read in the sample is assigned to
      * exactly one haplotype.
      *
-     * Remark: the procedure sets object variable `sample_to_sample`.
+     * Remark: the procedure sets object variables `sample_to_sample, read_ids, cluster_ids`.
      *
      * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
      * order that is the same for every node.
