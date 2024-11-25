@@ -45,7 +45,9 @@ class TransMap {
     /**
      * Data structures used by compression/decompression procedures.
      */
-    unordered_map<string,pair<int64_t,int64_t>> sample_to_sample;
+    vector<int64_t> read_ids, cluster_ids;
+    unordered_map<string,tuple<int64_t,int64_t,int64_t,int64_t>> sample_to_sample;  // from_sample_name -> from_sample_first, from_sample_last, to_sample_first, to_sample_last
+
 
 public:
     TransMap();
@@ -179,8 +181,10 @@ public:
      * injection between equivalent reads: every contained sample such that all its reads have only one assignment is
      * collapsed into a container sample.
      *
-     * Remark: the procedure sets object variables `sample_to_identical_sample, sample_to_container_sample,
-     * node_to_cluster`.
+     * Remark: there could be multiple haplotypes per sample, even though every read in the sample is assigned to
+     * exactly one haplotype.
+     *
+     * Remark: the procedure sets object variable `sample_to_sample`.
      *
      * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
      * order that is the same for every node.
@@ -190,16 +194,24 @@ public:
     /**
      * Adds every weight of every record in `weights[from_first..from_last]` to a distinct record in
      * `weights[to_first..to_last]` with the same cluster ID.
+     *
+     * @param cluster_ids one cluster ID per read;
+     * @param weights one array of neighbor weights per read;
+     * @param used temporary space.
      */
-    static void compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, const vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used);
+    void compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<vector<float>>& weights, vector<bool>& used);
 
     /**
-     * Reintroduces a node for every compressed sample using object variable `sample_to_sample`. The rest of the graph
-     * remains compressed.
+     * Reintroduces a node for every compressed sample using object variables `sample_to_sample, read_ids, cluster_ids`.
      *
-     * Remark: this procedure can be called only once, since `sample_to_sample` is cleared by it.
+     * Remark: decompressed samples are connected to reads of the remaining samples, so the transmap after decompression
+     * breaks the assumption that every read is connected to exactly one sample.
+     *
+     * Remark: this procedure can be called only once, since all object variables it uses are cleared by it.
+     *
+     * @param used temporary space.
      */
-    void decompress_samples();
+    void decompress_samples(vector<bool>& used);
 
     bool are_edges_distinct() const;
 };

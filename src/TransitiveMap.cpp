@@ -798,10 +798,11 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     bool contained, trivial;
     size_t length;
     int64_t i, j, k, h;
-    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id, contained_id, container_id;
+    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id, container_id;
     int64_t contained_first, contained_last, container_first, container_last;
     vector<bool> used;
-    vector<int64_t> node_ids, cluster_ids, cluster_size, cluster_size_prime, to_remove, sample_ids, to_update;
+    vector<int64_t> cluster_size, cluster_size_prime, to_remove, sample_ids, to_update;
+    set<int64_t> containers;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights;
     unordered_map<int64_t,tuple<int64_t,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
@@ -818,11 +819,11 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         compared_weights.reserve(n_reads);
         for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     }
-    node_ids.reserve(n_reads); sample_ids.reserve(n_reads);
+    read_ids.clear(); read_ids.reserve(n_reads); sample_ids.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
-            node_ids.emplace_back(read_id); sample_ids.emplace_back(get_id(sample_name));
+            read_ids.emplace_back(read_id); sample_ids.emplace_back(get_id(sample_name));
             i++;
             graph.for_each_neighbor_of_type(read_id, 'P', [&](int64_t path_id) {
                 // For each read, its neighbors lie in the same global order.
@@ -835,14 +836,14 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     });
 
     // Finding equivalent reads across all samples
-    cluster_ids.reserve(n_reads);
+    cluster_ids.clear(); cluster_ids.reserve(n_reads);
     for (i=0; i<n_reads; i++) cluster_ids.emplace_back(0);
     n_clusters=0;
     for (i=0; i<n_reads; i++) {
         if (cluster_ids.at(i)!=0) continue;
         n_clusters++;
         cluster_ids.at(i)=n_clusters;
-        read_id=node_ids.at(i);
+        read_id=read_ids.at(i);
         for (j=i+1; j<n_reads; j++) {
             if (cluster_ids.at(j)!=0 || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
             cluster_ids.at(j)=n_clusters;
@@ -857,7 +858,6 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     for (i=0; i<n_clusters; i++) cluster_size_prime.emplace_back(0);
 
     // Removing identical samples
-    sample_to_identical_sample.clear();
     i=0;
     while (i<n_reads) {
         sample_id=sample_ids.at(i);
@@ -882,7 +882,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             for (k=j; k<next_j; k++) cluster_size_prime.at(cluster_ids.at(k)-1)++;
             if (cluster_size_prime==cluster_size) {
                 to_remove.emplace_back(s_id);
-                for_each_read_of_sample(s_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
+                for (k=j; k<next_j; k++) to_remove.emplace_back(read_ids.at(k));
                 sample_to_identical_sample.emplace(s_id,std::make_tuple(sample_id,j,next_j-1,i,next_i-1));
             }
             j=next_j;
@@ -891,8 +891,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     }
     cerr << "Removed " << to_string(sample_to_identical_sample.size()) << " identical samples\n";
 
-    // Removing contained samples with a single hap available
-    sample_to_container_sample.clear();
+    // Removing contained samples where every read can be assigned to just one hap
     i=0;
     while (i<n_reads) {
         sample_id=sample_ids.at(i);
@@ -926,8 +925,9 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
             }
             if (contained) {
                 to_remove.emplace_back(sample_id);
-                for_each_read_of_sample(sample_id, [&](int64_t read_id) { to_remove.emplace_back(read_id); });
+                for (k=j; k<next_j; k++) to_remove.emplace_back(read_ids.at(k));
                 sample_to_container_sample.emplace(sample_id,std::make_tuple(s_id,i,next_i,j,next_j));
+                containers.emplace(s_id);
                 break;
             }
             j=next_j;
@@ -936,63 +936,47 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     }
     cerr << "Removed " << to_string(sample_to_container_sample.size()) << " contained samples with trivial haplotypes\n";
 
-    // Updating weights along the containment forest
-    for (auto& pair: sample_to_identical_sample) compress_samples_update_weights(std::get<1>(pair.second),std::get<2>(pair.second),std::get<3>(pair.second),std::get<4>(pair.second),cluster_ids,weights,used);
-    for (auto& pair: sample_to_container_sample) {
-        contained_id=pair.first;
-        auto& t = sample_to_container_sample.at(contained_id);
-        container_id=std::get<0>(t);
-        contained_first=std::get<1>(t); contained_last=std::get<2>(t);
-        container_first=std::get<3>(t); container_last=std::get<4>(t);
-        while (true) {
-            compress_samples_update_weights(contained_first,contained_last,container_first,container_last,cluster_ids,weights,used);
-            if (!sample_to_container_sample.contains(container_id)) break;
-            t=sample_to_container_sample.at(container_id);
-            contained_id=container_id;
-            container_id=std::get<0>(t);
-            contained_first=std::get<1>(t); contained_last=std::get<2>(t);
-            container_first=std::get<3>(t); container_last=std::get<4>(t);
-        }
-    }
-
-    // Updating the transmap
-    for (i=0; i<n_reads; i++) {
-        if (sample_to_identical_sample.contains(sample_ids.at(i)) || sample_to_container_sample.contains(sample_ids.at(i))) continue;
-        read_id=node_ids.at(i);
-        length=neighbors.at(i).size();
-        for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),weights.at(i).at(j));
-    }
-    weights.clear(); neighbors.clear();
-    for (auto node_id: to_remove) remove_node(node_id);
-
-    // Preparing decompression data structures
+    // Preparing data structures for decompression
     sample_to_sample.clear();
     for (auto& pair: sample_to_identical_sample) {
         auto& t = sample_to_identical_sample.at(pair.first);
         container_id=std::get<0>(t);
-        length=std::get<2>(t)+1-std::get<1>(t);
-        while (true) {
-            if (!sample_to_container_sample.contains(container_id)) break;
+        contained_first=std::get<1>(t); contained_last=std::get<2>(t);
+        container_first=std::get<3>(t); container_last=std::get<4>(t);
+        while (sample_to_container_sample.contains(container_id)) {
             t=sample_to_container_sample.at(container_id);
-            container_id=std::get<0>(t);
+            container_id=std::get<0>(sample_to_container_sample.at(container_id));
+            container_first=std::get<3>(t); container_last=std::get<4>(t);
         }
-        sample_to_sample.emplace(get_node(pair.first).name,std::make_pair(container_id,length));
+        sample_to_sample.emplace(get_node(pair.first).name,std::make_tuple(contained_first,contained_last,container_first,container_last));
     }
     for (auto& pair: sample_to_container_sample) {
         auto& t = sample_to_container_sample.at(pair.first);
         container_id=std::get<0>(t);
-        length=std::get<2>(t)+1-std::get<1>(t);
-        while (true) {
-            if (!sample_to_container_sample.contains(container_id)) break;
+        contained_first=std::get<1>(t); contained_last=std::get<2>(t);
+        container_first=std::get<3>(t); container_last=std::get<4>(t);
+        while (sample_to_container_sample.contains(container_id)) {
             t=sample_to_container_sample.at(container_id);
-            container_id=std::get<0>(t);
+            container_id=std::get<0>(sample_to_container_sample.at(container_id));
+            container_first=std::get<3>(t); container_last=std::get<4>(t);
         }
-        sample_to_sample.emplace(get_node(pair.first).name,std::make_pair(container_id,length));
+        sample_to_sample.emplace(get_node(pair.first).name,std::make_tuple(contained_first,contained_last,container_first,container_last));
     }
+
+    // Updating the transmap
+    for (auto& pair: sample_to_sample) compress_samples_update_weights(std::get<0>(pair.second),std::get<1>(pair.second),std::get<2>(pair.second),std::get<3>(pair.second),weights,used);
+    for (i=0; i<n_reads; i++) {
+        sample_id=sample_ids.at(i);
+        if (sample_to_identical_sample.contains(sample_id) || sample_to_container_sample.contains(sample_id)) continue;
+        read_id=read_ids.at(i);
+        length=neighbors.at(i).size();
+        for (j=0; j<length; j++) graph.update_edge_weight(read_id,neighbors.at(i).at(j),weights.at(i).at(j));
+    }
+    for (auto node_id: to_remove) remove_node(node_id);
 }
 
 
-void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, const vector<int64_t>& cluster_ids, vector<vector<float>>& weights, vector<bool>& used) {
+void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<vector<float>>& weights, vector<bool>& used) {
     int64_t i, j, k;
     int64_t cluster_id;
 
@@ -1010,23 +994,33 @@ void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_
 }
 
 
-void TransMap::decompress_samples() {
-    int64_t sample_id, length;
+/**
+ * Essentially the same as `compress_samples_update_weights()`.
+ */
+void TransMap::decompress_samples(vector<bool>& used) {
+    int64_t i, j;
+    int64_t cluster_id, sample_id, from_first, from_last, to_first, to_last;
     string sample_name;
 
     for (auto& pair: sample_to_sample) {
         sample_name=pair.first;
         add_sample(sample_name);
         sample_id=get_id(sample_name);
-        length=pair.second.second;
-        for (const auto& [read_id,read_weight]: graph.get_edges(pair.second.first)) {
-            add_edge(sample_id,read_id,0);  // Updates both sides of the edge
-            length--;
-            if (length==0) break;
+        auto& t = pair.second;
+        from_first=std::get<0>(t); from_last=std::get<1>(t); to_first=std::get<2>(t); to_last=std::get<3>(t);
+        used.clear();
+        for (i=to_first; i<=to_last; i++) used.emplace_back(false);
+        for (i=from_first; i<=from_last; i++) {
+            cluster_id=cluster_ids.at(i);
+            for (j=to_first; j<=to_last; j++) {
+                if (used.at(j-to_first) || cluster_ids.at(i)!=cluster_id) continue;
+                used.at(j-to_first)=true;
+                add_edge(sample_id,read_ids.at(j),0);  // Updates both sides of the edge
+                break;
+            }
         }
     }
-    sample_to_sample.clear();
+    read_ids.clear(); cluster_ids.clear(); sample_to_sample.clear();
 }
-
 
 }
