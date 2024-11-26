@@ -156,6 +156,7 @@ size_t solve_from_csv(
     if (compress_transmap) {
         //transmap.compress_reads(0,2,true,false);
         transmap.compress_samples(0,true);
+        transmap.compress_haplotypes(0,true);
         optimize(transmap, solver_type, 1, use_ploidy_constraint,true, output_dir/(tokens.substr(p+1,q-p-1)));
 
 

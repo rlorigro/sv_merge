@@ -195,10 +195,12 @@ public:
      *
      * Remark: the procedure sets object variables `sample_to_sample, read_ids, cluster_ids`.
      *
+     * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
+     * exactly;
      * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
      * order that is the same for every node.
      */
-    void compress_samples(float weight_quantum, bool sort_edges = true);
+    void compress_samples(float weight_quantum = 0, bool sort_edges = true);
 
     /**
      * Adds every weight of every record in `weights[from_first..from_last]` to a distinct record in
@@ -227,8 +229,23 @@ public:
      */
     void get_mandatory_haplotypes(unordered_set<int64_t> out) const;
 
+    /**
+     *
+     * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
+     * exactly;
+     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
+     * order that is the same for every node.
+     */
+    void compress_haplotypes(float weight_quantum = 0, bool sort_edges = true);
 
-
+    /**
+     * @param neighbors every row is assumed to be sorted;
+     * @return true iff `neighbors[from]` is dominated by `neighbors[to]`, i.e. iff every element in `neighbors[from]`
+     * occurs in `neighbors[to]` with equal or smaller weight.
+     *
+     * Remark: if `neighbors[from]` is identical to `neighbors[to]`, it is also considered as dominated.
+     */
+    static bool is_haplotype_dominated(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
 };
 

@@ -688,8 +688,8 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     int64_t read_id, n_clusters;
     vector<bool> is_redundant, is_representative;
     vector<int64_t> node_ids, cluster_representative, cluster_size, sample_ids;
-    vector<vector<int64_t>> neighbors, compared_weights;
-    vector<vector<float>> weights;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> weights, compared_weights;
 
     // Making sure that the neighbors of all nodes lie in the same global order
     if (sort_edges) graph.sort_adjacency_lists();
@@ -715,7 +715,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
                 auto [success, weight] = try_get_edge_weight(read_id, path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
-                if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
+                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
             });
         });
     });
@@ -809,8 +809,8 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     int64_t contained_first, contained_last, container_id, container_first, container_last;
     vector<bool> used;
     vector<int64_t> sample_ids, to_remove, cluster_size, cluster_size_prime;
-    vector<vector<int64_t>> neighbors, compared_weights;
-    vector<vector<float>> weights;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> weights, compared_weights;
     unordered_map<int64_t,tuple<int64_t,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
 
     // Making sure that the neighbors of all nodes lie in the same global order
@@ -836,7 +836,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 auto [success, weight] = try_get_edge_weight(read_id,path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
-                if (weight_quantum!=0) compared_weights.at(i).emplace_back((int64_t)floor(weight/weight_quantum));
+                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
             });
         });
     });
@@ -1037,6 +1037,109 @@ void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
     });
     cerr << "Mandatory haplotypes: " << to_string(out.size()) << '\n';
 }
+
+
+void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
+    const int64_t n_haps = get_n_paths();
+
+    int64_t i, j;
+    int64_t n_equivalent, n_dominated;
+    vector<bool> removed;
+    vector<int64_t> hap_ids;
+    unordered_set<int64_t> to_remove;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> weights, compared_weights;
+
+    // Making sure that the neighbors of all nodes lie in the same global order
+    if (sort_edges) graph.sort_adjacency_lists();
+
+    // Collecting all haplotype-read edges
+    neighbors.reserve(n_haps);
+    for (i=0; i<n_haps; i++) neighbors.emplace_back();
+    weights.reserve(n_haps);
+    for (i=0; i<n_haps; i++) weights.emplace_back();
+    if (weight_quantum!=0) {
+        compared_weights.reserve(n_haps);
+        for (i=0; i<n_haps; i++) compared_weights.emplace_back();
+    }
+    hap_ids.clear(); hap_ids.reserve(n_haps);
+    i=-1;
+    for_each_path([&](const string& path_name, int64_t path_id) {
+        hap_ids.emplace_back(path_id);
+        i++;
+        for_each_read_of_path(path_id, [&](int64_t read_id) {
+            // For each hap, its neighbors lie in the same global order.
+            auto [success, weight] = try_get_edge_weight(read_id,path_id);
+            neighbors.at(i).emplace_back(read_id);
+            weights.at(i).emplace_back(weight);
+            if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+        });
+    });
+
+    // Removing equivalent haps
+    n_equivalent=0;
+    removed.clear(); removed.reserve(n_haps);
+    for (i=0; i<n_haps; i++) removed.emplace_back(false);
+    for (i=0; i<n_haps; i++) {
+        if (removed.at(i)) continue;
+        for (j=i+1; j<n_haps; j++) {
+            if (removed.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
+            n_equivalent++;
+            removed.at(j)=true;
+            to_remove.emplace(hap_ids.at(j));
+        }
+    }
+    cerr << "Removed " << to_string(n_equivalent) << " equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
+
+    // Removing dominated haps
+    n_dominated=0;
+    for (i=0; i<n_haps; i++) {
+        if (removed.at(i)) continue;
+        for (j=i+1; j<n_haps; j++) {
+            if (removed.at(j)) continue;
+            if (is_haplotype_dominated(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                n_dominated++;
+                removed.at(i)=true;
+                to_remove.emplace(hap_ids.at(i));
+                break;
+            }
+        }
+    }
+    compared_weights.clear();
+    cerr << "Removed " << to_string(n_dominated) << " dominated haplotypes (out of " << to_string(n_haps) << " total)\n";
+
+    // Updating the transmap
+    for (auto node_id: to_remove) remove_node(node_id);
+}
+
+
+bool TransMap::is_haplotype_dominated(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
+    const size_t length_from = neighbors.at(from).size();
+    const size_t length_to = neighbors.at(to).size();
+
+    bool found;
+    size_t i, j;
+    int64_t neighbor_from, neighbor_to;
+
+    j=0;
+    for (i=0; i<length_from; i++) {
+        neighbor_from=neighbors.at(from).at(i);
+        found=false;
+        while (j<length_to) {
+            neighbor_to=neighbors.at(to).at(j);
+            if (neighbor_to>neighbor_from) break;
+            else if (neighbor_to<neighbor_from) j++;
+            else {
+                found=true;
+                if (weights.at(from).at(i)<weights.at(to).at(j)) return false;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
 
 
 }
