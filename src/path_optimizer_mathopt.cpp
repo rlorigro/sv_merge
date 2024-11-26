@@ -60,13 +60,15 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
 void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps){
-    // DEFINE: hap vars
+    int64_t n_paths;
     unordered_set<int64_t> mandatory_haps;
-    transmap.get_mandatory_haplotypes(mandatory_haps);
+
+    // DEFINE: hap vars
+    if (use_mandatory_haps) transmap.get_mandatory_haplotypes(mandatory_haps);
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){
         const string name = "h" + std::to_string(hap_id);
         auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
-        if (mandatory_haps.contains(hap_id)) {
+        if (use_mandatory_haps && mandatory_haps.contains(hap_id)) {
             auto& h = result.first->second;
             model.AddLinearConstraint(h == 1);
         }
@@ -74,10 +76,8 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
-            const string read_name = transmap.get_node(read_id).name;
+            n_paths=transmap.get_n_paths_of_read(read_id).first;
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
-                const string hap_name = transmap.get_node(hap_id).name;
-
                 // Do only once for each unique pair of read-hap. After read clustering, the same read-hap edge may be
                 // enumerated multiple times, since the same compressed read may belong to multiple samples.
                 if (vars.read_hap.find({read_id, hap_id}) == vars.read_hap.end()) {
@@ -96,6 +96,9 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
                     // OBJECTIVE: accumulate d cost sum
                     vars.cost_d += w*r_h;
+
+                    // Mandatory haps
+                    if (use_mandatory_haps && n_paths==1) model.AddLinearConstraint(r_h == 1);
                 }
 
                 // Do only once for each unique pair of sample-hap
@@ -110,6 +113,9 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
                     // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
+
+                    // Mandatory haps
+                    if (use_mandatory_haps && n_paths==1) model.AddLinearConstraint(s_h == 1);
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)

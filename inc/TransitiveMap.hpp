@@ -132,6 +132,10 @@ public:
     int64_t get_n_paths() const;
     int64_t get_n_edges() const;
 
+    /**
+     * @return (n_paths,last_path_id)
+     */
+    pair<int64_t,int64_t> get_n_paths_of_read(int64_t read_id) const;
 
     /// Writing
     void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;

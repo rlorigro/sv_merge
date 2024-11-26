@@ -564,6 +564,14 @@ int64_t TransMap::get_n_edges() const {
 }
 
 
+pair<int64_t,int64_t> TransMap::get_n_paths_of_read(int64_t read_id) const {
+    int64_t n_paths = 0;
+    int64_t last_path = -1;
+    for_each_path_of_read(read_id, [&](int64_t path_id) { n_paths++; last_path=path_id; });
+    return std::make_pair(n_paths,last_path);
+}
+
+
 bool TransMap::are_edges_distinct() const {
     return graph.are_edges_distinct();
 }
@@ -1022,13 +1030,10 @@ void TransMap::decompress_samples(vector<bool>& used) {
 
 
 void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
-    int64_t n_paths, last_path;
-
     out.clear();
-    for_each_read([&](const string& read_name, int64_t read_id){
-        n_paths=0;
-        for_each_path_of_read(read_id, [&](int64_t path_id) { n_paths++; last_path=path_id; });
-        if (n_paths==1) out.emplace(last_path);
+    for_each_read([&](const string& read_name, int64_t read_id) {
+        auto p = get_n_paths_of_read(read_id);
+        if (p.first==1) out.emplace(p.second);
     });
     cerr << "Mandatory haplotypes: " << to_string(out.size()) << '\n';
 }
