@@ -6,8 +6,10 @@
 #include <fstream>
 #include <thread>
 #include <map>
+#include <unordered_set>
 
 using std::map;
+using std::unordered_set;
 using std::ofstream;
 
 
@@ -59,9 +61,15 @@ string termination_reason_to_string(const TerminationReason& reason){
  */
 void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
     // DEFINE: hap vars
+    unordered_set<int64_t> mandatory_haps;
+    transmap.get_mandatory_haplotypes(mandatory_haps);
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){
         const string name = "h" + std::to_string(hap_id);
-        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+        auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+        if (mandatory_haps.contains(hap_id)) {
+            auto& h = result.first->second;
+            model.AddLinearConstraint(h == 1);
+        }
     });
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){

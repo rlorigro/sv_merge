@@ -142,6 +142,11 @@ public:
     /// Compressing
 
     /**
+     * Used just for debugging.
+     */
+    bool are_edges_distinct() const;
+
+    /**
      * Splits the read-path graph into its connected components (which are at least as many as the connected components
      * of the sample-path graph).
      *
@@ -213,7 +218,14 @@ public:
      */
     void decompress_samples(vector<bool>& used);
 
-    bool are_edges_distinct() const;
+    /**
+     * Makes `out` the set of all mandatory haplotypes.
+     */
+    void get_mandatory_haplotypes(unordered_set<int64_t> out) const;
+
+
+
+
 };
 
 

@@ -677,7 +677,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
 
     size_t length;
     int64_t i, j, k;
-    int64_t read_id, sample_id, n_clusters;
+    int64_t read_id, n_clusters;
     vector<bool> is_redundant, is_representative;
     vector<int64_t> node_ids, cluster_representative, cluster_size, sample_ids;
     vector<vector<int64_t>> neighbors, compared_weights;
@@ -797,11 +797,10 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     bool contained, trivial;
     size_t length;
     int64_t i, j, k;
-    int64_t read_id, n_clusters, sample_id, s_id, next_i, next_j, cluster_id, container_id;
-    int64_t contained_first, contained_last, container_first, container_last;
+    int64_t read_id, sample_id, s_id, next_i, next_j, n_clusters;
+    int64_t contained_first, contained_last, container_id, container_first, container_last;
     vector<bool> used;
-    vector<int64_t> cluster_size, cluster_size_prime, to_remove, sample_ids, to_update;
-    set<int64_t> containers;
+    vector<int64_t> sample_ids, to_remove, cluster_size, cluster_size_prime;
     vector<vector<int64_t>> neighbors, compared_weights;
     vector<vector<float>> weights;
     unordered_map<int64_t,tuple<int64_t,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
@@ -926,7 +925,6 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 to_remove.emplace_back(sample_id);
                 for (k=i; k<next_i; k++) to_remove.emplace_back(read_ids.at(k));
                 sample_to_container_sample.emplace(sample_id,std::make_tuple(s_id,i,next_i-1,j,next_j-1));
-                containers.emplace(s_id);
                 break;
             }
             j=next_j;
@@ -1021,5 +1019,19 @@ void TransMap::decompress_samples(vector<bool>& used) {
     }
     read_ids.clear(); cluster_ids.clear(); sample_to_sample.clear();
 }
+
+
+void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
+    int64_t n_paths, last_path;
+
+    out.clear();
+    for_each_read([&](const string& read_name, int64_t read_id){
+        n_paths=0;
+        for_each_path_of_read(read_id, [&](int64_t path_id) { n_paths++; last_path=path_id; });
+        if (n_paths==1) out.emplace(last_path);
+    });
+    cerr << "Mandatory haplotypes: " << to_string(out.size()) << '\n';
+}
+
 
 }
