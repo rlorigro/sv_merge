@@ -92,7 +92,8 @@ void construct_joint_n_d_model(
         Model& model,
         PathVariables& vars,
         bool integral = true,
-        bool use_ploidy_constraint = true
+        bool use_ploidy_constraint = true,
+        bool use_mandatory_haps = false
         );
 
 TerminationReason optimize_reads_with_d_and_n(
@@ -114,7 +115,8 @@ TerminationReason optimize_reads_with_d_plus_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint = true
+        bool use_ploidy_constraint = true,
+        bool use_mandatory_haps = false
         );
 
 void optimize_reads_with_d_and_n_using_golden_search(

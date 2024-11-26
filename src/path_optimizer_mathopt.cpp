@@ -59,7 +59,7 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps){
     // DEFINE: hap vars
     unordered_set<int64_t> mandatory_haps;
     transmap.get_mandatory_haplotypes(mandatory_haps);
@@ -1074,7 +1074,8 @@ TerminationReason optimize_reads_with_d_plus_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint
+        bool use_ploidy_constraint,
+        bool use_mandatory_haps
         ){
 
     Model model;
@@ -1102,7 +1103,7 @@ TerminationReason optimize_reads_with_d_plus_n(
         integral = false;
     }
 
-    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
+    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint, use_mandatory_haps);
 
     // First find one extreme of the pareto set (D_MIN)
     d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
