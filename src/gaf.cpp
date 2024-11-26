@@ -43,10 +43,14 @@ void GafAlignment::clear_cigar(){
 
 
 void GafAlignment::add_tag(const string& token){
+    if (token.empty()) {
+        return;
+    }
+
     auto i = token.find_last_of(':');
 
     if (i == string::npos){
-        throw runtime_error("ERROR: no colon found in non-mandatory GAF column (tag)");
+        throw runtime_error("ERROR: no colon found in non-mandatory GAF column (tag): '" + token + "'");
     }
 
     auto tag_type = token.substr(0,i);

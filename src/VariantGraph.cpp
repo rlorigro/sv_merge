@@ -751,7 +751,21 @@ void VariantGraph::to_gfa(const path& gfa_path) const {
     ofstream outstream(gfa_path.string());
     if (!outstream.good() || !outstream.is_open()) throw runtime_error("ERROR: file could not be written: " + gfa_path.string());
     graph.for_each_handle([&](handle_t handle) { outstream << GFA_NODE_CHAR << GFA_SEPARATOR << graph.get_id(handle) << GFA_SEPARATOR << graph.get_sequence(handle) << GFA_LINE_END; });
-    graph.for_each_edge([&](edge_t edge) { outstream << GFA_LINK_CHAR << GFA_SEPARATOR << graph.get_id(edge.first) << GFA_SEPARATOR << (graph.get_is_reverse(edge.first)?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << graph.get_id(edge.second) << GFA_SEPARATOR << (graph.get_is_reverse(edge.second)?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << GFA_OVERLAP_FIELD << GFA_LINE_END; });
+    graph.for_each_edge([&](edge_t edge) {
+        long long int a = graph.get_id(edge.first);
+        long long int b = graph.get_id(edge.second);
+        auto a_reverse = graph.get_is_reverse(edge.first);
+        auto b_reverse = graph.get_is_reverse(edge.second);
+
+        // Prefer (b+,a+) over (a-,b-) representation
+        if (a_reverse and b_reverse) {
+            std::swap(a,b);
+            std::swap(a_reverse,b_reverse);
+            a_reverse = !a_reverse;
+            b_reverse = !b_reverse;
+        }
+        outstream << GFA_LINK_CHAR << GFA_SEPARATOR << a << GFA_SEPARATOR << (a_reverse?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << b << GFA_SEPARATOR << (b_reverse?GFA_REV_CHAR:GFA_FWD_CHAR) << GFA_SEPARATOR << GFA_OVERLAP_FIELD << GFA_LINE_END;
+    });
     graph.for_each_path_handle([&](path_handle_t path) {
         outstream << GFA_PATH_CHAR << GFA_SEPARATOR << graph.get_path_name(path) << GFA_SEPARATOR;
         const step_handle_t source = graph.path_begin(path);

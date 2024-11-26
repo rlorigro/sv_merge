@@ -1074,16 +1074,21 @@ void merge_thread_fn(
 
         path fasta_path = subdir / fasta_filename;
 
-        string command = "GraphAligner"
-                         " --seeds-mum-count " "-1"
-                         " --seeds-mxm-windowsize " "0"
-                         " -b " "10"
-                         " --max-cluster-extend " "10"
-                         " --multimap-score-fraction  " "1"
-                         " -t " "1"
-                         " -a " + gaf_path.string() +
-                         " -g " + gfa_path.string() +
-                         " -f " + fasta_path.string();
+        // string command = "GraphAligner"
+        //                  " --seeds-mum-count " "-1"
+        //                  " --seeds-mxm-windowsize " "0"
+        //                  " -b " "10"
+        //                  " --max-cluster-extend " "10"
+        //                  " --multimap-score-fraction  " "1"
+        //                  " -t " "1"
+        //                  " -a " + gaf_path.string() +
+        //                  " -g " + gfa_path.string() +
+        //                  " -f " + fasta_path.string();
+
+        string command = "lasagna align"
+                         " -o " + gaf_path.string() +
+                         " " + gfa_path.string() +
+                         " " + fasta_path.string();
 
         // Run GraphAligner and check how long it takes, if it times out
         bool success = run_command(command, false, float(graphaligner_timeout));
