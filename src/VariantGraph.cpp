@@ -375,8 +375,10 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
         if (tmp_pair.first!=tmp_pair.second) {
             first_positions.push_back(tmp_pair.first);
-            if (tmp_pair.second>main_chromosome_length) tmp_pair.second=main_chromosome_length;
-            first_positions.push_back(tmp_pair.second);
+            if (!acyclic || (record.sv_type!=VcfReader::TYPE_DUPLICATION && record.sv_type!=VcfReader::TYPE_CNV)) {
+                if (tmp_pair.second>main_chromosome_length) tmp_pair.second=main_chromosome_length;
+                first_positions.push_back(tmp_pair.second);
+            }
             if (record.sv_type==VcfReader::TYPE_REPLACEMENT || record.sv_type==VcfReader::TYPE_SNP) {
                 const handle_t handle_alt = sequence2handle(record.alt,tmp_buffer_2);
                 insertion_handles.emplace_back(handle_alt);
@@ -395,7 +397,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                     get<0>(tmp_tuple)=record.sv_type; get<1>(tmp_tuple)=tmp_pair.first; get<2>(tmp_tuple)=tmp_pair.second;
                     if (interval_to_insertion_handle.contains(tmp_tuple)) insertion_handles.emplace_back(interval_to_insertion_handle.at(tmp_tuple));
                     else {
-                        const handle_t reference_handle = sequence2handle(reverse_complement(chrom_sequence.substr(tmp_pair.first,tmp_pair.second-tmp_pair.first)),tmp_buffer_2);
+                        str=chrom_sequence.substr(tmp_pair.first,tmp_pair.second-tmp_pair.first);
+                        reverse_complement(str);
+                        const handle_t reference_handle = sequence2handle(str,tmp_buffer_2);
                         insertion_handles.emplace_back(reference_handle);
                         interval_to_insertion_handle.emplace(tmp_tuple,reference_handle);
                     }

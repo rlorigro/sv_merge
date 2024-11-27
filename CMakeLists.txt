@@ -563,6 +563,7 @@ set(TESTS
         test_vcfreader
         test_variantgraph
         test_variantgraph_snp
+        test_variantgraph_acyclic
         )
 
 

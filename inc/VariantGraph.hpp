@@ -101,9 +101,9 @@ public:
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record in order to be considered;
-     * @param acyclic builds a bidirected graph with no cycle, by treating DUP and CNV calls like INS, INV calls like
-     * replacements, and by not including any BND call; DUP/CNV calls (respectively, INV calls) with identical intervals
-     * do not create duplicated nodes/edges.
+     * @param acyclic builds a bidirected graph with no cycle, by treating DUP and CNV calls like INS of just one copy,
+     * INV calls like replacements, and by not including any BND call; DUP/CNV calls (respectively, INV calls) with
+     * identical intervals do not create duplicated nodes/edges.
      */
     void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {}, bool acyclic = false);
 
