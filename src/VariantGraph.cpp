@@ -330,7 +330,7 @@ handle_t VariantGraph::sequence2handle(const string& sequence, string& tmp_buffe
 }
 
 
-void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers) {
+void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers, bool acyclic) {
     graph.clear();
     n_vcf_records=records.size();
     if (n_vcf_records!=0) this->vcf_records=std::move(records);
@@ -342,6 +342,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     insertion_handles.clear(); if (n_vcf_records!=0) insertion_handles.reserve(n_vcf_records);
     edge_to_vcf_record.clear(); if (n_vcf_records!=0) edge_to_vcf_record.reserve(n_vcf_records);
     if (n_vcf_records==0) { vcf_record_to_edge.clear(); return; }
+    if (acyclic) interval_to_insertion_handle.clear();
 
     main_chromosome=vcf_records.at(0).chrom;
     main_chromosome_length=(int32_t)chromosomes.at(main_chromosome).length();
@@ -351,8 +352,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     size_t i, j, r, s, t;
     size_t n_positions, assign_record;
     int32_t p, q, p_prime, q_prime, first_pos, last_pos, trans_pos;
-    string tmp_buffer, tmp_buffer_2;
+    string tmp_buffer, tmp_buffer_2, str;
     pair<int32_t,int32_t> tmp_pair;
+    tuple<int32_t,int32_t,int32_t> tmp_tuple;
     handle_t previous_handle;
 
     // Collecting every distinct first position of a reference node, and building all non-reference nodes.
@@ -368,6 +370,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     vector<int32_t>& first_positions = chunk_first_raw.at(main_chromosome);
     for (i=0; i<n_vcf_records; i++) {
         VcfRecord& record = vcf_records.at(i);
+        const string& chrom_sequence = chromosomes.at(record.chrom);
         record.get_reference_coordinates(false,tmp_pair);
         if (tmp_pair.first==INT32_MAX || tmp_pair.second==INT32_MAX) continue;
         if (tmp_pair.first!=tmp_pair.second) {
@@ -378,6 +381,26 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                 const handle_t handle_alt = sequence2handle(record.alt,tmp_buffer_2);
                 insertion_handles.emplace_back(handle_alt);
             }
+            else if (acyclic) {
+                if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) {
+                    get<0>(tmp_tuple)=VcfReader::TYPE_DUPLICATION; get<1>(tmp_tuple)=tmp_pair.first; get<2>(tmp_tuple)=tmp_pair.second;
+                    if (interval_to_insertion_handle.contains(tmp_tuple)) insertion_handles.emplace_back(interval_to_insertion_handle.at(tmp_tuple));
+                    else {
+                        const handle_t reference_handle = sequence2handle(chrom_sequence.substr(tmp_pair.first,tmp_pair.second-tmp_pair.first),tmp_buffer_2);
+                        insertion_handles.emplace_back(reference_handle);
+                        interval_to_insertion_handle.emplace(tmp_tuple,reference_handle);
+                    }
+                }
+                else if (record.sv_type==VcfReader::TYPE_INVERSION) {
+                    get<0>(tmp_tuple)=record.sv_type; get<1>(tmp_tuple)=tmp_pair.first; get<2>(tmp_tuple)=tmp_pair.second;
+                    if (interval_to_insertion_handle.contains(tmp_tuple)) insertion_handles.emplace_back(interval_to_insertion_handle.at(tmp_tuple));
+                    else {
+                        const handle_t reference_handle = sequence2handle(reverse_complement(chrom_sequence.substr(tmp_pair.first,tmp_pair.second-tmp_pair.first)),tmp_buffer_2);
+                        insertion_handles.emplace_back(reference_handle);
+                        interval_to_insertion_handle.emplace(tmp_tuple,reference_handle);
+                    }
+                }
+            }
         }
         else {
             if (record.sv_type==VcfReader::TYPE_INSERTION && !record.is_symbolic) {
@@ -385,7 +408,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                 const handle_t handle_ins = sequence2handle(record.alt.substr(1),tmp_buffer_2);
                 insertion_handles.emplace_back(handle_ins);
             }
-            else {
+            else if (!acyclic) {
                 is_bnd_single=record.is_breakend_single();
                 if (record.sv_type==VcfReader::TYPE_BREAKEND && is_bnd_single>=1 && !record.is_breakend_virtual(chromosomes)) {
                     // Virtual telomeric breakends, and single breakends with no inserted sequence, carry no information.
@@ -421,6 +444,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             }
         }
     }
+    interval_to_insertion_handle.clear();
     for (auto& [chromosome,first_positions]: chunk_first_raw) sort_and_compact_positions(first_positions);
     if (!silent) {
         cerr << "Table: Chromosome involved | N. distinct breakpoints\n";
@@ -540,10 +564,26 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             if (record.sv_type==VcfReader::TYPE_DELETION) {
                 if (s!=0 && tmp_pair.second!=main_chromosome_length) add_nonreference_edge(handles.at(s-1), handles.at(t), assign_record);
             }
-            else if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) add_nonreference_edge(handles.at(t-1),handles.at(s),assign_record);
+            else if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) {
+                if (acyclic) {
+                    const handle_t& insertion_handle = insertion_handles.at(j);
+                    if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
+                    if (tmp_pair.first!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(s),assign_record);
+                    j++;
+                }
+                else add_nonreference_edge(handles.at(t-1),handles.at(s),assign_record);
+            }
             else if (record.sv_type==VcfReader::TYPE_INVERSION) {
-                if (s!=0) add_nonreference_edge(handles.at(s-1), graph.flip(handles.at(t-1)), assign_record);
-                if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(graph.flip(handles.at(s)),handles.at(t),assign_record);
+                if (acyclic) {
+                    const handle_t& insertion_handle = insertion_handles.at(j);
+                    if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
+                    if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(t),assign_record);
+                    j++;
+                }
+                else {
+                    if (s!=0) add_nonreference_edge(handles.at(s-1), graph.flip(handles.at(t-1)), assign_record);
+                    if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(graph.flip(handles.at(s)),handles.at(t),assign_record);
+                }
             }
             else if (record.sv_type==VcfReader::TYPE_REPLACEMENT || record.sv_type==VcfReader::TYPE_SNP) {
                 const handle_t& insertion_handle = insertion_handles.at(j);
@@ -560,7 +600,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                 if (tmp_pair.first!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(s),assign_record);
                 j++;
             }
-            else {
+            else if (!acyclic) {
                 is_bnd_single=record.is_breakend_single();
                 if (record.sv_type==VcfReader::TYPE_BREAKEND && is_bnd_single>=1 && !record.is_breakend_virtual(chromosomes)) {
                     // Virtual telomeric breakends, and single breakends with no inserted sequence, carry no information.
