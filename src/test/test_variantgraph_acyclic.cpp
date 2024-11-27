@@ -38,24 +38,24 @@ void print_truth_vcf(ofstream& out) {
     const string INFIX = QUAL+"\t"+FILTER;
     const string SUFFIX = FORMAT+"\t"+GT+"\n";
 
-    out << "chr1\t20\tdup4\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=71;\t" << SUFFIX;
-    out << "chr1\t20\tdup4_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=71;\t" << SUFFIX;
-    out << "chr1\t30\tdup2\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=21;\t" << SUFFIX;
-    out << "chr1\t30\tdup2_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=21;\t" << SUFFIX;
-    out << "chr1\t40\tdup1\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=31;\t" << SUFFIX;
-    out << "chr1\t40\tdup1_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=31;\t" << SUFFIX;
-    out << "chr1\t52\tinv5\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=84;\t" << SUFFIX;
-    out << "chr1\t52\tinv5_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=84;\t" << SUFFIX;
-    out << "chr1\t55\tdup3\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=26;\t" << SUFFIX;
-    out << "chr1\t55\tdup3_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=26;\t" << SUFFIX;
-    out << "chr1\t100\tinv4\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=71;\t" << SUFFIX;
-    out << "chr1\t100\tinv4_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=71;\t" << SUFFIX;
-    out << "chr1\t110\tinv2\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
-    out << "chr1\t110\tinv2_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
-    out << "chr1\t120\tinv1\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=31;\t" << SUFFIX;
-    out << "chr1\t120\tinv1_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=31;\t" << SUFFIX;
-    out << "chr1\t140\tinv3\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
-    out << "chr1\t140\tinv3_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t19\tdup4\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=71;\t" << SUFFIX;
+    out << "chr1\t19\tdup4_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=71;\t" << SUFFIX;
+    out << "chr1\t29\tdup2\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t29\tdup2_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t39\tdup1\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=31;\t" << SUFFIX;
+    out << "chr1\t39\tdup1_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=31;\t" << SUFFIX;
+    out << "chr1\t51\tinv5\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=84;\t" << SUFFIX;
+    out << "chr1\t51\tinv5_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=84;\t" << SUFFIX;
+    out << "chr1\t54\tdup3\tA\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=26;\t" << SUFFIX;
+    out << "chr1\t54\tdup3_prime\tA\t<CNV>\t" << INFIX << "\tSVTYPE=CNV;SVLEN=26;\t" << SUFFIX;
+    out << "chr1\t99\tinv4\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=71;\t" << SUFFIX;
+    out << "chr1\t99\tinv4_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=71;\t" << SUFFIX;
+    out << "chr1\t109\tinv2\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t109\tinv2_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t119\tinv1\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=31;\t" << SUFFIX;
+    out << "chr1\t119\tinv1_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=31;\t" << SUFFIX;
+    out << "chr1\t139\tinv3\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
+    out << "chr1\t139\tinv3_prime\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=21;\t" << SUFFIX;
 }
 
 
@@ -419,7 +419,7 @@ int main(int argc, char* argv[]) {
     VariantGraph graph(chromosomes,tandem_track);
 
     cerr << "Testing acyclic GFA...\n";
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,{},true);
     ofstream test_gfa(TEST_GFA.string());
     graph.to_gfa(TEST_GFA);
     test_gfa.close();
