@@ -1134,7 +1134,7 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
         hap_ids.clear(); neighbors.clear(); weights.clear(); compared_weights.clear();
         i=-1;
         for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
-            hap_ids.emplace_back(path_id);
+            hap_ids.emplace_back(path_id); neighbors.emplace_back(); weights.emplace_back(); compared_weights.emplace_back();
             i++;
             for_each_read_of_path(path_id, [&](int64_t read_id) {
                 // For each hap, its neighbors lie in the same global order.
