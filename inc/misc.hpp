@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef USE_MIMALLOC
+#include "mimalloc-new-delete.h"
+#endif
+
 #include "Region.hpp"
 #include "Timer.hpp"
 #include <unordered_set>
