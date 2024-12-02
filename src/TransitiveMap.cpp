@@ -397,6 +397,21 @@ string TransMap::get_sample_of_read(const string& read_name) const{
 }
 
 
+int64_t TransMap::get_sample_of_read(int64_t read_id) const {
+    int64_t result;
+    size_t i=0;
+    for_each_sample_of_read(read_id, [&](int64_t sample_id){
+        if (i > 0){
+            throw runtime_error("ERROR: multiple samples found for read: " + to_string(read_id));
+        }
+        result = sample_id;
+        i++;
+    });
+
+    return result;
+}
+
+
 void TransMap::for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const{
     unordered_set<int64_t> visited;
 
@@ -1040,15 +1055,17 @@ void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
 
 
 void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
-    const int64_t n_haps = get_n_paths();
+    const int64_t n_samples = get_n_samples();
+    int64_t n_haps = get_n_paths();
 
     int64_t i, j;
-    int64_t n_equivalent, n_dominated;
+    int64_t n_equivalent, n_dominated, hap_id, n_removed_edges;
     vector<bool> removed;
     vector<int64_t> hap_ids;
     unordered_set<int64_t> to_remove;
     vector<vector<int64_t>> neighbors;
     vector<vector<float>> weights, compared_weights;
+    unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
     // Making sure that the neighbors of all nodes lie in the same global order
     if (sort_edges) graph.sort_adjacency_lists();
@@ -1076,7 +1093,7 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
         });
     });
 
-    // Removing equivalent haps
+    // Removing globally-equivalent haps
     n_equivalent=0;
     removed.clear(); removed.reserve(n_haps);
     for (i=0; i<n_haps; i++) removed.emplace_back(false);
@@ -1089,9 +1106,9 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
             to_remove.emplace(hap_ids.at(j));
         }
     }
-    cerr << "Removed " << to_string(n_equivalent) << " equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
+    cerr << "Removed " << to_string(n_equivalent) << " globally-equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
 
-    // Removing dominated haps
+    // Removing globally-dominated haps
     n_dominated=0;
     for (i=0; i<n_haps; i++) {
         if (removed.at(i)) continue;
@@ -1105,11 +1122,64 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
             }
         }
     }
-    compared_weights.clear();
-    cerr << "Removed " << to_string(n_dominated) << " dominated haplotypes (out of " << to_string(n_haps) << " total)\n";
+    neighbors.clear(); weights.clear(); compared_weights.clear(); hap_ids.clear();
+    cerr << "Removed " << to_string(n_dominated) << " globally-dominated haplotypes (out of " << to_string(n_haps) << " total)\n";
 
     // Updating the transmap
     for (auto node_id: to_remove) remove_node(node_id);
+
+    // Removing locally-dominated haps
+    n_dominated=0; edges_to_remove.clear();
+    for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        hap_ids.clear(); neighbors.clear(); weights.clear(); compared_weights.clear();
+        i=-1;
+        for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
+            hap_ids.emplace_back(path_id);
+            i++;
+            for_each_read_of_path(path_id, [&](int64_t read_id) {
+                // For each hap, its neighbors lie in the same global order.
+                if (get_sample_of_read(read_id)!=sample_id) return;
+                auto [success, weight] = try_get_edge_weight(read_id,path_id);
+                neighbors.at(i).emplace_back(read_id);
+                weights.at(i).emplace_back(weight);
+                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+            });
+        });
+        n_haps=hap_ids.size();
+        removed.clear();
+        for (i=0; i<n_haps; i++) removed.emplace_back(false);
+        for (i=0; i<n_haps; i++) {
+            if (removed.at(i)) continue;
+            for (j=i+1; j<n_haps; j++) {
+                if (removed.at(j)) continue;
+                if (is_haplotype_dominated(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                    n_dominated++;
+                    removed.at(i)=true;
+                    if (edges_to_remove.contains(sample_id)) edges_to_remove.at(hap_ids.at(j)).emplace(sample_id);
+                    else {
+                        unordered_set<int64_t> v;
+                        v.emplace(sample_id);
+                        edges_to_remove.emplace(hap_ids.at(j),v);
+                    }
+                    break;
+                }
+            }
+        }
+    });
+    cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/n_samples) << " avg per sample)\n";
+
+    // Updating the transmap
+    n_removed_edges=0;
+    for (auto& pair: edges_to_remove) {
+        hap_id=pair.first;
+        for_each_read_of_path(hap_id, [&](int64_t read_id) {
+            if (pair.second.contains(get_sample_of_read(read_id))) {
+                remove_edge(read_id,hap_id);
+                n_removed_edges++;
+            }
+        });
+    }
+    cerr << "Removed " << to_string(n_removed_edges) << " edges to locally-dominated haplotypes\n";
 }
 
 

@@ -108,6 +108,7 @@ public:
     void for_each_variant_of_path(int64_t path_id, const function<void(int64_t id)>& f) const;
 
     string get_sample_of_read(const string& read_name) const;
+    int64_t get_sample_of_read(int64_t read_id) const;
     void for_each_sample_of_read(const string& read_name, const function<void(const string& name, int64_t id)>& f) const;
     void for_each_sample_of_read(const int64_t& read_id, const function<void(int64_t id)>& f) const;
     void for_each_sample_of_path(const string& path_name, const function<void(const string& name, int64_t id)>& f) const;
@@ -230,6 +231,7 @@ public:
     void get_mandatory_haplotypes(unordered_set<int64_t> out) const;
 
     /**
+     * Removes equivalent and globally-dominated haplotypes.
      *
      * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
      * exactly;
