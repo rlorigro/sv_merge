@@ -1155,11 +1155,11 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
                 if (is_haplotype_dominated(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
                     n_dominated++;
                     removed.at(i)=true;
-                    if (edges_to_remove.contains(sample_id)) edges_to_remove.at(hap_ids.at(j)).emplace(sample_id);
+                    if (edges_to_remove.contains(sample_id)) edges_to_remove.at(hap_ids.at(i)).emplace(sample_id);
                     else {
                         unordered_set<int64_t> v;
                         v.emplace(sample_id);
-                        edges_to_remove.emplace(hap_ids.at(j),v);
+                        edges_to_remove.emplace(hap_ids.at(i),v);
                     }
                     break;
                 }
