@@ -1074,21 +1074,38 @@ void merge_thread_fn(
 
         path fasta_path = subdir / fasta_filename;
 
-        // string command = "GraphAligner"
-        //                  " --seeds-mum-count " "-1"
-        //                  " --seeds-mxm-windowsize " "0"
-        //                  " -b " "10"
-        //                  " --max-cluster-extend " "10"
-        //                  " --multimap-score-fraction  " "1"
-        //                  " -t " "1"
-        //                  " -a " + gaf_path.string() +
-        //                  " -g " + gfa_path.string() +
-        //                  " -f " + fasta_path.string();
+        // Write the solution to a VCF
+        path vcf_output_path = subdir / "input.vcf";
 
-        string command = "lasagna align"
-                         " -o " + gaf_path.string() +
-                         " " + gfa_path.string() +
-                         " " + fasta_path.string();
+        ofstream input_vcf(vcf_output_path);
+
+        if (not input_vcf.is_open() or not input_vcf.good()) {
+            throw runtime_error("ERROR: could not write VCF: " + vcf_output_path.string());
+        }
+
+        input_vcf << "##fileformat=VCFv4.2" << '\n';
+        input_vcf << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT";
+        for (const auto& sample_name: vcf_reader.sample_ids){
+            input_vcf << '\t' << sample_name;
+        }
+        input_vcf << '\n';
+
+        for (const auto& r: variant_graph.vcf_records) {
+            r.print(input_vcf);
+        }
+
+        input_vcf.close();
+
+        string command = "GraphAligner"
+                         " --seeds-mum-count " "-1"
+                         " --seeds-mxm-windowsize " "0"
+                         " -b " "10"
+                         " --max-cluster-extend " "10"
+                         " --multimap-score-fraction  " "1"
+                         " -t " "1"
+                         " -a " + gaf_path.string() +
+                         " -g " + gfa_path.string() +
+                         " -f " + fasta_path.string();
 
         // Run GraphAligner and check how long it takes, if it times out
         bool success = run_command(command, false, float(graphaligner_timeout));
@@ -1202,11 +1219,11 @@ void merge_thread_fn(
                     });
 
                     // Write the solution to a VCF
-                    path output_path = subdir / "solution.vcf";
+                    vcf_output_path = subdir / "solution.vcf";
 
-                    write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, output_path, region);
+                    write_solution_to_vcf(variant_graph, transmap, vcf_reader.sample_ids, vcf_output_path, region);
 
-                    output_path = subdir / "solution_haps.vcf";
+                    vcf_output_path = subdir / "solution_haps.vcf";
 
                     if (hapestry_config.write_hap_vcf) {
                         write_solution_as_hap_vcf(
@@ -1214,7 +1231,7 @@ void merge_thread_fn(
                             transmap,
                             vcf_reader.sample_ids,
                             ref_sequences,
-                            output_path,
+                            vcf_output_path,
                             region,
                             flank_length
                         );
