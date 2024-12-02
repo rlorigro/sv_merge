@@ -134,16 +134,6 @@ include(ExternalProject)
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
-# ---------------- mimalloc ---------------- #
-# ------------------------------------------ #
-##############################################
-
-find_package(mimalloc 2.1 REQUIRED)
-
-
-##############################################
-# ------------------------------------------ #
-# -------- LINKING EXTERNAL LIBRARY -------- #
 # ------------------ WFA2 ------------------ #
 # ------------------------------------------ #
 ##############################################
@@ -516,6 +506,29 @@ include_directories(external/bdsg/include/
 #set_property(TARGET GFAse PROPERTY INSTALL_RPATH "$ORIGIN" "${INSTALL_DIR}/bin/bdsg")
 
 message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- mimalloc ---------------- #
+# ------------------------------------------ #
+##############################################
+
+include(FetchContent)
+
+FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
+        GIT_TAG 9b7537755ace8f4a5110a06dca90826e60188037
+)
+
+FetchContent_MakeAvailable(mimalloc)
+
+add_dependencies(sv_merge mimalloc)
+
+include_directories(
+        ${mimalloc_SOURCE_DIR}/include
+)
 
 # ------- Misc -------
 
