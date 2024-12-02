@@ -1719,6 +1719,13 @@ void VariantGraph::load_edge_record_map(const vector<pair<edge_t,size_t>>& map, 
 }
 
 
+unordered_map<edge_t,vector<size_t>> VariantGraph::get_edge_record_map() {
+    unordered_map<edge_t,vector<size_t>> out;
+    out=edge_to_vcf_record;
+    return out;
+}
+
+
 void VariantGraph::node_to_chromosome_clear() { node_to_chromosome.clear(); }
 
 

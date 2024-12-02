@@ -323,6 +323,11 @@ public:
     void load_edge_record_map(const vector<pair<edge_t,size_t>>& map, size_t n_vcf_records);
 
     /**
+     * @return a copy of `edge_to_vcf_record`.
+     */
+    unordered_map<edge_t,vector<size_t>> get_edge_record_map();
+
+    /**
      * Erases `node_to_chromosome`.
      */
     void node_to_chromosome_clear();
