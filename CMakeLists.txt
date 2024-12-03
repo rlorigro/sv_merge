@@ -527,7 +527,7 @@ if(USE_MIMALLOC)
     FetchContent_Declare(
         mimalloc
         GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
-        GIT_TAG 9b7537755ace8f4a5110a06dca90826e60188037
+        GIT_TAG 8c532c32c3c96e5ba1f2283e032f69ead8add00f
     )
 
     FetchContent_MakeAvailable(mimalloc)
