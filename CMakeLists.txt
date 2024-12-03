@@ -525,9 +525,9 @@ if(USE_MIMALLOC)
     include(FetchContent)
 
     FetchContent_Declare(
-            mimalloc
-            GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
-            GIT_TAG 9b7537755ace8f4a5110a06dca90826e60188037
+        mimalloc
+        GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
+        GIT_TAG 9b7537755ace8f4a5110a06dca90826e60188037
     )
 
     FetchContent_MakeAvailable(mimalloc)
@@ -535,7 +535,7 @@ if(USE_MIMALLOC)
     add_dependencies(sv_merge mimalloc)
 
     include_directories(
-            ${mimalloc_SOURCE_DIR}/include
+        ${mimalloc_SOURCE_DIR}/include
     )
 endif()
 
