@@ -231,23 +231,41 @@ public:
     void get_mandatory_haplotypes(unordered_set<int64_t> out) const;
 
     /**
-     * Removes equivalent and globally-dominated haplotypes.
+     * Removes globally-equivalent and globally-contained haplotypes.
      *
      * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
      * exactly;
      * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
      * order that is the same for every node.
      */
-    void compress_haplotypes(float weight_quantum = 0, bool sort_edges = true);
+    void compress_haplotypes_global(float weight_quantum = 0, bool sort_edges = true);
 
     /**
      * @param neighbors every row is assumed to be sorted;
-     * @return true iff `neighbors[from]` is dominated by `neighbors[to]`, i.e. iff every element in `neighbors[from]`
-     * occurs in `neighbors[to]` with equal or smaller weight.
-     *
-     * Remark: if `neighbors[from]` is identical to `neighbors[to]`, it is also considered as dominated.
+     * @return true iff every element in `neighbors[from]` occurs in `neighbors[to]` with smaller or equal weight.
      */
-    static bool is_haplotype_dominated(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
+    static bool is_haplotype_contained(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
+
+    /**
+     * Removes edges to dominated haplotypes per-sample. The procedure assumes that the objective function has the form
+     * $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$.
+     *
+     * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
+     * exactly;
+     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
+     * order that is the same for every node.
+     */
+    void compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum = 0, bool sort_edges = true);
+
+    /**
+     * The procedure assumes that the objective function has the form $nWeight \cdot \sum_i h_i + dWeight \cdot
+     * \sum_i d_i$.
+     *
+     * @param neighbors every row is assumed to be sorted;
+     * @return true iff every element in `neighbors[from]` occurs in `neighbors[to]` with a weight that is smaller by at
+     * least `n_weight/d_weight`.
+     */
+    static bool is_haplotype_dominated(float n_weight, float d_weight, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
 };
 

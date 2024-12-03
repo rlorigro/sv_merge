@@ -1054,12 +1054,12 @@ void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
 }
 
 
-void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
+void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges) {
     const int64_t n_samples = get_n_samples();
     int64_t n_haps = get_n_paths();
 
     int64_t i, j;
-    int64_t n_equivalent, n_dominated, hap_id, n_removed_edges;
+    int64_t n_equivalent, n_contained, hap_id;
     vector<bool> removed;
     vector<int64_t> hap_ids;
     unordered_set<int64_t> to_remove;
@@ -1108,14 +1108,14 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
     }
     cerr << "Removed " << to_string(n_equivalent) << " globally-equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
 
-    // Removing globally-dominated haps
-    n_dominated=0;
+    // Removing globally-contained haps
+    n_contained=0;
     for (i=0; i<n_haps; i++) {
         if (removed.at(i)) continue;
         for (j=i+1; j<n_haps; j++) {
             if (removed.at(j)) continue;
-            if (is_haplotype_dominated(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
-                n_dominated++;
+            if (is_haplotype_contained(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                n_contained++;
                 removed.at(i)=true;
                 to_remove.emplace(hap_ids.at(i));
                 break;
@@ -1123,10 +1123,57 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
         }
     }
     neighbors.clear(); weights.clear(); compared_weights.clear(); hap_ids.clear();
-    cerr << "Removed " << to_string(n_dominated) << " globally-dominated haplotypes (out of " << to_string(n_haps) << " total)\n";
+    cerr << "Removed " << to_string(n_contained) << " globally-contained haplotypes (out of " << to_string(n_haps) << " total)\n";
 
     // Updating the transmap
     for (auto node_id: to_remove) remove_node(node_id);
+}
+
+
+bool TransMap::is_haplotype_contained(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
+    const size_t length_from = neighbors.at(from).size();
+    const size_t length_to = neighbors.at(to).size();
+    if (length_from>length_to) return false;
+
+    bool found;
+    size_t i, j;
+    int64_t neighbor_from, neighbor_to;
+
+    j=0;
+    for (i=0; i<length_from; i++) {
+        neighbor_from=neighbors.at(from).at(i);
+        found=false;
+        while (j<length_to) {
+            neighbor_to=neighbors.at(to).at(j);
+            if (neighbor_to>neighbor_from) break;
+            else if (neighbor_to<neighbor_from) j++;
+            else {
+                found=true;
+                if (weights.at(to).at(j)>weights.at(from).at(i)) return false;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+
+void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum, bool sort_edges) {
+    const int64_t n_samples = get_n_samples();
+    int64_t n_haps = get_n_paths();
+
+    int64_t i, j;
+    int64_t n_dominated, hap_id, n_removed_edges;
+    vector<bool> removed;
+    vector<int64_t> hap_ids;
+    unordered_set<int64_t> to_remove;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> weights, compared_weights;
+    unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
+
+    // Making sure that the neighbors of all nodes lie in the same global order
+    if (sort_edges) graph.sort_adjacency_lists();
 
     // Removing locally-dominated haps
     n_dominated=0; edges_to_remove.clear();
@@ -1134,8 +1181,8 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
         hap_ids.clear(); neighbors.clear(); weights.clear(); compared_weights.clear();
         i=-1;
         for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
-            hap_ids.emplace_back(path_id); neighbors.emplace_back(); weights.emplace_back(); compared_weights.emplace_back();
-            i++;
+            i++; hap_ids.emplace_back(path_id);
+            neighbors.emplace_back(); weights.emplace_back(); compared_weights.emplace_back();
             for_each_read_of_path(path_id, [&](int64_t read_id) {
                 // For each hap, its neighbors lie in the same global order.
                 if (get_sample_of_read(read_id)!=sample_id) return;
@@ -1152,7 +1199,7 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
             if (removed.at(i)) continue;
             for (j=i+1; j<n_haps; j++) {
                 if (removed.at(j)) continue;
-                if (is_haplotype_dominated(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                if (is_haplotype_dominated(n_weight,d_weight,i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
                     n_dominated++;
                     removed.at(i)=true;
                     hap_id=hap_ids.at(i);
@@ -1184,9 +1231,11 @@ void TransMap::compress_haplotypes(float weight_quantum, bool sort_edges) {
 }
 
 
-bool TransMap::is_haplotype_dominated(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
+bool TransMap::is_haplotype_dominated(float n_weight, float d_weight, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
     const size_t length_from = neighbors.at(from).size();
     const size_t length_to = neighbors.at(to).size();
+    if (length_from>length_to) return false;
+    const float gap = n_weight/d_weight;
 
     bool found;
     size_t i, j;
@@ -1202,7 +1251,7 @@ bool TransMap::is_haplotype_dominated(int64_t from, int64_t to, const vector<vec
             else if (neighbor_to<neighbor_from) j++;
             else {
                 found=true;
-                if (weights.at(from).at(i)<weights.at(to).at(j)) return false;
+                if (weights.at(to).at(j)>weights.at(from).at(i)-gap) return false;
                 break;
             }
         }
@@ -1210,7 +1259,6 @@ bool TransMap::is_haplotype_dominated(int64_t from, int64_t to, const vector<vec
     }
     return true;
 }
-
 
 
 }

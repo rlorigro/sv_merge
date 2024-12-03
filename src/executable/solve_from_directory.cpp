@@ -154,9 +154,9 @@ size_t solve_from_csv(
     size_t q = tokens.find_last_of("/");
     size_t p = tokens.substr(0,q).find_last_of("/");
     if (compress_transmap) {
+        transmap.compress_haplotypes_global(0,true);
+        //transmap.compress_samples(0,true);
         //transmap.compress_reads(0,2,true,false);
-        transmap.compress_samples(0,true);
-        transmap.compress_haplotypes(0,true);
         optimize(transmap, solver_type, 1, use_ploidy_constraint,true, output_dir/(tokens.substr(p+1,q-p-1)));
 
 
@@ -181,10 +181,10 @@ size_t solve_from_csv(
     }
     else optimize(transmap, solver_type, 1, use_ploidy_constraint, false, output_dir/tokens.substr(p+1,q-p-1));
     if (compress_transmap) {
-        cerr << "Decompressing the transmap... ";
-        vector<bool> used;
-        transmap.decompress_samples(used);
-        cerr << "done\n";
+//        cerr << "Decompressing the transmap... ";
+//        vector<bool> used;
+//        transmap.decompress_samples(used);
+//        cerr << "done\n";
     }
 
     return i-1;
