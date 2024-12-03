@@ -29,6 +29,7 @@ task annotate {
         File haps_vs_ref_csv
         Boolean force_unique_reads = false
         Boolean bam_not_hardclipped = false
+        Boolean use_bnds = false
         String? annotation_label = "HAPESTRY_REF"
 
         String docker
@@ -60,11 +61,13 @@ task annotate {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
+        bnd_arg = ~{if use_bnds then "" else "-e 'SVTYPE=\"BND\"'" }
+
         # use bcftools to subset the vcf by the confident bed, only if the bed is defined
         if ~{defined(confident_bed)}; then
-            bcftools view -T ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
+            bcftools view ${bnd_arg} -T ~{confident_bed} ~{vcf_gz} -Ov -o confident.vcf
         else
-            bcftools view -Ov ~{vcf_gz} -o confident.vcf
+            bcftools view ${bnd_arg} -Ov ~{vcf_gz} -o confident.vcf
         fi
 
         ~{docker_dir}/sv_merge/build/annotate \

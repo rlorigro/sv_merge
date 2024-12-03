@@ -234,7 +234,6 @@ void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse
 void compute_graph_evaluation_thread_fn(
         unordered_map<Region,vector<VcfRecord> >& region_records,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
-        const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const VcfReader& vcf_reader,
@@ -444,7 +443,6 @@ void compute_graph_evaluation_thread_fn(
 void compute_graph_evaluation(
         const unordered_map <string, interval_tree_t<int32_t> >& contig_interval_trees,
         const unordered_map<string,vector<interval_t> >& contig_tandems,
-        const unordered_map<Region,TransMap>& region_transmaps,
         const unordered_map<string,string>& ref_sequences,
         const vector<Region>& regions,
         const string& label,
@@ -521,7 +519,6 @@ void compute_graph_evaluation(
                 threads.emplace_back(compute_graph_evaluation_thread_fn,
                                      std::ref(region_records),
                                      std::cref(contig_tandems),
-                                     std::cref(region_transmaps),
                                      std::cref(ref_sequences),
                                      std::cref(regions),
                                      std::cref(vcf_reader),
@@ -725,7 +722,6 @@ void annotate(
     compute_graph_evaluation(
             contig_interval_trees,
             contig_tandems,
-            region_transmaps,
             ref_sequences,
             regions,
             label,
