@@ -61,7 +61,11 @@ task annotate {
           bash ~{monitoring_script} > monitoring.log &
         fi
 
-        bnd_arg=~{if use_bnds then "" else "\"-e 'SVTYPE=\"BND\"'\"" }
+        if ~{use_bnds}; then
+            bnd_arg=""
+        else
+            bnd_arg='-e SVTYPE="BND"'
+        fi
 
         # use bcftools to subset the vcf by the confident bed, only if the bed is defined
         if ~{defined(confident_bed)}; then
