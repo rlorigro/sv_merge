@@ -1198,7 +1198,6 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
         bool use_ploidy_constraint
         ){
     SolveArguments args;
-    PathVariables vars;
     TerminationReason termination_reason;
     std::chrono::milliseconds duration;
 
@@ -1212,26 +1211,28 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     double d_min = -1;
     auto transmap_clone = transmap;
     Model model1;
+    PathVariables vars1;
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
-    construct_joint_n_d_model(transmap_clone, model1, vars, integral, use_ploidy_constraint, true);
-    d_min=round(optimize_d(model1, vars, solver_type, args, termination_reason, duration));
-    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+    construct_joint_n_d_model(transmap_clone,model1,vars1,integral,use_ploidy_constraint,true);
+    d_min=round(optimize_d(model1,vars1,solver_type,args,termination_reason,duration));
+    write_optimization_log(termination_reason,duration,transmap_clone,"optimize_d",output_dir);
     if (termination_reason!=TerminationReason::kOptimal) return termination_reason;
 
     // Computing N_MAX
     double n_max = -1;
     transmap_clone=transmap;
     Model model2;
+    PathVariables vars2;
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
-    construct_joint_n_d_model(transmap_clone, model2, vars, integral, use_ploidy_constraint, true);
-    n_max=round(optimize_n_given_d(model2, vars, solver_type, args, termination_reason, duration, d_min));
-    write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
-    if (termination_reason != TerminationReason::kOptimal) return termination_reason;
+    construct_joint_n_d_model(transmap_clone,model2,vars2,integral,use_ploidy_constraint,true);
+    n_max=round(optimize_n_given_d(model2,vars2,solver_type,args,termination_reason,duration,d_min));
+    write_optimization_log(termination_reason,duration,transmap_clone,"optimize_n_given_d",output_dir);
+    if (termination_reason!=TerminationReason::kOptimal) return termination_reason;
 
     // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
     // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
@@ -1248,24 +1249,25 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     double d = -1;
     transmap_clone=transmap;
     Model model3;
+    PathVariables vars3;
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
-    construct_joint_n_d_model(transmap_clone, model3, vars, integral, use_ploidy_constraint, true);
+    construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.
     Variable d_norm = model3.AddContinuousVariable(0,32,"d");
     Variable n_norm = model3.AddContinuousVariable(0,n_max,"n");
-    model3.AddLinearConstraint(d_norm == vars.cost_d/d_min);
-    model3.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+    model3.AddLinearConstraint(d_norm == vars3.cost_d/d_min);
+    model3.AddLinearConstraint(n_norm == vars3.cost_n/n_max);
     model3.Minimize(d_norm*d_weight + n_norm*n_weight);
-    const absl::StatusOr<SolveResult> response_n_d = Solve(model3, solver_type, args);
+    const absl::StatusOr<SolveResult> response_n_d = Solve(model3,solver_type,args);
     const auto& result_n_d = response_n_d.value();
     duration=std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
     termination_reason=result_n_d.termination.reason;
-    write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
-    if (termination_reason != TerminationReason::kOptimal) return termination_reason;
+    write_optimization_log(termination_reason,duration,transmap_clone,"optimize_d_plus_n",output_dir);
+    if (termination_reason!=TerminationReason::kOptimal) return termination_reason;
 
     // Infer the optimal n and d values of the joint solution
     n = vars.cost_n.Evaluate(result_n_d.variable_values());
@@ -1276,7 +1278,7 @@ cerr << "Objective=" << to_string(result_n_d.objective_value()) << '\n';
 cerr << "d_min=" << to_string(d_min) << '\n';
 cerr << "n_max=" << to_string(n_max) << '\n';
 
-    if (integral) parse_read_model_solution(result_n_d, vars, transmap_clone, output_dir);
+    if (integral) parse_read_model_solution(result_n_d,vars3,transmap_clone,output_dir);
     else throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
 
     transmap=transmap_clone;
