@@ -1197,7 +1197,6 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
         const SolverType& solver_type,
         bool use_ploidy_constraint
         ){
-
     SolveArguments args;
     PathVariables vars;
     TerminationReason termination_reason;
@@ -1277,7 +1276,7 @@ cerr << "Objective=" << to_string(result_n_d.objective_value()) << '\n';
 cerr << "d_min=" << to_string(d_min) << '\n';
 cerr << "n_max=" << to_string(n_max) << '\n';
 
-    if (integral) parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    if (integral) parse_read_model_solution(termination_reason,result_n_d, vars, transmap_clone, output_dir);
     else throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
 
     transmap=transmap_clone;
