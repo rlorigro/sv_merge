@@ -59,7 +59,7 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps = false){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps){
     int64_t n_paths;
     unordered_set<int64_t> mandatory_haps;
 
@@ -1234,11 +1234,6 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
     if (termination_reason != TerminationReason::kOptimal) return termination_reason;
 
-    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
-    // using an arbitrary factor of 32.
-    Variable d_norm = model.AddContinuousVariable(0,32,"d");
-    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
-
     // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
     // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
     // so that the solver exits normally and the solution is parsed as given: no read-hap edges.
@@ -1259,6 +1254,10 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
     construct_joint_n_d_model(transmap_clone, model3, vars, integral, use_ploidy_constraint, true);
+    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
+    // using an arbitrary factor of 32.
+    Variable d_norm = model3.AddContinuousVariable(0,32,"d");
+    Variable n_norm = model3.AddContinuousVariable(0,n_max,"n");
     model3.AddLinearConstraint(d_norm == vars.cost_d/d_min);
     model3.AddLinearConstraint(n_norm == vars.cost_n/n_max);
     model3.Minimize(d_norm*d_weight + n_norm*n_weight);
