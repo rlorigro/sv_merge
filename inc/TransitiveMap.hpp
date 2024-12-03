@@ -258,14 +258,11 @@ public:
     void compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum = 0, bool sort_edges = true);
 
     /**
-     * The procedure assumes that the objective function has the form $nWeight \cdot \sum_i h_i + dWeight \cdot
-     * \sum_i d_i$.
-     *
      * @param neighbors every row is assumed to be sorted;
      * @return true iff every element in `neighbors[from]` occurs in `neighbors[to]` with a weight that is smaller by at
-     * least `n_weight/d_weight`.
+     * least `delta`.
      */
-    static bool is_haplotype_dominated(float n_weight, float d_weight, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
+    static bool is_haplotype_dominated(float delta, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
 };
 

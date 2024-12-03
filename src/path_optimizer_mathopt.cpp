@@ -1270,8 +1270,8 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     if (termination_reason!=TerminationReason::kOptimal) return termination_reason;
 
     // Infer the optimal n and d values of the joint solution
-    n = vars.cost_n.Evaluate(result_n_d.variable_values());
-    d = vars.cost_d.Evaluate(result_n_d.variable_values());
+    n = vars3.cost_n.Evaluate(result_n_d.variable_values());
+    d = vars3.cost_d.Evaluate(result_n_d.variable_values());
 
 cerr << "Optimal n=" << to_string(n) << " Optimal d=" << to_string(d) << '\n';
 cerr << "Objective=" << to_string(result_n_d.objective_value()) << '\n';

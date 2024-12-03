@@ -1160,8 +1160,10 @@ bool TransMap::is_haplotype_contained(int64_t from, int64_t to, const vector<vec
 
 
 void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum, bool sort_edges) {
-    const int64_t n_samples = get_n_samples();
+    const float DELTA = n_weight/d_weight;
+    const int64_t N_SAMPLES = get_n_samples();
     int64_t n_haps = get_n_paths();
+    cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
 
     int64_t i, j;
     int64_t n_dominated, hap_id, n_removed_edges;
@@ -1199,7 +1201,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
             if (removed.at(i)) continue;
             for (j=i+1; j<n_haps; j++) {
                 if (removed.at(j)) continue;
-                if (is_haplotype_dominated(n_weight,d_weight,i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                if (is_haplotype_dominated(DELTA,i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
                     n_dominated++;
                     removed.at(i)=true;
                     hap_id=hap_ids.at(i);
@@ -1214,7 +1216,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
             }
         }
     });
-    cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/n_samples) << " avg per sample)\n";
+    cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/N_SAMPLES) << " avg per sample)\n";
 
     // Updating the transmap
     n_removed_edges=0;
@@ -1231,11 +1233,10 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
 }
 
 
-bool TransMap::is_haplotype_dominated(float n_weight, float d_weight, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
+bool TransMap::is_haplotype_dominated(float delta, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights) {
     const size_t length_from = neighbors.at(from).size();
     const size_t length_to = neighbors.at(to).size();
     if (length_from>length_to) return false;
-    const float gap = n_weight/d_weight;
 
     bool found;
     size_t i, j;
@@ -1251,7 +1252,7 @@ bool TransMap::is_haplotype_dominated(float n_weight, float d_weight, int64_t fr
             else if (neighbor_to<neighbor_from) j++;
             else {
                 found=true;
-                if (weights.at(to).at(j)>weights.at(from).at(i)-gap) return false;
+                if (weights.at(to).at(j)>weights.at(from).at(i)-delta) return false;
                 break;
             }
         }
