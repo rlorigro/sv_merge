@@ -139,20 +139,9 @@ RUN mkdir /opt/gurobi
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
 
-# MIMALLOC
-RUN wget https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.7.tar.gz
-RUN tar -xvzf v2.1.7.tar.gz
-WORKDIR mimalloc-2.1.7/
-WORKDIR out/release
-# "toplevel" install needed for headers to be found in mimalloc
-RUN cmake ../.. -DMI_INSTALL_TOPLEVEL=ON
-RUN make -j 32
-RUN make install
-WORKDIR ${work_dir}
-
 # HAPESTRY
 # MIMALLOC BRANCH COMMIT
-ARG HAPESTRY_COMMIT=3a6542a8f5d9667044e1150aafccbb4097ce4787
+ARG HAPESTRY_COMMIT=991940ea1d5713ea9374b6925ca4b214d4d1afcb
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
