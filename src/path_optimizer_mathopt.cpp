@@ -59,7 +59,7 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps = false){
     int64_t n_paths;
     unordered_set<int64_t> mandatory_haps;
 
@@ -1080,8 +1080,7 @@ TerminationReason optimize_reads_with_d_plus_n(
         size_t time_limit_seconds,
         path output_dir,
         const SolverType& solver_type,
-        bool use_ploidy_constraint,
-        bool use_mandatory_haps
+        bool use_ploidy_constraint
         ){
 
     Model model;
@@ -1109,7 +1108,7 @@ TerminationReason optimize_reads_with_d_plus_n(
         integral = false;
     }
 
-    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint, use_mandatory_haps);
+    construct_joint_n_d_model(transmap, model, vars, integral, use_ploidy_constraint);
 
     // First find one extreme of the pareto set (D_MIN)
     d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
@@ -1181,6 +1180,108 @@ cerr << "n_max=" << to_string(n_max) << '\n';
         throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
     }
 
+    return termination_reason;
+}
+
+
+/**
+ * @param transmap is set to the compressed transmap for the N+D ILP at the end of the procedure.
+ */
+TerminationReason optimize_reads_with_d_plus_n_compressed(
+        TransMap& transmap,
+        double d_weight,
+        double n_weight,
+        size_t n_threads,
+        size_t time_limit_seconds,
+        path output_dir,
+        const SolverType& solver_type,
+        bool use_ploidy_constraint
+        ){
+
+    SolveArguments args;
+    PathVariables vars;
+    TerminationReason termination_reason;
+    std::chrono::milliseconds duration;
+
+    args.parameters.threads = n_threads;
+    if (time_limit_seconds > 0) args.parameters.time_limit = absl::Seconds(time_limit_seconds);
+    else args.parameters.time_limit = absl::InfiniteDuration();
+    bool integral = true;
+    if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop) integral = false;
+
+    // Computing D_MIN
+    double d_min = -1;
+    auto transmap_clone = transmap;
+    Model model1;
+    transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.compress_haplotypes_local(0,1,0,true);
+    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_samples(0,true);
+    construct_joint_n_d_model(transmap_clone, model1, vars, integral, use_ploidy_constraint, true);
+    d_min=round(optimize_d(model1, vars, solver_type, args, termination_reason, duration));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+    if (termination_reason!=TerminationReason::kOptimal) return termination_reason;
+
+    // Computing N_MAX
+    double n_max = -1;
+    transmap_clone=transmap;
+    Model model2;
+    transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_samples(0,true);
+    construct_joint_n_d_model(transmap_clone, model2, vars, integral, use_ploidy_constraint, true);
+    n_max=round(optimize_n_given_d(model2, vars, solver_type, args, termination_reason, duration, d_min));
+    write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
+    if (termination_reason != TerminationReason::kOptimal) return termination_reason;
+
+    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
+    // using an arbitrary factor of 32.
+    Variable d_norm = model.AddContinuousVariable(0,32,"d");
+    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
+
+    // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
+    // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
+    // so that the solver exits normally and the solution is parsed as given: no read-hap edges.
+    //
+    // An example of a case where this may happen is in a window where none of the reads span. Generally this is the
+    // result of a Graphaligner issue. In some cases a perfect duplication can "capture" all the reads and prevent
+    // them from spanning the flanks.
+    if (d_min == 0) d_min = 1;
+    if (n_max == 0) n_max = 1;
+
+    // Minimizing N+D
+    double n = -1;
+    double d = -1;
+    transmap_clone=transmap;
+    Model model3;
+    transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
+    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_samples(0,true);
+    construct_joint_n_d_model(transmap_clone, model3, vars, integral, use_ploidy_constraint, true);
+    model3.AddLinearConstraint(d_norm == vars.cost_d/d_min);
+    model3.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+    model3.Minimize(d_norm*d_weight + n_norm*n_weight);
+    const absl::StatusOr<SolveResult> response_n_d = Solve(model3, solver_type, args);
+    const auto& result_n_d = response_n_d.value();
+    duration=std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
+    termination_reason=result_n_d.termination.reason;
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
+    if (termination_reason != TerminationReason::kOptimal) return termination_reason;
+
+    // Infer the optimal n and d values of the joint solution
+    n = vars.cost_n.Evaluate(result_n_d.variable_values());
+    d = vars.cost_d.Evaluate(result_n_d.variable_values());
+
+cerr << "Optimal n=" << to_string(n) << " Optimal d=" << to_string(d) << '\n';
+cerr << "Objective=" << to_string(result_n_d.objective_value()) << '\n';
+cerr << "d_min=" << to_string(d_min) << '\n';
+cerr << "n_max=" << to_string(n_max) << '\n';
+
+    if (integral) parse_read_model_solution(result_n_d, vars, transmap, output_dir);
+    else throw runtime_error("ERROR: solution parsing not implemented for non-integer variables");
+
+    transmap=transmap_clone;
     return termination_reason;
 }
 

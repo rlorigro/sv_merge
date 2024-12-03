@@ -66,15 +66,16 @@ using std::ref;
 using namespace sv_merge;
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool use_mandatory_haps, path output_dir){
-    if (not exists(output_dir)){
-        create_directories(output_dir);
-    }
-    else{
-        throw runtime_error("Directory already exists: " + output_dir.string());
-    }
+void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool compress, path output_dir){
+    if (not exists(output_dir)) create_directories(output_dir);
+    else throw runtime_error("Directory already exists: " + output_dir.string());
 
-    optimize_reads_with_d_plus_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint, use_mandatory_haps);
+    if (compress) {
+        optimize_reads_with_d_plus_n_compressed(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
+        vector<bool> used;
+        transmap.decompress_samples(used);
+    }
+    else optimize_reads_with_d_plus_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
 }
 
 
@@ -154,9 +155,6 @@ size_t solve_from_csv(
     size_t q = tokens.find_last_of("/");
     size_t p = tokens.substr(0,q).find_last_of("/");
     if (compress_transmap) {
-        transmap.compress_haplotypes_global(0,true);
-        //transmap.compress_samples(0,true);
-        //transmap.compress_reads(0,2,true,false);
         optimize(transmap, solver_type, 1, use_ploidy_constraint,true, output_dir/(tokens.substr(p+1,q-p-1)));
 
 
@@ -180,13 +178,6 @@ size_t solve_from_csv(
 
     }
     else optimize(transmap, solver_type, 1, use_ploidy_constraint, false, output_dir/tokens.substr(p+1,q-p-1));
-    if (compress_transmap) {
-//        cerr << "Decompressing the transmap... ";
-//        vector<bool> used;
-//        transmap.decompress_samples(used);
-//        cerr << "done\n";
-    }
-
     return i-1;
 }
 
