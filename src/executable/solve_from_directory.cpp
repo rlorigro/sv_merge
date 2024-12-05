@@ -70,12 +70,15 @@ void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_thread
     if (not exists(output_dir)) create_directories(output_dir);
     else throw runtime_error("Directory already exists: " + output_dir.string());
 
+    const float D_WEIGHT = 60000;
+    const float N_WEIGHT = 1;
+
     if (compress) {
-        optimize_reads_with_d_plus_n_compressed(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
+        optimize_reads_with_d_plus_n_compressed(transmap, D_WEIGHT, N_WEIGHT, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
         vector<bool> used;
         transmap.decompress_samples(used);
     }
-    else optimize_reads_with_d_plus_n(transmap, 1, 1, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
+    else optimize_reads_with_d_plus_n(transmap, D_WEIGHT, N_WEIGHT, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
 }
 
 
