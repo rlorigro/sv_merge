@@ -54,6 +54,12 @@ using std::ref;
 using namespace sv_merge;
 
 
+void write_vcf_headers(ofstream& out_file, const string& label) {
+    out_file << "##INFO=<ID=" << label << ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+    out_file << "##INFO=<ID=" << label << "_MAX,Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+    out_file << "##INFO=<ID=" << label << "_NEIGHBORS,Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+}
+
 void write_region_subsequences_to_file_thread_fn(
         const unordered_map<Region,TransMap>& region_transmaps,
         const vector<Region>& regions,
@@ -398,10 +404,12 @@ void compute_graph_evaluation_thread_fn(
 
         path output_path = subdir / "annotated.vcf";
         ofstream out_file(output_path);
-        if (not out_file.is_open() or not out_file.good()) throw runtime_error("ERROR: file could not be written: " + output_path.string());
-        out_file << "##INFO=<ID=" << label << ",Number=27,Type=Float,Description=\"Coverage computed by hapestry stratified by log2 Q values (6 bins), read is spanning (2 bins, boolean), and is reverse (2 bins, boolean), with bin edges q = 2,3,4,5,6,7 open ended both ends, log2 meaning q1 corresponding to identity 50% q2=75% etc. first value in vector is avg window coverage, last 2 values are: is_tandem (0/1) and length_of_evaluated_region (bp)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
-        out_file << "##INFO=<ID=" << label << "_MAX,Number=1,Type=Float,Description=\"The maximum observed identity for any alignment that spanned this variant (DELs are given pseudo-matches equal to their length)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
-        out_file << "##INFO=<ID=" << label << "_NEIGHBORS,Number=1,Type=Float,Description=\"The number of variants that shared the window/region (including this one)\",Source=\"hapestry\",Version=\"0.0.0.0.0.1\">\n";
+
+        if (not out_file.is_open() or not out_file.good()) {
+            throw runtime_error("ERROR: file could not be written: " + output_path.string());
+        }
+
+        // Don't bother printing proper INFO header for every single window VCF, only do at the end during concatenation
         vcf_reader.print_minimal_header(out_file);
         string s;
         for (size_t v=0; v<variant_supports.size(); v++){
@@ -536,6 +544,94 @@ void compute_graph_evaluation(
         // Wait for threads to finish
         for (auto &n: threads) {
             n.join();
+        }
+    }
+}
+
+
+void concatenate_output_vcfs(
+        const path& out_vcf,
+        const path& vcf,
+        const path& output_dir,
+        vector<Region>& regions,
+        int32_t flank_length,
+        const string& label,
+        const string& fail_log_suffix = "failed",
+        const string& vcf_prefix = "solution"
+        ) {
+
+    ofstream out_file(out_vcf);
+
+    if (not (out_file.is_open() and out_file.good())){
+        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
+    }
+
+    ifstream input_vcf(vcf);
+
+    if (not (input_vcf.is_open() and input_vcf.good())){
+        throw runtime_error("ERROR: could not write file: " + vcf.string());
+    }
+
+    // Just copy over the header lines
+    string line;
+    while (getline(input_vcf, line)){
+        if (line.starts_with("##")){
+            out_file << line << '\n';
+        }
+        else{
+            // The next non-## line MUST be the sample line
+            if (line.starts_with("#")){
+                // Write header lines for the INFO tags that we added here
+                out_file << VcfReader::INFO_REDUNDANT_HEADER << '\n';
+                write_vcf_headers(out_file, label);
+
+                // Copy the input sample line to the output VCF
+                out_file << line << '\n';
+            }
+            else {
+                throw runtime_error("ERROR: cannot find sample line in input VCF: " + vcf.string());
+            }
+
+            // Stop iteration
+            break;
+        }
+    }
+
+    input_vcf.close();
+
+    path fail_regions_bed_path = output_dir / ("windows_" + fail_log_suffix + ".bed");
+    ofstream fail_regions_file(fail_regions_bed_path);
+
+    path fail_regions_flanked_bed_path = output_dir / ("windows_" + fail_log_suffix + "_flanked.bed");
+    ofstream fail_regions_flanked_file(fail_regions_flanked_bed_path);
+
+    if (not (fail_regions_file.is_open() and fail_regions_file.good())) {
+        throw runtime_error("ERROR: could not write file: " + fail_regions_bed_path.string());
+    }
+
+    if (not (fail_regions_flanked_file.is_open() and fail_regions_flanked_file.good())) {
+        throw runtime_error("ERROR: could not write file: " + fail_regions_flanked_bed_path.string());
+    }
+
+    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
+    // Will be empty if no regions were processed
+    for (size_t i=0; i<regions.size(); i++){
+        const auto& region = regions[i];
+        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / (vcf_prefix + ".vcf");
+
+        // Skip if the file does not exist
+        if (not exists(sub_vcf)){
+            // Log that this region did not contain any solution
+            fail_regions_file << region.to_unflanked_string('\t',flank_length) << '\n';
+            fail_regions_flanked_file << region.to_bed() << '\n';
+            continue;
+        }
+
+        ifstream file(sub_vcf);
+        while (getline(file, line)){
+            if (not line.starts_with('#')){
+                out_file << line << '\n';
+            }
         }
     }
 }
@@ -735,49 +831,17 @@ void annotate(
 
     auto vcf_prefix = get_vcf_name_prefix(vcf);
     path out_vcf = output_dir / ("annotated.vcf");
-    ofstream out_file(out_vcf);
 
-    if (not (out_file.is_open() and out_file.good())){
-        throw runtime_error("ERROR: could not write file: " + out_vcf.string());
-    }
-
-    ifstream input_vcf(vcf);
-
-    if (not (input_vcf.is_open() and input_vcf.good())){
-        throw runtime_error("ERROR: could not write file: " + vcf.string());
-    }
-
-    // Just copy over the header lines
-    string line;
-    while (getline(input_vcf, line)){
-        if (line.starts_with("##")){
-            out_file << line << '\n';
-        }
-        else{
-            input_vcf.close();
-            break;
-        }
-    }
-
-    // Copy over the mutable parts of the header and then the main contents of the filtered VCF
-    for (size_t i=0; i<regions.size(); i++){
-        const auto& region = regions[i];
-        path sub_vcf = output_dir / region.to_unflanked_string('_', flank_length) / "annotated.vcf";
-
-        ifstream file(sub_vcf);
-        while (getline(file, line)){
-            if (line.starts_with('#')){
-                if (not line.starts_with("##fileformat")){
-                    if (i == 0){
-                        out_file << line << '\n';
-                    }
-                }
-            }
-            else{
-                out_file << line << '\n';
-            }
-        }
-    }
+    concatenate_output_vcfs(
+        out_vcf,
+        vcf,
+        output_dir,
+        regions,
+        flank_length,
+        label,
+        "failed",
+        "solution"
+    );
 
     cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
     cerr << t << "Done" << '\n';
