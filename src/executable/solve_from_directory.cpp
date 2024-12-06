@@ -323,6 +323,9 @@ int main(int argc, char** argv){
     else if (solver == "pdlp"){
         solver_type = SolverType::kPdlp;
     }
+    else if (solver == "gurobi"){
+        solver_type = SolverType::kGurobi;
+    }
     else{
         throw runtime_error("ERROR: unknown solver: " + solver);
     }

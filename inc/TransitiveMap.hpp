@@ -50,6 +50,16 @@ class TransMap {
 
 
 public:
+    /**
+     * Haps that must be set to one in the ILP
+     */
+    unordered_set<int64_t> present_haps;
+
+    /**
+     * Edges that must be set to one in the ILP. Format: (read_id,hap_id).
+     */
+    vector<pair<int64_t,int64_t>> present_edges;
+
     TransMap();
 
     /// Building
@@ -151,6 +161,8 @@ public:
      */
     bool are_edges_distinct() const;
 
+    void clear_present_haps_edges();
+
     /**
      * Splits the read-path graph into its connected components (which are at least as many as the connected components
      * of the sample-path graph).
@@ -174,22 +186,20 @@ public:
     /**
      * Two reads are considered identical iff they belong to the same sample and they connect to the same haplotypes
      * with the same weights (possibly after quantization). The procedure collapses all identical reads onto a single
-     * node.
+     * node and sums edge weights.
      *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
      * exactly;
-     * @param mode the weight of every read-hap edge is set to the max (mode=0), min (mode=1), sum (mode=2) or avg
-     * (mode=3) of all the edges that were collapsed onto it;
      * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
      * order that is the same for every node.
      */
-    void compress_reads(float weight_quantum, uint64_t mode, bool sort_edges = true, bool verbose = false);
+    void compress_reads(float weight_quantum, bool sort_edges = true, bool verbose = false);
 
     /**
      * Two samples are considered identical iff there is a bijection between equivalent reads: only one sample per
      * equivalence class is kept, and edge weights are summed. A sample is contained in another sample iff there is an
      * injection between equivalent reads: every contained sample such that all its reads have only one assignment is
-     * collapsed into a container sample.
+     * collapsed into a container sample, and edge weights are summed.
      *
      * Remark: there could be multiple haplotypes per sample, even though every read in the sample is assigned to
      * exactly one haplotype.
@@ -226,9 +236,12 @@ public:
     void decompress_samples(vector<bool>& used);
 
     /**
-     * Makes `out` the set of all mandatory haplotypes.
+     * Adds to object variable `present_haps` all the mandatory haplotypes, and to `present_edges` the corresponding
+     * read-hap edges.
+     *
+     * @return the number of mandatory haplotypes.
      */
-    void get_mandatory_haplotypes(unordered_set<int64_t> out) const;
+    int64_t get_mandatory_haplotypes() const;
 
     /**
      * Removes globally-equivalent and globally-contained haplotypes.
@@ -264,6 +277,25 @@ public:
      */
     static bool is_haplotype_dominated(float delta, int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
+    /**
+     * Assigns some samples to one or two haplotypes and simplifies the transmap accordingly. The procedure assumes that
+     * the objective function has the form $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$.
+     *
+     * Remark: the procedure adds to object variable `present_haps` all the haplotypes that were used to solve a sample,
+     * and it adds to `present_edges` all the edges that were used to solve a sample (all the other edges of a solved
+     * sample are removed from the transmap).
+     *
+     * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
+     * exactly;
+     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
+     * order that is the same for every node.
+     */
+    void solve_easy_samples(float n_weight, float d_weight, float weight_quantum, bool sort_edges);
+
+    /**
+     * @return `weight` if `weight_quantum=0`; otherwise, `weight` rounded to the nearest multiple of `weight_quantum`.
+     */
+    static float get_edge_weight(float weight, float weight_quantum);
 };
 
 

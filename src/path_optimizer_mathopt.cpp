@@ -59,16 +59,15 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param model - model to be constructed
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
-void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool use_mandatory_haps){
+void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint, bool compressed) {
     int64_t n_paths;
     unordered_set<int64_t> mandatory_haps;
 
     // DEFINE: hap vars
-    if (use_mandatory_haps) transmap.get_mandatory_haplotypes(mandatory_haps);
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){
         const string name = "h" + std::to_string(hap_id);
         auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
-        if (use_mandatory_haps && mandatory_haps.contains(hap_id)) {
+        if (compressed && transmap.present_haps.contains(hap_id)) {
             auto& h = result.first->second;
             model.AddLinearConstraint(h == 1);
         }
@@ -97,8 +96,8 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     // OBJECTIVE: accumulate d cost sum
                     vars.cost_d += w*r_h;
 
-                    // Mandatory haps
-                    if (use_mandatory_haps && n_paths==1) model.AddLinearConstraint(r_h == 1);
+                    // Present edges
+                    if (compressed && transmap.present_edges.contains(read_id,hap_id)) model.AddLinearConstraint(r_h == 1);
                 }
 
                 // Do only once for each unique pair of sample-hap
@@ -114,8 +113,8 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
 
-                    // Mandatory haps
-                    if (use_mandatory_haps && n_paths==1) model.AddLinearConstraint(s_h == 1);
+                    // Present edges
+                    if (compressed && transmap.present_edges.contains(read_id,hap_id)) model.AddLinearConstraint(s_h == 1);
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
@@ -1200,6 +1199,8 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     SolveArguments args;
     TerminationReason termination_reason;
     std::chrono::milliseconds duration;
+    unordered_set<int64_t> present_haps;
+    vector<pair<int64_t,int64_t>> present_edges;
 
     args.parameters.threads = n_threads;
     if (time_limit_seconds > 0) args.parameters.time_limit = absl::Seconds(time_limit_seconds);
@@ -1212,8 +1213,12 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     auto transmap_clone = transmap;
     Model model1;
     PathVariables vars1;
+    transmap_clone.clear_present_haps_edges();
+    int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes(mandatory_haps);
+    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
+    transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
     construct_joint_n_d_model(transmap_clone,model1,vars1,integral,use_ploidy_constraint,true);
@@ -1226,7 +1231,9 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone=transmap;
     Model model2;
     PathVariables vars2;
+    transmap_clone.clear_present_haps_edges();
     transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
     construct_joint_n_d_model(transmap_clone,model2,vars2,integral,use_ploidy_constraint,true);
@@ -1250,8 +1257,10 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone=transmap;
     Model model3;
     PathVariables vars3;
+    transmap_clone.clear_present_haps_edges();
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
+    transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);

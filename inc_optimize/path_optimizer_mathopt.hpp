@@ -93,7 +93,7 @@ void construct_joint_n_d_model(
         PathVariables& vars,
         bool integral = true,
         bool use_ploidy_constraint = true,
-        bool use_mandatory_haps = false
+        bool compressed = false
         );
 
 TerminationReason optimize_reads_with_d_and_n(

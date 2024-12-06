@@ -695,7 +695,7 @@ TransMap TransMap::partition_get_test_transmap() {
 }
 
 
-void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edges, bool verbose) {
+void TransMap::compress_reads(float weight_quantum, bool sort_edges, bool verbose) {
     const int64_t n_reads = get_n_reads();
 
     size_t length;
@@ -714,10 +714,8 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
     for (i=0; i<n_reads; i++) weights.emplace_back();
-    if (weight_quantum!=0) {
-        compared_weights.reserve(n_reads);
-        for (i=0; i<n_reads; i++) compared_weights.emplace_back();
-    }
+    compared_weights.reserve(n_reads);
+    for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     node_ids.reserve(n_reads); sample_ids.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string &sample_name, int64_t sample_id) {
@@ -730,7 +728,7 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
                 auto [success, weight] = try_get_edge_weight(read_id, path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
-                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+                compared_weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
             });
         });
     });
@@ -749,38 +747,21 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     for (i=0; i<n_reads; i++) is_redundant.emplace_back(false);
     is_representative.reserve(n_reads);
     for (i=0; i<n_reads; i++) is_representative.emplace_back(false);
-    if (mode==3) {
-        cluster_size.reserve(n_reads);
-        for (i=0; i<n_reads; i++) cluster_size.emplace_back(0);
-    }
+    cluster_size.reserve(n_reads);
+    for (i=0; i<n_reads; i++) cluster_size.emplace_back(0);
     n_clusters=0;
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i)) continue;
         n_clusters++;
-        if (mode==3) cluster_size.at(i)=1;
+        cluster_size.at(i)=1;
         read_id=node_ids.at(i);
         length=neighbors.at(i).size();
         for (j=i+1; j<n_reads; j++) {
             if (sample_ids.at(j)!=sample_ids.at(i)) break;
-            if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
+            if (is_redundant.at(j) || neighbors.at(j)!=neighbors.at(i) || compared_weights.at(j)!=compared_weights.at(i)) continue;
             is_redundant.at(j)=true; is_representative.at(i)=true;
-            if (mode==3) cluster_size.at(i)++;
-            for (k=0; k<length; k++) {
-                switch (mode) {
-                    case 0:
-                        weights.at(i).at(k)=std::max(weights.at(i).at(k),weights.at(j).at(k));
-                        break;
-                    case 1:
-                        weights.at(i).at(k)=std::min(weights.at(i).at(k),weights.at(j).at(k));
-                        break;
-                    case 2:
-                        weights.at(i).at(k)+=weights.at(j).at(k);
-                        break;
-                    case 3:
-                        weights.at(i).at(k)+=weights.at(j).at(k);
-                        break;
-                }
-            }
+            cluster_size.at(i)++;
+            for (k=0; k<length; k++) weights.at(i).at(k)+=weights.at(j).at(k);
         }
     }
     compared_weights.clear();
@@ -798,10 +779,6 @@ void TransMap::compress_reads(float weight_quantum, uint64_t mode, bool sort_edg
     // Updating the transmap
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i) || !is_representative.at(i)) continue;
-        if (mode==3) {
-            length=weights.at(i).size();
-            for (j=0; j<length; j++) weights.at(i).at(j)/=cluster_size.at(i);
-        }
         read_id=node_ids.at(i); length=neighbors.at(i).size();
         for (j=0; j<length; j++) graph.update_edge_weight(read_id, neighbors.at(i).at(j), weights.at(i).at(j));
     }
@@ -836,10 +813,8 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
     for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
     for (i=0; i<n_reads; i++) weights.emplace_back();
-    if (weight_quantum!=0) {
-        compared_weights.reserve(n_reads);
-        for (i=0; i<n_reads; i++) compared_weights.emplace_back();
-    }
+    compared_weights.reserve(n_reads);
+    for (i=0; i<n_reads; i++) compared_weights.emplace_back();
     read_ids.clear(); read_ids.reserve(n_reads); sample_ids.reserve(n_reads);
     i=-1;
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
@@ -851,7 +826,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
                 auto [success, weight] = try_get_edge_weight(read_id,path_id);
                 neighbors.at(i).emplace_back(path_id);
                 weights.at(i).emplace_back(weight);
-                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+                compared_weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
             });
         });
     });
@@ -866,7 +841,7 @@ void TransMap::compress_samples(float weight_quantum, bool sort_edges) {
         cluster_ids.at(i)=n_clusters;
         read_id=read_ids.at(i);
         for (j=i+1; j<n_reads; j++) {
-            if (cluster_ids.at(j)!=0 || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
+            if (cluster_ids.at(j)!=0 || neighbors.at(j)!=neighbors.at(i) || compared_weights.at(j)!=compared_weights.at(i)) continue;
             cluster_ids.at(j)=n_clusters;
         }
     }
@@ -1044,13 +1019,17 @@ void TransMap::decompress_samples(vector<bool>& used) {
 }
 
 
-void TransMap::get_mandatory_haplotypes(unordered_set<int64_t> out) const {
-    out.clear();
+int64_t TransMap::get_mandatory_haplotypes() const {
+    int64_t out = 0;
     for_each_read([&](const string& read_name, int64_t read_id) {
         auto p = get_n_paths_of_read(read_id);
-        if (p.first==1) out.emplace(p.second);
+        if (p.first==1) {
+            present_haps.emplace(p.second);
+            present_edges.emplace_back(read_id,p.second);
+            out++;
+        }
     });
-    cerr << "Mandatory haplotypes: " << to_string(out.size()) << '\n';
+    return out;
 }
 
 
@@ -1064,7 +1043,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
     vector<int64_t> hap_ids;
     unordered_set<int64_t> to_remove;
     vector<vector<int64_t>> neighbors;
-    vector<vector<float>> weights, compared_weights;
+    vector<vector<float>> weights;
     unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
     // Making sure that the neighbors of all nodes lie in the same global order
@@ -1075,10 +1054,6 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
     for (i=0; i<n_haps; i++) neighbors.emplace_back();
     weights.reserve(n_haps);
     for (i=0; i<n_haps; i++) weights.emplace_back();
-    if (weight_quantum!=0) {
-        compared_weights.reserve(n_haps);
-        for (i=0; i<n_haps; i++) compared_weights.emplace_back();
-    }
     hap_ids.clear(); hap_ids.reserve(n_haps);
     i=-1;
     for_each_path([&](const string& path_name, int64_t path_id) {
@@ -1088,8 +1063,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
             // For each hap, its neighbors lie in the same global order.
             auto [success, weight] = try_get_edge_weight(read_id,path_id);
             neighbors.at(i).emplace_back(read_id);
-            weights.at(i).emplace_back(weight);
-            if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+            weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
         });
     });
 
@@ -1100,7 +1074,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
     for (i=0; i<n_haps; i++) {
         if (removed.at(i)) continue;
         for (j=i+1; j<n_haps; j++) {
-            if (removed.at(j) || neighbors.at(j)!=neighbors.at(i) || (weight_quantum==0 && weights.at(j)!=weights.at(i)) || (weight_quantum!=0 && compared_weights.at(j)!=compared_weights.at(i))) continue;
+            if (removed.at(j) || neighbors.at(j)!=neighbors.at(i) || weights.at(j)!=weights.at(i)) continue;
             n_equivalent++;
             removed.at(j)=true;
             to_remove.emplace(hap_ids.at(j));
@@ -1114,7 +1088,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
         if (removed.at(i)) continue;
         for (j=i+1; j<n_haps; j++) {
             if (removed.at(j)) continue;
-            if (is_haplotype_contained(i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+            if (is_haplotype_contained(i,j,neighbors,weights)) {
                 n_contained++;
                 removed.at(i)=true;
                 to_remove.emplace(hap_ids.at(i));
@@ -1122,7 +1096,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum, bool sort_edges)
             }
         }
     }
-    neighbors.clear(); weights.clear(); compared_weights.clear(); hap_ids.clear();
+    neighbors.clear(); weights.clear(); hap_ids.clear();
     cerr << "Removed " << to_string(n_contained) << " globally-contained haplotypes (out of " << to_string(n_haps) << " total)\n";
 
     // Updating the transmap
@@ -1171,7 +1145,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     vector<int64_t> hap_ids;
     unordered_set<int64_t> to_remove;
     vector<vector<int64_t>> neighbors;
-    vector<vector<float>> weights, compared_weights;
+    vector<vector<float>> weights;
     unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
     // Making sure that the neighbors of all nodes lie in the same global order
@@ -1180,18 +1154,17 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     // Removing locally-dominated haps
     n_dominated=0; edges_to_remove.clear();
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
-        hap_ids.clear(); neighbors.clear(); weights.clear(); compared_weights.clear();
+        hap_ids.clear(); neighbors.clear(); weights.clear();
         i=-1;
         for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
             i++; hap_ids.emplace_back(path_id);
-            neighbors.emplace_back(); weights.emplace_back(); compared_weights.emplace_back();
+            neighbors.emplace_back(); weights.emplace_back();
             for_each_read_of_path(path_id, [&](int64_t read_id) {
                 // For each hap, its neighbors lie in the same global order.
                 if (get_sample_of_read(read_id)!=sample_id) return;
                 auto [success, weight] = try_get_edge_weight(read_id,path_id);
                 neighbors.at(i).emplace_back(read_id);
-                weights.at(i).emplace_back(weight);
-                if (weight_quantum!=0) compared_weights.at(i).emplace_back((float)floor(weight/weight_quantum));
+                weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
             });
         });
         n_haps=hap_ids.size();
@@ -1201,7 +1174,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
             if (removed.at(i)) continue;
             for (j=i+1; j<n_haps; j++) {
                 if (removed.at(j)) continue;
-                if (is_haplotype_dominated(DELTA,i,j,neighbors,weight_quantum==0?weights:compared_weights)) {
+                if (is_haplotype_dominated(DELTA,i,j,neighbors,weights)) {
                     n_dominated++;
                     removed.at(i)=true;
                     hap_id=hap_ids.at(i);
@@ -1259,6 +1232,143 @@ bool TransMap::is_haplotype_dominated(float delta, int64_t from, int64_t to, con
         if (!found) return false;
     }
     return true;
+}
+
+
+void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_quantum, bool sort_edges) {
+    const float DELTA = n_weight/d_weight;
+    const int64_t N_HAPS = get_n_paths();
+
+    bool not_worse, favored;
+    int64_t i, j, k;
+    int64_t read_id, hap_id, min_hap_id, n_reads, n_haps, hap1, hap2, n_one_hap_samples, n_two_hap_samples;
+    float weight, min_weight;
+    vector<int64_t> read_ids;
+    unordered_set<int64_t> tmp_set;
+    vector<vector<int64_t>> neighbors;
+    vector<vector<float>> weights;
+    vector<pair<int64_t,int64_t>> edges_to_remove;
+    unordered_set<int64_t> favored_haps;
+    unordered_map<int64_t,unordered_set<int64_t>> hap_to_reads;
+
+    // Making sure that the neighbors of all nodes lie in the same global order
+    if (sort_edges) graph.sort_adjacency_lists();
+
+    // Solving easy samples
+    n_one_hap_samples=0; n_two_hap_samples=0;
+    edges_to_remove.clear();
+    hap_to_reads.reserve(N_HAPS); favored_haps.reserve(N_HAPS); tmp_set.reserve(N_HAPS);
+    for_each_sample([&](const string& sample_name, int64_t sample_id) {
+        read_ids.clear(); neighbors.clear(); weights.clear();
+        i=-1;
+        for_each_read_of_sample(sample_id, [&](int64_t read_id) {
+            i++; read_ids.emplace_back(read_id);
+            neighbors.emplace_back(); weights.emplace_back();
+            for_each_path_of_read(read_id, [&](int64_t path_id) {
+                // For each read, its neighbors lie in the same global order.
+                auto [success, weight] = try_get_edge_weight(read_id,path_id);
+                neighbors.at(i).emplace_back(path_id);
+                weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
+            });
+        });
+        n_reads=read_ids.size();
+        hap_to_reads.clear(); favored_haps.clear();
+        for (i=0; i<n_reads; i++) {
+            read_id=read_ids.at(i);
+            n_haps=neighbors.at(i).size();
+            for (j=i+1; j<n_haps; j++) {
+                hap_id=neighbors.at(i).at(j);
+                weight=weights.at(i).at(j);
+                not_worse=true;
+                for (k=0; k<n_haps; k++) {
+                    if (k!=j && weight>weights.at(i).at(k)) { not_worse=false; break; }
+                }
+                if (not_worse) {
+                    if (hap_to_reads.contains(hap_id)) hap_to_reads.at(hap_id).emplace(read_id);
+                    else hap_to_reads.emplace(hap_id,read_id);
+                }
+                favored=true;
+                for (k=0; k<n_haps; k++) {
+                    if (k!=j && weight>weights.at(i).at(k)-DELTA) { favored=false; break; }
+                }
+                if (favored) favored_haps.emplace(hap_id);
+            }
+        }
+        // One-hap sample
+        hap1=-1;
+        for (auto& hap_id: favored_haps) {
+            if (hap_to_reads.at(hap_id).size()==n_reads) { hap1=hap_id; break; }
+        }
+        if (hap1!=-1) {
+            for (i=0; i<n_reads; i++) {
+                read_id=read_ids.at(i);
+                n_haps=neighbors.at(i).size();
+                for (j=0; j<n_haps; j++) {
+                    hap_id=neighbors.at(i).at(j);
+                    if (hap_id!=hap1) edges_to_remove.emplace_back(read_id,hap_id);
+                    else present_edges.emplace_back(read_id,hap_id);
+                }
+            }
+            present_haps.emplace(hap1);
+            n_one_hap_samples++;
+            return;
+        }
+        // Two-hap sample
+        hap1=-1; hap2=-1;
+        for (auto& hap_id: favored_haps) {
+            for (auto& hap_id_prime: favored_haps) {
+                if (hap_id_prime==hap_id) continue;
+                tmp_set.clear();
+                for (auto& element: hap_to_reads.at(hap_id)) tmp_set.emplace(element);
+                for (auto& element: hap_to_reads.at(hap_id_prime)) tmp_set.emplace(element);
+                if (tmp_set.size()!=n_reads) continue;
+                hap1=hap_id; hap2=hap_id_prime;
+                break;
+            }
+            if (hap1!=-1 && hap2!=-1) break;
+        }
+        if (hap1!=-1 && hap2!=-1) {
+            for (i=0; i<n_reads; i++) {
+                read_id=read_ids.at(i);
+                min_hap_id=-1; min_weight=INT32_MAX;
+                n_haps=neighbors.at(i).size();
+                for (j=0; j<n_haps; j++) {
+                    hap_id=neighbors.at(i).at(j);
+                    weight=weights.at(i).at(j);
+                    if (hap_id!=hap1 && hap_id!=hap2) edges_to_remove.emplace_back(read_id,hap_id);
+                    else if (weight<min_weight) { min_weight=weight; min_hap_id=hap_id; }
+                }
+                for (j=0; j<n_haps; j++) {
+                    hap_id=neighbors.at(i).at(j);
+                    if (hap_id==hap1) {
+                        if (min_hap_id!=hap1) edges_to_remove.emplace_back(read_id,hap_id);
+                        else present_edges.emplace_back(read_id,hap_id);
+                    }
+                    else if (hap_id==hap2) {
+                        if (min_hap_id!=hap2) edges_to_remove.emplace_back(read_id,hap_id);
+                        else present_edges.emplace_back(read_id,hap_id);
+                    }
+                }
+            }
+            present_haps.emplace(hap1); present_haps.emplace(hap2);
+            n_two_hap_samples++;
+            return;
+        }
+    });
+    cerr << "Solved " << to_string(n_one_hap_samples) << " one-hap samples and " << to_string(n_two_hap_samples) << " two-hap samples. Removed " << to_string(edges_to_remove.size()) << " edges. Set to one " << to_string(present_haps.size()) << " haplotypes and " << to_string(present_edges.size()) << " edges.\n";
+
+    // Updating the transmap
+    for (auto& pair: edges_to_remove) remove_edge(pair.first,pair.second);
+}
+
+
+float TransMap::get_edge_weight(float weight, float weight_quantum) {
+    return weight_quantum!=0?(float)(round(weight/weight_quantum)*weight_quantum):weight;
+}
+
+
+void TransMap::clear_present_haps_edges() {
+    present_haps.clear(); present_edges.clear();
 }
 
 
