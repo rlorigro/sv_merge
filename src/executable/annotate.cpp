@@ -557,7 +557,7 @@ void concatenate_output_vcfs(
         int32_t flank_length,
         const string& label,
         const string& fail_log_suffix = "failed",
-        const string& vcf_prefix = "solution"
+        const string& vcf_prefix = "annotated"
         ) {
 
     ofstream out_file(out_vcf);
