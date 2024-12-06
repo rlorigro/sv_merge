@@ -840,7 +840,7 @@ void annotate(
         flank_length,
         label,
         "failed",
-        "solution"
+        "annotated"
     );
 
     cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
