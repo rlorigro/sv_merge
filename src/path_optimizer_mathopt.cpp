@@ -1201,6 +1201,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     std::chrono::milliseconds duration;
     unordered_set<int64_t> present_haps;
     vector<pair<int64_t,int64_t>> present_edges;
+    Timer t;
 
     args.parameters.threads = n_threads;
     if (time_limit_seconds > 0) args.parameters.time_limit = absl::Seconds(time_limit_seconds);
@@ -1210,17 +1211,21 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
 
     // Computing D_MIN
     double d_min = -1;
+    t.reset();
     auto transmap_clone = transmap;
+    cerr << "Clone time: " << to_string(t.elapsed_milliseconds()) << " ms\n";
     Model model1;
     PathVariables vars1;
+    t.reset();
     transmap_clone.clear_present_haps_edges();
     int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes(mandatory_haps);
     cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
-    transmap_clone.solve_easy_samples(0,1,0,true);
+    //transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
+    cerr << "Compression time d: " << to_string(t.elapsed_milliseconds()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model1,vars1,integral,use_ploidy_constraint,true);
     d_min=round(optimize_d(model1,vars1,solver_type,args,termination_reason,duration));
     write_optimization_log(termination_reason,duration,transmap_clone,"optimize_d",output_dir);
@@ -1231,11 +1236,13 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone=transmap;
     Model model2;
     PathVariables vars2;
+    t.reset();
     transmap_clone.clear_present_haps_edges();
     transmap_clone.compress_haplotypes_global(0,true);
-    transmap_clone.solve_easy_samples(0,1,0,true);
+    //transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
+    cerr << "Compression time n_given_d: " << to_string(t.elapsed_milliseconds()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model2,vars2,integral,use_ploidy_constraint,true);
     n_max=round(optimize_n_given_d(model2,vars2,solver_type,args,termination_reason,duration,d_min));
     write_optimization_log(termination_reason,duration,transmap_clone,"optimize_n_given_d",output_dir);
@@ -1257,12 +1264,14 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone=transmap;
     Model model3;
     PathVariables vars3;
+    t.reset();
     transmap_clone.clear_present_haps_edges();
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
-    transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
+    //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
     transmap_clone.compress_reads(0,2,true,false);
     transmap_clone.compress_samples(0,true);
+    cerr << "Compression time d_plus_n: " << to_string(t.elapsed_milliseconds()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.
