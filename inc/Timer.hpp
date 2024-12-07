@@ -24,6 +24,7 @@ class Timer{
 
 public:
     Timer();
+    milliseconds elapsed_milliseconds() const;
     string elapsed() const;
     string to_csv() const;
 

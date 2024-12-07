@@ -9,6 +9,12 @@ Timer::Timer():
 {}
 
 
+milliseconds Timer::elapsed_milliseconds() const {
+    milliseconds d = duration_cast<milliseconds>(std::chrono::steady_clock::now() - start);
+    return d;
+}
+
+
 string Timer::elapsed() const {
     auto d = std::chrono::steady_clock::now() - start;
 
