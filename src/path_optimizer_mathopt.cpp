@@ -1218,7 +1218,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     PathVariables vars1;
     t.reset();
     transmap_clone.clear_present_haps_edges();
-    int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes(mandatory_haps);
+    int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes();
     cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
@@ -1238,6 +1238,8 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     PathVariables vars2;
     t.reset();
     transmap_clone.clear_present_haps_edges();
+    n_mandatory=transmap_clone.get_mandatory_haplotypes();
+    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     //transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,true,false);
@@ -1266,6 +1268,8 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     PathVariables vars3;
     t.reset();
     transmap_clone.clear_present_haps_edges();
+    n_mandatory=transmap_clone.get_mandatory_haplotypes();
+    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
     //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
