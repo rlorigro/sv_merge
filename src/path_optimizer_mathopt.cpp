@@ -1219,7 +1219,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     t.reset();
     transmap_clone.clear_present_haps_edges();
     int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes();
-    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
+    //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
     //transmap_clone.solve_easy_samples(0,1,0,true);
@@ -1239,7 +1239,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     t.reset();
     transmap_clone.clear_present_haps_edges();
     n_mandatory=transmap_clone.get_mandatory_haplotypes();
-    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
+    //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
     //transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0,true,false);
@@ -1268,14 +1268,26 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     PathVariables vars3;
     t.reset();
     transmap_clone.clear_present_haps_edges();
+    auto t1 = t.elapsed_milliseconds().count();
+    t.reset();
     n_mandatory=transmap_clone.get_mandatory_haplotypes();
-    cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
+    auto t2 = t.elapsed_milliseconds().count();
+    t.reset();
+    //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0,true);
+    auto t3 = t.elapsed_milliseconds().count();
+    t.reset();
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
+    auto t4 = t.elapsed_milliseconds().count();
+    t.reset();
     //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
     transmap_clone.compress_reads(0,true,false);
+    auto t5 = t.elapsed_milliseconds().count();
+    t.reset();
     transmap_clone.compress_samples(0,true);
-    cerr << "Compression time d_plus_n: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
+    auto t6 = t.elapsed_milliseconds().count();
+    t.reset();
+    cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "\n";
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.
