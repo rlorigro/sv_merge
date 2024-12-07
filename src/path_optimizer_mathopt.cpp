@@ -97,7 +97,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     vars.cost_d += w*r_h;
 
                     // Present edges
-                    if (compressed && transmap.present_edges.contains(read_id,hap_id)) model.AddLinearConstraint(r_h == 1);
+                    if (compressed && transmap.present_edges.contains(std::make_pair(read_id,hap_id))) model.AddLinearConstraint(r_h == 1);
                 }
 
                 // Do only once for each unique pair of sample-hap
@@ -114,7 +114,7 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
 
                     // Present edges
-                    if (compressed && transmap.present_edges.contains(read_id,hap_id)) model.AddLinearConstraint(s_h == 1);
+                    if (compressed && transmap.present_edges.contains(std::make_pair(read_id,hap_id))) model.AddLinearConstraint(s_h == 1);
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
