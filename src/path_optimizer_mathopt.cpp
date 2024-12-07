@@ -1223,7 +1223,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(0,1,0,true);
     //transmap_clone.solve_easy_samples(0,1,0,true);
-    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_reads(0,true,false);
     transmap_clone.compress_samples(0,true);
     cerr << "Compression time d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model1,vars1,integral,use_ploidy_constraint,true);
@@ -1240,7 +1240,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.clear_present_haps_edges();
     transmap_clone.compress_haplotypes_global(0,true);
     //transmap_clone.solve_easy_samples(0,1,0,true);
-    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_reads(0,true,false);
     transmap_clone.compress_samples(0,true);
     cerr << "Compression time n_given_d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model2,vars2,integral,use_ploidy_constraint,true);
@@ -1269,7 +1269,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_haplotypes_global(0,true);
     transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
     //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
-    transmap_clone.compress_reads(0,2,true,false);
+    transmap_clone.compress_reads(0,true,false);
     transmap_clone.compress_samples(0,true);
     cerr << "Compression time d_plus_n: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
