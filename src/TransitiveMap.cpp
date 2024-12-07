@@ -1019,13 +1019,13 @@ void TransMap::decompress_samples(vector<bool>& used) {
 }
 
 
-int64_t TransMap::get_mandatory_haplotypes() const {
+int64_t TransMap::get_mandatory_haplotypes() {
     int64_t out = 0;
     for_each_read([&](const string& read_name, int64_t read_id) {
         auto p = get_n_paths_of_read(read_id);
         if (p.first==1) {
             present_haps.emplace(p.second);
-            present_edges.emplace_back(read_id,p.second);
+            present_edges.emplace(read_id,p.second);
             out++;
         }
     });
@@ -1306,7 +1306,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
                 for (j=0; j<n_haps; j++) {
                     hap_id=neighbors.at(i).at(j);
                     if (hap_id!=hap1) edges_to_remove.emplace_back(read_id,hap_id);
-                    else present_edges.emplace_back(read_id,hap_id);
+                    else present_edges.emplace(read_id,hap_id);
                 }
             }
             present_haps.emplace(hap1);
@@ -1342,11 +1342,11 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
                     hap_id=neighbors.at(i).at(j);
                     if (hap_id==hap1) {
                         if (min_hap_id!=hap1) edges_to_remove.emplace_back(read_id,hap_id);
-                        else present_edges.emplace_back(read_id,hap_id);
+                        else present_edges.emplace(read_id,hap_id);
                     }
                     else if (hap_id==hap2) {
                         if (min_hap_id!=hap2) edges_to_remove.emplace_back(read_id,hap_id);
-                        else present_edges.emplace_back(read_id,hap_id);
+                        else present_edges.emplace(read_id,hap_id);
                     }
                 }
             }

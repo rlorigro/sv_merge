@@ -58,7 +58,7 @@ public:
     /**
      * Edges that must be set to one in the ILP. Format: (read_id,hap_id).
      */
-    vector<pair<int64_t,int64_t>> present_edges;
+    unordered_set<pair<int64_t,int64_t>> present_edges;
 
     TransMap();
 
@@ -241,7 +241,7 @@ public:
      *
      * @return the number of mandatory haplotypes.
      */
-    int64_t get_mandatory_haplotypes() const;
+    int64_t get_mandatory_haplotypes();
 
     /**
      * Removes globally-equivalent and globally-contained haplotypes.
