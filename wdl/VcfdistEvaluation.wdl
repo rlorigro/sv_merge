@@ -146,6 +146,8 @@ task SubsetSampleFromVcf {
             --threads 4 \
             -Oz -o region.vcf.gz
 
+        bcftools index -t --threads 4 region.vcf.gz
+
         bcftools view region.vcf.gz \
             --threads 4 \
             -s ~{sample} \
