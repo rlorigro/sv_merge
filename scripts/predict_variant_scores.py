@@ -64,8 +64,8 @@ def main(vcf_paths, model_path, features_name, output_vcf_path):
     if output_vcf_path.endswith(".gz"):
         exit("ERROR: gz compressed output format not supported. Please output VCF and compress with bcftools.")
 
-    model = ShallowLinear(input_size=41)
-    model.load_state_dict(torch.load(model_path))
+    # model = ShallowLinear(input_size=41)
+    model = torch.load(model_path)
     model.eval()
 
     t2 = datetime.datetime.now()
