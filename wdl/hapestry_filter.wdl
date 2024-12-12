@@ -81,4 +81,9 @@ workflow hapestry_filter {
         vcf_tbi: "Path to the VCF index"
         model: "Path to the filter model, typically '.pt' file extension"
     }
+
+    output{
+        File hapestry_filtered_vcf_gz = predict_variant_scores.hapestry_filtered_vcf_gz
+        File hapestry_filtered_vcf_tbi = predict_variant_scores.hapestry_filtered_vcf_tbi
+    }
 }
