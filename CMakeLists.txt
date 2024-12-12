@@ -11,9 +11,12 @@ message(STATUS "Use the following flags for special configuration options E.g.: 
     FLAG            RESULT
     ------------    ----------------------------------------------------------------------------------------
     no_ortools:     skip all portions of the project that involve ortools (including the main hapestry exe)
+    no_mimalloc:    skip building/linking mimalloc
     debug:          invoke less optimization and more transparency for debugging (including ASan)
     no_san:         skip AddressSanitizer and other sanitizers (only relevant when using debug=1)
-    dev:            skip fetching external projects (must NOT be invoked on first compilation)")
+    dev:            skip fetching external projects (must NOT be invoked on first compilation)
+    "
+)
 
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
@@ -24,6 +27,10 @@ set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl/bin/openssl")
 set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if (NOT no_mimalloc OR NOT DEFINED no_mimalloc)
+    set(USE_MIMALLOC ON)
+endif()
 
 # Commented until Ubuntu24/CMake3.24 becomes mainstream
 #cmake_policy(SET CMP0135 NEW)
@@ -507,6 +514,31 @@ include_directories(external/bdsg/include/
 
 message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- mimalloc ---------------- #
+# ------------------------------------------ #
+##############################################
+
+if(USE_MIMALLOC)
+    include(FetchContent)
+
+    FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
+        GIT_TAG 8c532c32c3c96e5ba1f2283e032f69ead8add00f
+    )
+
+    FetchContent_MakeAvailable(mimalloc)
+
+    add_dependencies(sv_merge mimalloc)
+
+    include_directories(
+        ${mimalloc_SOURCE_DIR}/include
+    )
+endif()
+
 # ------- Misc -------
 
 find_program(GRAPHALIGNER_FOUND "GraphAligner")
@@ -524,7 +556,6 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 else()
     find_package(CURL REQUIRED)
 endif()
-
 
 #message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
@@ -595,6 +626,10 @@ foreach(FILENAME_PREFIX ${TESTS})
             libsdsl
     )
 
+    if (USE_MIMALLOC)
+        target_link_libraries(${FILENAME_PREFIX} mimalloc)
+    endif()
+
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         target_link_libraries(${FILENAME_PREFIX} curl2)
     else()
@@ -646,6 +681,10 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
             libhandlegraph
             libsdsl
     )
+
+    if (USE_MIMALLOC)
+        target_link_libraries(${FILENAME_PREFIX} mimalloc)
+    endif()
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         target_link_libraries(${FILENAME_PREFIX} curl2)

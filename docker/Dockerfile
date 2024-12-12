@@ -136,10 +136,12 @@ RUN mv gurobi1101/ /opt/
 # This is where the license will be placed during runtime
 RUN mkdir /opt/gurobi
 
-# HAPESTRY
 RUN apt remove cmake -y \
     && pip3 install cmake --upgrade
-ARG HAPESTRY_COMMIT=90c2d29c898ecdef1b390ea32202def084fb14f7
+
+# HAPESTRY
+# MIMALLOC BRANCH COMMIT
+ARG HAPESTRY_COMMIT=991940ea1d5713ea9374b6925ca4b214d4d1afcb
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
