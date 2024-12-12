@@ -64,7 +64,7 @@ def main(vcf_paths, model_path, features_name, output_vcf_path):
     if output_vcf_path.endswith(".gz"):
         exit("ERROR: gz compressed output format not supported. Please output VCF and compress with bcftools.")
 
-    # model = ShallowLinear(input_size=41)
+    # Expect full model to be saved
     model = torch.load(model_path)
     model.eval()
 
@@ -73,7 +73,7 @@ def main(vcf_paths, model_path, features_name, output_vcf_path):
     t = t2
 
     for vcf_path in vcf_paths:
-        dataset = VcfDataset(vcf_paths=[vcf_path], truth_info_name=features_name, filter_fn=None, annotation_name="Hapestry")
+        dataset = VcfDataset(vcf_paths=[vcf_path], truth_info_name=None, filter_fn=None, annotation_name=features_name)
 
         t2 = datetime.datetime.now()
         print(t2 - t, "Loaded VCF")
