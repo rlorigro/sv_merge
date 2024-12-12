@@ -1,3 +1,5 @@
+import os.path
+
 from modules.data_loader import VcfDataset
 from modules.shallow_linear import ShallowLinear
 from collections import OrderedDict
@@ -40,6 +42,11 @@ def filter_fn(record: vcfpy.Record):
 
 
 def write_scored_vcf(y_predict, records, input_vcf_path, output_vcf_path):
+    dir = os.path.dirname(output_vcf_path)
+
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
     reader = vcfpy.Reader.from_path(input_vcf_path)
 
     mapping = OrderedDict({
