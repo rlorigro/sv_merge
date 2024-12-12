@@ -70,3 +70,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/hapestry_merge_heaptrack.wdl
   testParameterFiles:
+- name: hapestry_filter
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_filter.wdl
+  testParameterFiles:

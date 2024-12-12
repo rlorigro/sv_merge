@@ -2,6 +2,7 @@ from torch.utils.data.dataset import Dataset
 from collections import defaultdict
 import numpy as np
 import torch
+import math
 import sys
 
 import vcfpy
@@ -72,14 +73,15 @@ def load_features_from_vcf(
         #               \  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  2  3  4  5  6  7  /  /
         #             i 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26
         #             [ 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, x]
-        if truth_info_name.lower() == "hapestry":
-            is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
-        elif truth_info_name is not None:
+        if truth_info_name is not None:
             if truth_info_name not in info:
                 sys.stderr.write("ERROR: truth info not found in record: " + str(record.ID) + "\n")
                 continue
-
-            is_true = info[truth_info_name]
+            else:
+                if truth_info_name.lower() == "hapestry":
+                    is_true = float(info["HAPESTRY_REF_MAX"]) > 0.9
+                else:
+                    is_true = info[truth_info_name]
         else:
             is_true = 0
 
@@ -144,6 +146,11 @@ def load_features_from_vcf(
             x[-1].append(max_align_score)
             if r == 0:
                 feature_names.append("max_align_score")
+
+            # Makes no difference in performance
+            # x[-1].append(info["HAPESTRY_READS_NEIGHBORS"])
+            # if r == 0:
+            #     feature_names.append("hapestry_reads_neighbors")
 
         elif annotation_name.lower() == "sniffles":
             call = record.calls[0]
@@ -386,7 +393,9 @@ def load_features_from_vcf(
 
 
 class VcfDataset(Dataset):
-    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None):
+    def __init__(self, vcf_paths: list, truth_info_name, annotation_name, batch_size=256, filter_fn=None, contigs=None, use_gpu=False, max_batches_per_epoch=sys.maxsize, minority_size_cutoff=20_000):
+        self.use_gpu = use_gpu
+
         x = list()
         y = list()
 
@@ -413,46 +422,85 @@ class VcfDataset(Dataset):
 
             self.feature_indexes = {feature_names[i]: i for i in range(len(feature_names))}
 
+        self.ref_length_index = self.feature_indexes["ref_length"]
+        self.alt_length_index = self.feature_indexes["alt_length"]
+        self.minority_size_cutoff = minority_size_cutoff
+
         x = np.array(x)
         y = np.array(y)
 
         x_dtype = torch.FloatTensor
         y_dtype = torch.FloatTensor
 
-        self.length = x.shape[0]
-
         self.x_data = torch.from_numpy(x).type(x_dtype)
         self.y_data = torch.from_numpy(y).type(y_dtype)
 
-        self.x_data = torch.nn.functional.normalize(self.x_data, dim=0)
-        self.x_data += 1e-12
+        self.length = x.shape[0]
 
         self.filter_fn = filter_fn
 
-        self.minority_size = self.compute_minority_size()
-
         self.ordinals = list(range(self.length))
+        self.class_counts = defaultdict(int)
+
+        self.compute_class_counts()
+        self.minority_size = max(self.minority_size_cutoff, min(self.class_counts.values()))
 
         self.batch_size = batch_size
         self.subset_ordinals = list()
         self.initialize_iterator()
 
+        self.max_batches_per_epoch = max_batches_per_epoch
+
+        if self.use_gpu:
+            device = torch.device('cuda:0')
+            self.x_data.to(device)
+
+        self.x_data = torch.nn.functional.normalize(self.x_data, dim=0)
+        self.x_data += 1e-12
+
     def set_batch_size(self, batch_size):
-        self.batch_size = batch_size
+            self.batch_size = batch_size
 
-    def compute_minority_size(self):
-        unique, counts = np.unique(self.y_data.numpy(), return_counts=True)
-
-        return min(counts)
+    # def compute_minority_size(self):
+    #     unique, counts = np.unique(self.y_data.numpy(), return_counts=True)
+    #
+    #     return min(counts)
 
     def get_n_batches_per_epoch(self):
-        return len(self.subset_ordinals) // self.batch_size
+        # return max_batches_per_epoch if it is less than the total possible batches
+        return min(self.max_batches_per_epoch, len(self.subset_ordinals) // self.batch_size)
 
     def __getitem__(self, index):
         return self.x_data[index], self.y_data[index]
 
     def __len__(self):
         return self.length
+
+    def get_abs_length(self, index: int):
+        return max(self.x_data[index][self.alt_length_index], self.x_data[index][self.ref_length_index])
+
+    def get_length_bin(self, index: int):
+        l = self.get_abs_length(index)
+
+        return int(math.log2(l + 1))
+
+    def get_compound_class_id(self, index: int):
+        c1 = int(round(self.y_data[index].item()))
+        c2 = self.get_length_bin(index)
+
+        # make up a combinatorial class ID which is a function of both class types
+        c = str(c1) + "_" + str(c2)
+
+        return c
+
+    def compute_class_counts(self):
+        for i in self.ordinals:
+            c = self.get_compound_class_id(i)
+            self.class_counts[c] += 1
+
+        print("Class counts:")
+        for name,c in sorted(self.class_counts.items(), key=lambda x: list(map(int,x[0].split('_')))):
+            print(name, c)
 
     def initialize_iterator(self):
         # Shuffle and iterate over the data, accumulating approximately balanced batches without replacement
@@ -462,7 +510,7 @@ class VcfDataset(Dataset):
         accumulated_class_counts = defaultdict(int)
 
         for i in self.ordinals:
-            c = self.y_data[i].item()
+            c = self.get_compound_class_id(i)
 
             if accumulated_class_counts[c] < self.minority_size:
                 self.subset_ordinals.append(i)
@@ -470,11 +518,11 @@ class VcfDataset(Dataset):
 
         np.random.shuffle(self.subset_ordinals)
 
-    def iter_balanced_batches(self, max_batches_per_epoch=sys.maxsize):
+    def iter_balanced_batches(self):
         n = 0
         i = 0
         while i + self.batch_size < len(self.subset_ordinals):
-            if n >= max_batches_per_epoch:
+            if n >= self.max_batches_per_epoch:
                 break
 
             batch_indexes = self.subset_ordinals[i:i+self.batch_size]
@@ -486,12 +534,12 @@ class VcfDataset(Dataset):
 
         self.initialize_iterator()
 
-    def iter_batches(self, max_batches_per_epoch=sys.maxsize):
+    def iter_batches(self):
         n = 0
         i = 0
         m = 0
         while m < self.length - 1:
-            if n >= max_batches_per_epoch:
+            if n >= self.max_batches_per_epoch:
                 break
 
             m = min(i+self.batch_size, self.length)

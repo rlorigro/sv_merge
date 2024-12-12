@@ -1085,6 +1085,8 @@ void merge_thread_fn(
                          " -g " + gfa_path.string() +
                          " -f " + fasta_path.string();
 
+        t.reset();
+
         // Run GraphAligner and check how long it takes, if it times out
         bool success = run_command(command, false, float(graphaligner_timeout));
 
@@ -1093,6 +1095,8 @@ void merge_thread_fn(
         // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
             cerr << "WARNING: Command timed out: " << command << '\n';
+            write_time_log(subdir, "window_total", t_total, false);
+
             transmap = {};
             i = job_index.fetch_add(1);
             continue;

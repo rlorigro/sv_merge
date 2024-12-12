@@ -55,7 +55,7 @@ def write_recalibrated_vcf(y_predict, input_vcf_path, output_vcf_path):
         'ID': 'HAPESTRY_SCORE',
         'Number': 1,
         'Type': 'Float',
-        'Description': 'Recalibrated q score from model trained with hapestry'
+        'Description': 'Prediction score from hapestry NN model'
     })
 
     reader.header.add_info_line(mapping)
