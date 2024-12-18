@@ -8,6 +8,6 @@ fi
 
 TAG="$1"
 
-docker build --progress=plain -t fcunial/hapestry .
+docker build --platform linux/amd64 --progress=plain -t fcunial/hapestry .
 docker tag fcunial/hapestry fcunial/hapestry:${TAG}
 docker push fcunial/hapestry:${TAG}
