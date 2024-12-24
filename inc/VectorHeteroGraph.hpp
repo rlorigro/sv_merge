@@ -1,6 +1,5 @@
 #pragma once
 
-#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
@@ -12,7 +11,6 @@
 #include <queue>
 
 using std::unordered_map;
-using std::map;
 using std::unordered_set;
 using std::runtime_error;
 using std::to_string;
@@ -53,7 +51,7 @@ template<class T> class HeteroGraph {
     /**
      * The first position of each type block in each sorted adjacency list.
      */
-    map<pair<int64_t,char>,int64_t> first_of_type;
+    unordered_map<char, unordered_map<int64_t,int64_t>> first_of_type;
 
     int64_t id_counter = 0;
 
@@ -286,7 +284,12 @@ template<class T> void HeteroGraph<T>::update_first_of_type() {
         for (i=0; i<length; i++) {
             current_type=nodes.at(element.second.at(i).first).type;
             if (current_type!=type) {
-                first_of_type.emplace(element.first,current_type,(int64_t)i);
+                if (first_of_type.contains(current_type)) first_of_type.at(current_type).emplace(element.first,(int64_t)i);
+                else {
+                    unordered_map<int64_t,int64_t> new_map;
+                    new_map.emplace(element.first,(int64_t)i);
+                    first_of_type.emplace(current_type,new_map);
+                }
                 type=current_type;
             }
         }
@@ -507,7 +510,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
-        int64_t first = first_of_type.at(std::make_pair(id,type));
+        int64_t first = first_of_type.at(type).at(id);
         const size_t length = result->second.size();
         for (size_t i=first; i<length; i++) {
             const int64_t id_b = result->second.at(i).first;
@@ -532,7 +535,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
-        int64_t first = first_of_type.at(std::make_pair(id,type));
+        int64_t first = first_of_type.at(type).at(id);
         const size_t length = result->second.size();
         for (size_t i=first; i<length; i++) {
             const int64_t id_b = result->second.at(i).first;
@@ -555,7 +558,7 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
-        int64_t first = first_of_type.at(std::make_pair(id,type));
+        int64_t first = first_of_type.at(type).at(id);
         const size_t length = result->second.size();
         for (size_t i=first; i<length; i++) {
             const int64_t id_b = result->second.at(i).first;
