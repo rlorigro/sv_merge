@@ -107,7 +107,7 @@ public:
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, const string& sequence)>& f) const;
     void for_each_read_id(const function<void(int64_t id)>& f) const;
-    void for_each_path(const function<void(const string& name, int64_t id)>& f, bool sorted = false) const;
+    void for_each_path(const function<void(const string& name, int64_t id)>& f) const;
 
     void get_read_sample(const string& read_name, string& result) const;
     void get_read_sample(int64_t read_id, string& result) const;

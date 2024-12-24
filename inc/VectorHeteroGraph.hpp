@@ -283,7 +283,7 @@ template<class T> void HeteroGraph<T>::update_first_of_type() {
         for (i=0; i<length; i++) {
             current_type=nodes.at(element.second.at(i).first).type;
             if (current_type!=type) {
-                first_of_type.emplace(element.first,current_type,i);
+                first_of_type.at(std::make_pair(element.first,current_type))=(int64_t)i;
                 type=current_type;
             }
         }

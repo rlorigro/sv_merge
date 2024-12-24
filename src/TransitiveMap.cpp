@@ -328,10 +328,10 @@ void TransMap::for_each_neighbor_of_type(int64_t id, char type, const function<v
 }
 
 
-void TransMap::for_each_path(const function<void(const string& name, int64_t id)>& f, bool sorted) const{
+void TransMap::for_each_path(const function<void(const string& name, int64_t id)>& f) const{
     graph.for_each_neighbor_of_type(path_node_name, 'P', [&](const HeteroNode& neighbor, int64_t id){
         f(neighbor.name, id);
-    }, sorted);
+    });
 }
 
 
@@ -611,7 +611,7 @@ void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_sam
     unordered_set<int64_t> set;
     unordered_map<int64_t, int64_t> read_component, path_component;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Computing connected components and building the corresponding transmaps
     maps.clear();
@@ -718,7 +718,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
     vector<vector<int64_t>> neighbors;
     vector<vector<float>> weights, compared_weights;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Collecting all read-haplotype edges, with reads grouped by sample.
     neighbors.reserve(n_reads);
@@ -816,7 +816,7 @@ void TransMap::compress_samples(float weight_quantum) {
     vector<vector<float>> weights, compared_weights;
     unordered_map<int64_t,tuple<int64_t,int64_t,int64_t,int64_t,int64_t>> sample_to_identical_sample, sample_to_container_sample;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Collecting all read-haplotype edges, with reads grouped by sample.
     neighbors.reserve(n_reads);
@@ -1030,7 +1030,7 @@ void TransMap::decompress_samples(vector<bool>& used) {
 
 
 int64_t TransMap::get_mandatory_haplotypes() {
-    update_first_of_type();
+    graph.update_first_of_type();
 
     int64_t out = 0;
     for_each_read([&](const string& read_name, int64_t read_id) {
@@ -1058,7 +1058,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum) {
     vector<vector<float>> weights;
     unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Collecting all haplotype-read edges
     neighbors.reserve(n_haps);
@@ -1159,7 +1159,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     vector<vector<float>> weights;
     unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Removing locally-dominated haps
     n_dominated=0; edges_to_remove.clear();
@@ -1261,7 +1261,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     unordered_set<int64_t> favored_haps;
     unordered_map<int64_t,unordered_set<int64_t>> hap_to_reads;
 
-    update_first_of_type();
+    graph.update_first_of_type();
 
     // Solving easy samples
     n_one_hap_samples=0; n_two_hap_samples=0;
