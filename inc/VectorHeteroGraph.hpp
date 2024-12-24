@@ -49,6 +49,16 @@ template<class T> class HeteroGraph {
     unordered_map<string, int64_t> id_map;
     int64_t id_counter = 0;
 
+    /**
+     * The first position of each type block in each sorted adjacency list.
+     */
+    unordered_map<pair<int64_t,char>,int64_t> first_of_type;
+
+    /**
+     * Tells whether `first_of_type` reflects the current state of the adjacency lists.
+     */
+    bool is_first_of_type_updated = false;
+
 public:
 
     /// Building
@@ -60,9 +70,14 @@ public:
     void update_adjacency_list(int64_t id, float weight, vector<pair <int64_t,float> >& adjacencies);
 
     /**
-     * Sorts the neighbors of every node by (type,id).
+     * Sorts the neighbors of every node by `(type,id)`. This order is the same for every set of neighbors.
      */
     void sort_adjacency_lists();
+
+    /**
+     * Updates `first_of_type`, assuming that `sort_adjacency_lists()` has already been called.
+     */
+    void update_first_of_type();
 
     /**
      * @return TRUE iff no duplicated ID exists in any vector of `edges`.
@@ -237,6 +252,7 @@ template<class T> void HeteroGraph<T>::update_adjacency_list(
     // Only append the vector if id is not found (edge doesn't already exist)
     if (ab == adjacencies.end()){
         adjacencies.emplace_back(id, weight);
+        is_first_of_type_updated=false;
     }
     // Otherwise just overwrite the weight
     else{
@@ -251,6 +267,25 @@ template<class T> void HeteroGraph<T>::sort_adjacency_lists() {
             return (nodes.at(a.first).type<nodes.at(b.first).type || (nodes.at(a.first).type==nodes.at(b.first).type && a.first<b.first));
         });
     }
+}
+
+
+template<class T> void HeteroGraph<T>::update_first_of_type() {
+    char type, current_type;
+
+    if (is_first_of_type_updated) return;
+    first_of_type.clear();
+    for (auto& element: edges) {
+        type='_';
+        for (auto& edge: element.second) {
+            current_type=nodes.at(edge.first).type;
+            if (current_type!=type) {
+                first_of_type.emplace(element.first,current_type);
+                type=current_type;
+            }
+        }
+    }
+    is_first_of_type_updated=true;
 }
 
 
@@ -378,6 +413,7 @@ template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
 
         if (ab != adjacencies.end()){
             adjacencies.erase(ab);
+            is_first_of_type_updated=false;
         }
     }
 
@@ -392,6 +428,7 @@ template<class T> void HeteroGraph<T>::remove_edge(int64_t id_a, int64_t id_b) {
 
         if (ba != adjacencies.end()) {
             adjacencies.erase(ba);
+            is_first_of_type_updated=false;
         }
     }
 }
@@ -460,16 +497,23 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-
-    if (result == edges.end()){
-        return;
-    }
+    if (result==edges.end()) return;
 
     // Iterate all edges, but only operate on the specified type
-    for (const auto& [id_b,w]: result->second) {
-        const auto& node = nodes.at(id_b);
-        if (node.type == type){
-            f(node, id_b);
+    if (is_first_of_type_updated) {
+        int64_t first = first_of_type.at(std::make_pair(id,type));
+        const size_t length = result->second.size();
+        for (size_t i=first; i<length; i++) {
+            const int64_t id_b = result->second.at(i).first;
+            const auto &node = nodes.at(id_b);
+            if (node.type!=type) break;
+            f(node,id_b);
+        }
+    }
+    else {
+        for (const auto &[id_b, w]: result->second) {
+            const auto &node = nodes.at(id_b);
+            if (node.type==type) f(node,id_b);
         }
     }
 }
@@ -478,16 +522,21 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const{
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-
-    if (result == edges.end()){
-        return;
-    }
+    if (result==edges.end()) return;
 
     // Iterate all edges, but only operate on the specified type
-    for (const auto& [id_b,w]: result->second) {
-        const auto& node = nodes.at(id_b);
-        if (node.type == type){
+    if (is_first_of_type_updated) {
+        int64_t first = first_of_type.at(std::make_pair(id,type));
+        const size_t length = result->second.size();
+        for (size_t i=first; i<length; i++) {
+            const int64_t id_b = result->second.at(i).first;
+            if (nodes.at(id_b).type!=type) break;
             f(id_b);
+        }
+    }
+    else {
+        for (const auto& [id_b,w]: result->second) {
+            if (nodes.at(id_b).type==type) f(id_b);
         }
     }
 }
@@ -496,16 +545,21 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const{
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-
-    if (result == edges.end()){
-        return;
-    }
+    if (result==edges.end()) return;
 
     // Iterate all edges, but only operate on the specified type
-    for (const auto& [id_b,w]: result->second) {
-        const auto& node = nodes.at(id_b);
-        if (node.type == type){
-            f(id_b, w);
+    if (is_first_of_type_updated) {
+        int64_t first = first_of_type.at(std::make_pair(id,type));
+        const size_t length = result->second.size();
+        for (size_t i=first; i<length; i++) {
+            const int64_t id_b = result->second.at(i).first;
+            if (nodes.at(id_b).type!=type) break;
+            f(id_b,result->second.at(i).second);
+        }
+    }
+    else {
+        for (const auto &[id_b, w]: result->second) {
+            if (nodes.at(id_b).type==type) f(id_b,w);
         }
     }
 }

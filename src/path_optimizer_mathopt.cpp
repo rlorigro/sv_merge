@@ -1199,8 +1199,6 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     SolveArguments args;
     TerminationReason termination_reason;
     std::chrono::milliseconds duration;
-    unordered_set<int64_t> present_haps;
-    vector<pair<int64_t,int64_t>> present_edges;
     Timer t;
 
     args.parameters.threads = n_threads;
@@ -1208,6 +1206,9 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     else args.parameters.time_limit = absl::InfiniteDuration();
     bool integral = true;
     if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop) integral = false;
+
+    transmap.sort_adjacency_lists();
+    transmap.update_first_of_type();
 
     // Computing D_MIN
     double d_min = -1;
@@ -1220,11 +1221,11 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.clear_present_haps_edges();
     int64_t n_mandatory = transmap_clone.get_mandatory_haplotypes();
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
-    transmap_clone.compress_haplotypes_global(0,true);
-    transmap_clone.compress_haplotypes_local(0,1,0,true);
+    transmap_clone.compress_haplotypes_global(0);
+    transmap_clone.compress_haplotypes_local(0,1,0);
     //transmap_clone.solve_easy_samples(0,1,0,true);
-    transmap_clone.compress_reads(0,true,false);
-    transmap_clone.compress_samples(0,true);
+    transmap_clone.compress_reads(0);
+    transmap_clone.compress_samples(0);
     cerr << "Compression time d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model1,vars1,integral,use_ploidy_constraint,true);
     d_min=round(optimize_d(model1,vars1,solver_type,args,termination_reason,duration));
@@ -1240,10 +1241,10 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.clear_present_haps_edges();
     n_mandatory=transmap_clone.get_mandatory_haplotypes();
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
-    transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.compress_haplotypes_global(0);
     //transmap_clone.solve_easy_samples(0,1,0,true);
-    transmap_clone.compress_reads(0,true,false);
-    transmap_clone.compress_samples(0,true);
+    transmap_clone.compress_reads(0);
+    transmap_clone.compress_samples(0);
     cerr << "Compression time n_given_d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
     construct_joint_n_d_model(transmap_clone,model2,vars2,integral,use_ploidy_constraint,true);
     n_max=round(optimize_n_given_d(model2,vars2,solver_type,args,termination_reason,duration,d_min));
@@ -1274,17 +1275,17 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     auto t2 = t.elapsed_milliseconds().count();
     t.reset();
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
-    transmap_clone.compress_haplotypes_global(0,true);
+    transmap_clone.compress_haplotypes_global(0);
     auto t3 = t.elapsed_milliseconds().count();
     t.reset();
-    transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0,true);
+    transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0);
     auto t4 = t.elapsed_milliseconds().count();
     t.reset();
     //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
-    transmap_clone.compress_reads(0,true,false);
+    transmap_clone.compress_reads(0);
     auto t5 = t.elapsed_milliseconds().count();
     t.reset();
-    transmap_clone.compress_samples(0,true);
+    transmap_clone.compress_samples(0);
     auto t6 = t.elapsed_milliseconds().count();
     t.reset();
     cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "\n";

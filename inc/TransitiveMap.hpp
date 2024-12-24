@@ -107,7 +107,7 @@ public:
     void for_each_read(const function<void(const string& name, int64_t id)>& f) const;
     void for_each_read(const function<void(const string& name, const string& sequence)>& f) const;
     void for_each_read_id(const function<void(int64_t id)>& f) const;
-    void for_each_path(const function<void(const string& name, int64_t id)>& f) const;
+    void for_each_path(const function<void(const string& name, int64_t id)>& f, bool sorted = false) const;
 
     void get_read_sample(const string& read_name, string& result) const;
     void get_read_sample(int64_t read_id, string& result) const;
@@ -161,17 +161,25 @@ public:
      */
     bool are_edges_distinct() const;
 
+
+    void sort_adjacency_lists();
+
+    void update_first_of_type();
+
     void clear_present_haps_edges();
 
     /**
      * Splits the read-path graph into its connected components (which are at least as many as the connected components
      * of the sample-path graph).
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * @param maps output array, with one transmap per connected component; every transmap contains the corresponding
      * samples;
      * @param partitioned_samples output array, lists the samples whose reads were assigned to 2 transmaps.
      */
-    void partition(vector<TransMap>& maps, vector<string>& partitioned_samples) const;
+    void partition(vector<TransMap>& maps, vector<string>& partitioned_samples);
 
     /**
      * @return a transmap with the following connected components (id, n_reads, n_paths, n_samples, n_edges):
@@ -188,12 +196,13 @@ public:
      * with the same weights (possibly after quantization). The procedure collapses all identical reads onto a single
      * node and sums edge weights.
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
-     * exactly;
-     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
-     * order that is the same for every node.
+     * exactly.
      */
-    void compress_reads(float weight_quantum, bool sort_edges = true, bool verbose = false);
+    void compress_reads(float weight_quantum, bool verbose = false);
 
     /**
      * Two samples are considered identical iff there is a bijection between equivalent reads: only one sample per
@@ -204,14 +213,15 @@ public:
      * Remark: there could be multiple haplotypes per sample, even though every read in the sample is assigned to
      * exactly one haplotype.
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * Remark: the procedure sets object variables `sample_to_sample, read_ids, cluster_ids`.
      *
      * @param weight_quantum if nonzero, read-haplotype weights are divided by this and floored before being compared
-     * exactly;
-     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
-     * order that is the same for every node.
+     * exactly.
      */
-    void compress_samples(float weight_quantum = 0, bool sort_edges = true);
+    void compress_samples(float weight_quantum = 0);
 
     /**
      * Adds every weight of every record in `weights[from_first..from_last]` to a distinct record in
@@ -246,12 +256,13 @@ public:
     /**
      * Removes globally-equivalent and globally-contained haplotypes.
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
-     * exactly;
-     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
-     * order that is the same for every node.
+     * exactly.
      */
-    void compress_haplotypes_global(float weight_quantum = 0, bool sort_edges = true);
+    void compress_haplotypes_global(float weight_quantum = 0);
 
     /**
      * @param neighbors every row is assumed to be sorted;
@@ -263,12 +274,13 @@ public:
      * Removes edges to dominated haplotypes per-sample. The procedure assumes that the objective function has the form
      * $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$.
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
-     * exactly;
-     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
-     * order that is the same for every node.
+     * exactly.
      */
-    void compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum = 0, bool sort_edges = true);
+    void compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum = 0);
 
     /**
      * @param neighbors every row is assumed to be sorted;
@@ -285,12 +297,13 @@ public:
      * and it adds to `present_edges` all the edges that were used to solve a sample (all the other edges of a solved
      * sample are removed from the transmap).
      *
+     * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
+     * for every node.
+     *
      * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being compared
-     * exactly;
-     * @param sort_edges if false, the procedure assumes that the adjacencies of every node are already sorted in an
-     * order that is the same for every node.
+     * exactly.
      */
-    void solve_easy_samples(float n_weight, float d_weight, float weight_quantum, bool sort_edges);
+    void solve_easy_samples(float n_weight, float d_weight, float weight_quantum);
 
     /**
      * @return `weight` if `weight_quantum=0`; otherwise, `weight` rounded to the nearest multiple of `weight_quantum`.
