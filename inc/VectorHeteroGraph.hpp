@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
@@ -11,6 +12,7 @@
 #include <queue>
 
 using std::unordered_map;
+using std::map;
 using std::unordered_set;
 using std::runtime_error;
 using std::to_string;
@@ -47,12 +49,13 @@ template<class T> class HeteroGraph {
     unordered_map<int64_t, vector<pair <int64_t,float> > > edges;
     unordered_map<int64_t, T> nodes;
     unordered_map<string, int64_t> id_map;
-    int64_t id_counter = 0;
 
     /**
      * The first position of each type block in each sorted adjacency list.
      */
-    unordered_map<pair<int64_t,char>,int64_t> first_of_type;
+    map<pair<int64_t,char>,int64_t> first_of_type;
+
+    int64_t id_counter = 0;
 
     /**
      * Tells whether `first_of_type` reflects the current state of the adjacency lists.
@@ -283,7 +286,7 @@ template<class T> void HeteroGraph<T>::update_first_of_type() {
         for (i=0; i<length; i++) {
             current_type=nodes.at(element.second.at(i).first).type;
             if (current_type!=type) {
-                first_of_type.at(std::make_pair(element.first,current_type))=(int64_t)i;
+                first_of_type.emplace(element.first,current_type,(int64_t)i);
                 type=current_type;
             }
         }
