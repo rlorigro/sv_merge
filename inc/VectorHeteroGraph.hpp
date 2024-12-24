@@ -272,15 +272,18 @@ template<class T> void HeteroGraph<T>::sort_adjacency_lists() {
 
 template<class T> void HeteroGraph<T>::update_first_of_type() {
     char type, current_type;
+    size_t i;
+    size_t length;
 
     if (is_first_of_type_updated) return;
     first_of_type.clear();
     for (auto& element: edges) {
+        length=element.second.size();
         type='_';
-        for (auto& edge: element.second) {
-            current_type=nodes.at(edge.first).type;
+        for (i=0; i<length; i++) {
+            current_type=nodes.at(element.second.at(i).first).type;
             if (current_type!=type) {
-                first_of_type.emplace(element.first,current_type);
+                first_of_type.emplace(element.first,current_type,i);
                 type=current_type;
             }
         }
