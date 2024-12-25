@@ -161,9 +161,15 @@ public:
      */
     bool are_edges_distinct() const;
 
-
+    /**
+     * Sorts the neighbors of every node by `(type,id)`. This order is the same for every set of neighbors.
+     */
     void sort_adjacency_lists();
 
+    /**
+     * Updates the `first_of_type` index of `graph`, assuming that `sort_adjacency_lists()` has already been called.
+     * See `VectorHeteroGraph.update_first_of_type()` for details.
+     */
     void update_first_of_type();
 
     void clear_present_haps_edges();

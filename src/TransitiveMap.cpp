@@ -1,6 +1,7 @@
 #include "TransitiveMap.hpp"
 #include "gaf.hpp"
 #include <fstream>
+#include <algorithm>
 
 using std::ofstream;
 
@@ -1147,37 +1148,69 @@ bool TransMap::is_haplotype_contained(int64_t from, int64_t to, const vector<vec
 void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum) {
     const float DELTA = n_weight/d_weight;
     const int64_t N_SAMPLES = get_n_samples();
-    int64_t n_haps = get_n_paths();
+    size_t n_haps = get_n_paths();
     cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
 
     int64_t i, j;
-    int64_t n_dominated, hap_id, n_removed_edges;
+    int64_t n_dominated, hap_id, n_removed_edges, n_reads, read_id;
+    float weight;
+    size_t length;
     vector<bool> removed;
-    vector<int64_t> hap_ids;
+    vector<int64_t> hap_ids, read_ids, tmp_vector;
+    vector<pair<int64_t,int64_t>> edges_to_remove_prime;
     unordered_set<int64_t> to_remove;
-    vector<vector<int64_t>> neighbors;
-    vector<vector<float>> weights;
+    vector<vector<int64_t>> neighbors, neighbors_prime;
+    vector<vector<float>> weights, weights_prime;
     unordered_map<int64_t,unordered_set<int64_t>> edges_to_remove;
 
     graph.update_first_of_type();
 
     // Removing locally-dominated haps
-    n_dominated=0; edges_to_remove.clear();
+    n_dominated=0;
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
-        hap_ids.clear(); neighbors.clear(); weights.clear();
+        // Building the read-hap matrix
+        read_ids.clear(); neighbors_prime.clear(); weights_prime.clear();
         i=-1;
-        for_each_path_of_sample(sample_id, [&](const string& name, int64_t path_id) {
-            i++; hap_ids.emplace_back(path_id);
-            neighbors.emplace_back(); weights.emplace_back();
-            for_each_read_of_path(path_id, [&](int64_t read_id) {
-                // For each hap, its neighbors lie in the same global order.
-                if (get_sample_of_read(read_id)!=sample_id) return;
-                auto [success, weight] = try_get_edge_weight(read_id,path_id);
-                neighbors.at(i).emplace_back(read_id);
-                weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
+        for_each_read_of_sample(sample_id, [&](int64_t read_id) {
+            // Reads are assumed to be enumerated in sorted order by ID.
+            i++; read_ids.emplace_back(read_id);
+            neighbors_prime.emplace_back(); weights_prime.emplace_back();
+            for_each_path_of_read(read_id, [&](int64_t path_id) {
+                // Haps are assumed to be enumerated in sorted order by ID.
+                auto [success, w] = try_get_edge_weight(read_id,path_id);
+                neighbors_prime.at(i).emplace_back(path_id);
+                weights_prime.at(i).emplace_back(get_edge_weight(w,weight_quantum));
             });
         });
+        n_reads=i+1;
+        if (n_reads==0) return;
+        // Building the hap-read matrix
+        tmp_vector.clear();
+        for (i=0; i<n_reads; i++) tmp_vector.insert(tmp_vector.end(),neighbors_prime.at(i).begin(),neighbors_prime.at(i).end());
+        length=tmp_vector.size();
+        if (length==0) return;
+        if (length>1) std::sort(tmp_vector.begin(),tmp_vector.end());
+        hap_ids.clear(); hap_ids.emplace_back(tmp_vector.at(0));
+        for (i=1; i<tmp_vector.size(); i++) {
+            if (tmp_vector.at(i)!=tmp_vector.at(i-1)) hap_ids.emplace_back(tmp_vector.at(i));
+        }
         n_haps=hap_ids.size();
+        neighbors.clear(); weights.clear();
+        for (i=0; i<n_haps; i++) neighbors.emplace_back();
+        for (i=0; i<n_haps; i++) weights.emplace_back();
+        for (i=0; i<n_reads; i++) {
+            read_id=read_ids.at(i);
+            length=neighbors_prime.at(i).size();
+            for (j=0; j<length; j++) {
+                hap_id=neighbors_prime.at(i).at(j);
+                weight=weights_prime.at(i).at(j);
+                auto p = std::lower_bound(hap_ids.begin(),hap_ids.end(),hap_id);  // Could have been implemented as a mergesort since both arrays are sorted
+                neighbors.at(p-hap_ids.begin()).emplace_back(read_id);
+                weights.at(p-hap_ids.begin()).emplace_back(weight);
+            }
+        }
+        neighbors_prime.clear(); weights_prime.clear(); read_ids.clear();
+        // Removing dominated haps
         removed.clear();
         for (i=0; i<n_haps; i++) removed.emplace_back(false);
         for (i=0; i<n_haps; i++) {
@@ -1198,20 +1231,23 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
                 }
             }
         }
+        neighbors.clear(); weights.clear(); hap_ids.clear();
     });
     cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/N_SAMPLES) << " avg per sample)\n";
 
     // Updating the transmap
+    edges_to_remove_prime.clear();
     n_removed_edges=0;
     for (auto& pair: edges_to_remove) {
         hap_id=pair.first;
         for_each_read_of_path(hap_id, [&](int64_t read_id) {
             if (pair.second.contains(get_sample_of_read(read_id))) {
-                remove_edge(read_id,hap_id);
+                edges_to_remove_prime.emplace_back(read_id,hap_id);
                 n_removed_edges++;
             }
         });
     }
+    for (auto& pair: edges_to_remove_prime) remove_edge(pair.first,pair.second);
     cerr << "Removed " << to_string(n_removed_edges) << " edges to locally-dominated haplotypes\n";
 }
 
