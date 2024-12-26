@@ -277,8 +277,15 @@ public:
     static bool is_haplotype_contained(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
     /**
+     * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being checked;
+     * @return true iff there is a read-hap weight that is not smaller than `n_weight/d_weight`.
+     */
+    bool has_large_weight(float n_weight, float d_weight, float weight_quantum);
+
+    /**
      * Removes edges to dominated haplotypes per-sample. The procedure assumes that the objective function has the form
-     * $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$.
+     * $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$ where every $d_i$ is non-negative and $nWeight,dWeight$
+     * are non-negative.
      *
      * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
      * for every node.
@@ -297,7 +304,8 @@ public:
 
     /**
      * Assigns some samples to one or two haplotypes and simplifies the transmap accordingly. The procedure assumes that
-     * the objective function has the form $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$.
+     * the objective function has the form $nWeight \cdot \sum_i h_i + dWeight \cdot \sum_i d_i$ where every $d_i$ is
+     * non-negative and $nWeight,dWeight$ are non-negative.
      *
      * Remark: the procedure adds to object variable `present_haps` all the haplotypes that were used to solve a sample,
      * and it adds to `present_edges` all the edges that were used to solve a sample (all the other edges of a solved

@@ -788,7 +788,8 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
         }
     }
 
-    // Updating the transmap
+    // Updating the transmap.
+    // Remark: edge removal could be implemented much faster.
     for (i=0; i<n_reads; i++) {
         if (is_redundant.at(i) || !is_representative.at(i)) continue;
         read_id=node_ids.at(i); length=neighbors.at(i).size();
@@ -969,7 +970,8 @@ void TransMap::compress_samples(float weight_quantum) {
         sample_to_sample.emplace(get_node(pair.first).name,std::make_tuple(contained_first,contained_last,container_first,container_last));
     }
 
-    // Updating the transmap
+    // Updating the transmap.
+    // Remark: edge removal could be implemented much faster.
     for (auto& pair: sample_to_sample) compress_samples_update_weights(std::get<0>(pair.second),std::get<1>(pair.second),std::get<2>(pair.second),std::get<3>(pair.second),weights,used);
     for (i=0; i<n_reads; i++) {
         sample_id=sample_ids.at(i);
@@ -1111,7 +1113,8 @@ void TransMap::compress_haplotypes_global(float weight_quantum) {
     neighbors.clear(); weights.clear(); hap_ids.clear();
     cerr << "Removed " << to_string(n_contained) << " globally-contained haplotypes (out of " << to_string(n_haps) << " total)\n";
 
-    // Updating the transmap
+    // Updating the transmap.
+    // Remark: edge removal could be implemented much faster.
     for (auto node_id: to_remove) remove_node(node_id);
 }
 
@@ -1145,16 +1148,28 @@ bool TransMap::is_haplotype_contained(int64_t from, int64_t to, const vector<vec
 }
 
 
+bool TransMap::has_large_weight(float n_weight, float d_weight, float weight_quantum) {
+    const float DELTA = n_weight/d_weight;
+
+    for_each_read_id([&](int64_t read_id) {
+        for_each_path_of_read(read_id, [&](int64_t path_id) {
+            auto [success, weight] = try_get_edge_weight(read_id,path_id);
+            if (get_edge_weight(weight,weight_quantum)>=DELTA) return true;
+        });
+    });
+    return false;
+}
+
+
 void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum) {
     const float DELTA = n_weight/d_weight;
     const int64_t N_SAMPLES = get_n_samples();
-    size_t n_haps = get_n_paths();
     cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
 
     int64_t i, j;
     int64_t n_dominated, hap_id, n_removed_edges, n_reads, read_id;
-    float weight;
-    size_t length;
+    float weight, max_weight;
+    size_t length, n_haps;
     vector<bool> removed;
     vector<int64_t> hap_ids, read_ids, tmp_vector;
     vector<pair<int64_t,int64_t>> edges_to_remove_prime;
@@ -1170,7 +1185,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         // Building the read-hap matrix
         read_ids.clear(); neighbors_prime.clear(); weights_prime.clear();
-        i=-1;
+        i=-1; max_weight=0;
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             // Reads are assumed to be enumerated in sorted order by ID.
             i++; read_ids.emplace_back(read_id);
@@ -1179,11 +1194,13 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
                 // Haps are assumed to be enumerated in sorted order by ID.
                 auto [success, w] = try_get_edge_weight(read_id,path_id);
                 neighbors_prime.at(i).emplace_back(path_id);
-                weights_prime.at(i).emplace_back(get_edge_weight(w,weight_quantum));
+                w=get_edge_weight(w,weight_quantum);
+                weights_prime.at(i).emplace_back(w);
+                if (w>max_weight) max_weight=w;
             });
         });
         n_reads=i+1;
-        if (n_reads==0) return;
+        if (n_reads==0 || max_weight<DELTA) return;
         // Building the hap-read matrix
         tmp_vector.clear();
         for (i=0; i<n_reads; i++) tmp_vector.insert(tmp_vector.end(),neighbors_prime.at(i).begin(),neighbors_prime.at(i).end());
@@ -1235,7 +1252,8 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     });
     cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/N_SAMPLES) << " avg per sample)\n";
 
-    // Updating the transmap
+    // Updating the transmap.
+    // Remark: edge removal could be implemented much faster.
     edges_to_remove_prime.clear();
     n_removed_edges=0;
     for (auto& pair: edges_to_remove) {
@@ -1288,7 +1306,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     bool not_worse, favored;
     int64_t i, j, k;
     int64_t read_id, hap_id, min_hap_id, n_reads, n_haps, hap1, hap2, n_one_hap_samples, n_two_hap_samples;
-    float weight, min_weight;
+    float weight, min_weight, max_weight;
     vector<int64_t> read_ids;
     unordered_set<int64_t> tmp_set;
     vector<vector<int64_t>> neighbors;
@@ -1305,18 +1323,21 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     hap_to_reads.reserve(N_HAPS); favored_haps.reserve(N_HAPS); tmp_set.reserve(N_HAPS);
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         read_ids.clear(); neighbors.clear(); weights.clear();
-        i=-1;
+        i=-1; max_weight=0;
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             i++; read_ids.emplace_back(read_id);
             neighbors.emplace_back(); weights.emplace_back();
             for_each_path_of_read(read_id, [&](int64_t path_id) {
                 // For each read, its neighbors lie in the same global order.
-                auto [success, weight] = try_get_edge_weight(read_id,path_id);
+                auto [success, w] = try_get_edge_weight(read_id,path_id);
                 neighbors.at(i).emplace_back(path_id);
-                weights.at(i).emplace_back(get_edge_weight(weight,weight_quantum));
+                w=get_edge_weight(w,weight_quantum);
+                weights.at(i).emplace_back(w);
+                if (w>max_weight) max_weight=w;
             });
         });
         n_reads=read_ids.size();
+        if (n_reads==0 || max_weight<DELTA) return;
         hap_to_reads.clear(); favored_haps.clear();
         for (i=0; i<n_reads; i++) {
             read_id=read_ids.at(i);
@@ -1402,7 +1423,8 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     });
     cerr << "Solved " << to_string(n_one_hap_samples) << " one-hap samples and " << to_string(n_two_hap_samples) << " two-hap samples. Removed " << to_string(edges_to_remove.size()) << " edges. Set to one " << to_string(present_haps.size()) << " haplotypes and " << to_string(present_edges.size()) << " edges.\n";
 
-    // Updating the transmap
+    // Updating the transmap.
+    // Remark: edge removal could be implemented much faster.
     for (auto& pair: edges_to_remove) remove_edge(pair.first,pair.second);
 }
 

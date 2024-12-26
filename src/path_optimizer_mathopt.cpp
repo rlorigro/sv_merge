@@ -1206,6 +1206,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     else args.parameters.time_limit = absl::InfiniteDuration();
     bool integral = true;
     if (solver_type == SolverType::kPdlp or solver_type == SolverType::kGlop) integral = false;
+    bool has_large_weight;
 
     transmap.sort_adjacency_lists();
     transmap.update_first_of_type();
@@ -1278,10 +1279,24 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_haplotypes_global(0);
     auto t3 = t.elapsed_milliseconds().count();
     t.reset();
-    transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0);
-    auto t4 = t.elapsed_milliseconds().count();
+    has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
+    auto t31 = t.elapsed_milliseconds().count();
+    long long t4 = 0;
+    long long t42 = 0;
+    if (has_large_weight) {
+        t.reset();
+        transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0);
+        t4=t.elapsed_milliseconds().count();
+//        t.reset();
+//        has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
+//        auto t41 = t.elapsed_milliseconds().count();
+//        if (has_large_weight) {
+//            t.reset();
+//            transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
+//            t42=t.elapsed_milliseconds().count();
+//        }
+    }
     t.reset();
-    //transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
     transmap_clone.compress_reads(0);
     auto t5 = t.elapsed_milliseconds().count();
     t.reset();
