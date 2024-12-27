@@ -1224,7 +1224,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0);
     transmap_clone.compress_haplotypes_local(0,1,0);
-    //transmap_clone.solve_easy_samples(0,1,0,true);
+    transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0);
     transmap_clone.compress_samples(0);
     cerr << "Compression time d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
@@ -1243,7 +1243,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     n_mandatory=transmap_clone.get_mandatory_haplotypes();
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0);
-    //transmap_clone.solve_easy_samples(0,1,0,true);
+    transmap_clone.solve_easy_samples(0,1,0,true);
     transmap_clone.compress_reads(0);
     transmap_clone.compress_samples(0);
     cerr << "Compression time n_given_d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";
@@ -1281,20 +1281,20 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     t.reset();
     has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
     auto t31 = t.elapsed_milliseconds().count();
-    long long t4 = 0;
-    long long t42 = 0;
+    long long t4, t41, t42;
+    t4=t41=t42=0;
     if (has_large_weight) {
         t.reset();
         transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0);
         t4=t.elapsed_milliseconds().count();
-//        t.reset();
-//        has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
-//        auto t41 = t.elapsed_milliseconds().count();
-//        if (has_large_weight) {
-//            t.reset();
-//            transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
-//            t42=t.elapsed_milliseconds().count();
-//        }
+        t.reset();
+        has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
+        auto t41 = t.elapsed_milliseconds().count();
+        if (has_large_weight) {
+            t.reset();
+            transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0,true);
+            t42=t.elapsed_milliseconds().count();
+        }
     }
     t.reset();
     transmap_clone.compress_reads(0);
@@ -1303,7 +1303,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_samples(0);
     auto t6 = t.elapsed_milliseconds().count();
     t.reset();
-    cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "\n";
+    cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "," << to_string(t31) << "," << to_string(t41) << to_string(t42) << "\n";
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.
