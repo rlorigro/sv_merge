@@ -1342,7 +1342,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
         for (i=0; i<n_reads; i++) {
             read_id=read_ids.at(i);
             n_haps=neighbors.at(i).size();
-            for (j=i+1; j<n_haps; j++) {
+            for (j=0; j<n_haps; j++) {
                 hap_id=neighbors.at(i).at(j);
                 weight=weights.at(i).at(j);
                 not_worse=true;
