@@ -1243,7 +1243,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     n_mandatory=transmap_clone.get_mandatory_haplotypes();
     //cerr << "Mandatory haplotypes: " << to_string(n_mandatory) << '\n';
     transmap_clone.compress_haplotypes_global(0);
-    transmap_clone.solve_easy_samples(0,1,0);
+    transmap_clone.solve_easy_samples(1,0,0);
     transmap_clone.compress_reads(0);
     transmap_clone.compress_samples(0);
     cerr << "Compression time n_given_d: " << to_string(t.elapsed_milliseconds().count()) << " ms\n";

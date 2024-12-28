@@ -1305,7 +1305,8 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
 
     bool not_worse, favored;
     int64_t i, j, k;
-    int64_t read_id, hap_id, min_hap_id, n_reads, n_haps, hap1, hap2, n_one_hap_samples, n_two_hap_samples;
+    int64_t read_id, hap_id, min_hap_id, n_reads, hap1, hap2, n_one_hap_samples, n_two_hap_samples;
+    size_t n_haps;
     float weight, min_weight, max_weight;
     vector<int64_t> read_ids;
     unordered_set<int64_t> tmp_set;
@@ -1350,14 +1351,18 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
                     if (k!=j && weight>weights.at(i).at(k)) { not_worse=false; break; }
                 }
                 if (not_worse) {
-                    if (hap_to_reads.contains(hap_id)) hap_to_reads.at(hap_id).emplace(read_id);
-                    else hap_to_reads.emplace(hap_id,read_id);
+                    if (hap_to_reads.contains(hap_id)) hap_to_reads.at(hap_id).insert(read_id);
+                    else {
+                        unordered_set<int64_t> new_set;
+                        new_set.insert(read_id);
+                        hap_to_reads[hap_id]=new_set;
+                    }
+                    favored=true;
+                    for (k=0; k<n_haps; k++) {
+                        if (k!=j && weight>weights.at(i).at(k)-DELTA) { favored=false; break; }
+                    }
+                    if (favored) favored_haps.insert(hap_id);
                 }
-                favored=true;
-                for (k=0; k<n_haps; k++) {
-                    if (k!=j && weight>weights.at(i).at(k)-DELTA) { favored=false; break; }
-                }
-                if (favored) favored_haps.emplace(hap_id);
             }
         }
         // One-hap sample
