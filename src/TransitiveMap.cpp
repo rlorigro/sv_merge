@@ -1150,16 +1150,9 @@ bool TransMap::is_haplotype_contained(int64_t from, int64_t to, const vector<vec
 }
 
 
-bool TransMap::has_large_weight(float n_weight, float d_weight, float weight_quantum) {
+bool TransMap::has_large_weight(float n_weight, float d_weight) {
     const float DELTA = n_weight/d_weight;
-
-    for_each_read_id([&](int64_t read_id) {
-        for_each_path_of_read(read_id, [&](int64_t path_id) {
-            auto [success, weight] = try_get_edge_weight(read_id,path_id);
-            if (get_edge_weight(weight,weight_quantum)>=DELTA) return true;
-        });
-    });
-    return false;
+    return graph.has_large_weight(get_id(read_node_name),'P',DELTA);
 }
 
 

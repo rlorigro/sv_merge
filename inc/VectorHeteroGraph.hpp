@@ -76,6 +76,12 @@ public:
     void sort_adjacency_lists();
 
     /**
+     * @return true iff there is an edge `(a,b)` with weight `>=delta`, where `a` is a neighbor of node `root_id` and
+     * `b` is of type `type_b`.
+     */
+    bool has_large_weight(int64_t root_id, char type_b, float delta) const;
+
+    /**
      * Updates `first_of_type`, assuming that `sort_adjacency_lists()` has already been called.
      */
     void update_first_of_type();
@@ -571,6 +577,30 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
             if (nodes.at(id_b).type==type) f(id_b,w);
         }
     }
+}
+
+
+template<class T> bool HeteroGraph<T>::has_large_weight(int64_t root_id, char type_b, float delta) const {
+    const auto result = edges.find(root_id);
+    if (result==edges.end()) return false;
+    for (const auto &[id_a, w]: result->second) {
+        if (is_first_of_type_updated) {
+            const size_t length = result->second.size();
+            int64_t first = first_of_type.at(type_b).at(id_a);
+            for (size_t i=first; i<length; i++) {
+                const int64_t id_b = result->second.at(i).first;
+                if (nodes.at(id_b).type!=type_b) break;
+                if (result->second.at(i).second>=delta) return true;
+            }
+        }
+        else {
+            const auto result2 = edges.find(id_a);
+            for (const auto &[id_b, w]: result2->second) {
+                if (nodes.at(id_b).type==type_b && w>=delta) return true;
+            }
+        }
+    }
+    return false;
 }
 
 

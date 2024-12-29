@@ -1279,7 +1279,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_haplotypes_global(0);
     auto t3 = t.elapsed_milliseconds().count();
     t.reset();
-    has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
+    has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min);
     auto t31 = t.elapsed_milliseconds().count();
     long long t4, t41, t42;
     t4=t41=t42=0;
@@ -1288,7 +1288,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
         transmap_clone.compress_haplotypes_local(n_weight/n_max,d_weight/d_min,0);
         t4=t.elapsed_milliseconds().count();
         t.reset();
-        has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
+        has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min);
         t41=t.elapsed_milliseconds().count();
         if (has_large_weight) {
             t.reset();

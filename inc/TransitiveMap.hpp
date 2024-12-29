@@ -282,10 +282,9 @@ public:
     static bool is_haplotype_contained(int64_t from, int64_t to, const vector<vector<int64_t>>& neighbors, const vector<vector<float>>& weights);
 
     /**
-     * @param weight_quantum if nonzero, haplotype-read weights are divided by this and floored before being checked;
      * @return true iff there is a read-hap weight that is not smaller than `n_weight/d_weight`.
      */
-    bool has_large_weight(float n_weight, float d_weight, float weight_quantum);
+    bool has_large_weight(float n_weight, float d_weight);
 
     /**
      * Removes edges to dominated haplotypes per-sample. The procedure assumes that the objective function has the form
