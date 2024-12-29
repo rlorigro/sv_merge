@@ -325,7 +325,9 @@ public:
     void solve_easy_samples(float n_weight, float d_weight, float weight_quantum);
 
     /**
-     * @return a transmap where all samples are easy, to test `solve_easy_samples()`.
+     * @return a transmap to test `solve_easy_samples()`: 2 out of 3 samples are easy, and `solve_easy_samples()`
+     * should solve 1 one-hap sample and 1 two-hap sample; it should remove 12 edges and it should set to one 3
+     * haplotypes and 6 edges.
      */
     static TransMap solve_easy_samples_get_test_transmap(float n_weight, float d_weight);
 
