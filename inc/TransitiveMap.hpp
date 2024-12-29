@@ -47,6 +47,7 @@ class TransMap {
      */
     vector<int64_t> read_ids, cluster_ids;
     unordered_map<string,tuple<int64_t,int64_t,int64_t,int64_t>> sample_to_sample;  // from_sample_name -> from_sample_first, from_sample_last, to_sample_first, to_sample_last
+    unordered_set<int64_t> solved_samples;
 
 
 public:
@@ -202,6 +203,8 @@ public:
      * with the same weights (possibly after quantization). The procedure collapses all identical reads onto a single
      * node and sums edge weights.
      *
+     * Remark: samples in `solved_samples` are skipped.
+     *
      * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
      * for every node.
      *
@@ -218,6 +221,8 @@ public:
      *
      * Remark: there could be multiple haplotypes per sample, even though every read in the sample is assigned to
      * exactly one haplotype.
+     *
+     * Remark: samples in `solved_samples` are skipped.
      *
      * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
      * for every node.
@@ -309,7 +314,7 @@ public:
      *
      * Remark: the procedure adds to object variable `present_haps` all the haplotypes that were used to solve a sample,
      * and it adds to `present_edges` all the edges that were used to solve a sample (all the other edges of a solved
-     * sample are removed from the transmap).
+     * sample are removed from the transmap). The procedure also sets object variable `solved_samples`.
      *
      * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
      * for every node.
@@ -318,6 +323,11 @@ public:
      * exactly.
      */
     void solve_easy_samples(float n_weight, float d_weight, float weight_quantum);
+
+    /**
+     * @return a transmap where all samples are easy, to test `solve_easy_samples()`.
+     */
+    static TransMap solve_easy_samples_get_test_transmap(float n_weight, float d_weight);
 
     /**
      * @return `weight` if `weight_quantum=0`; otherwise, `weight` rounded to the nearest multiple of `weight_quantum`.
