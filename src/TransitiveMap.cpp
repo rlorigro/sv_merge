@@ -1161,9 +1161,10 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     const int64_t N_SAMPLES = get_n_samples();
     cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
 
+    bool large_weight;
     int64_t i, j;
     int64_t n_dominated, hap_id, n_removed_edges, n_reads, read_id;
-    float weight, max_weight;
+    float weight;
     size_t length, n_haps;
     vector<bool> removed;
     vector<int64_t> hap_ids, read_ids, tmp_vector;
@@ -1180,7 +1181,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         // Building the read-hap matrix
         read_ids.clear(); neighbors_prime.clear(); weights_prime.clear();
-        i=-1; max_weight=0;
+        i=-1; large_weight=false;
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             // Reads are assumed to be enumerated in sorted order by ID.
             i++; read_ids.emplace_back(read_id);
@@ -1191,11 +1192,11 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
                 neighbors_prime.at(i).emplace_back(path_id);
                 w=get_edge_weight(w,weight_quantum);
                 weights_prime.at(i).emplace_back(w);
-                if (w>max_weight) max_weight=w;
+                if (w>=DELTA) large_weight=true;
             });
         });
         n_reads=i+1;
-        if (n_reads==0 || max_weight<DELTA) return;
+        if (n_reads==0 || !large_weight) return;
         // Building the hap-read matrix
         tmp_vector.clear();
         for (i=0; i<n_reads; i++) tmp_vector.insert(tmp_vector.end(),neighbors_prime.at(i).begin(),neighbors_prime.at(i).end());
@@ -1298,11 +1299,11 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     const float DELTA = n_weight/d_weight;
     const int64_t N_HAPS = get_n_paths();
 
-    bool not_worse, favored;
+    bool large_weight, not_worse, favored;
     int64_t i, j, k;
     int64_t read_id, hap_id, min_hap_id, n_reads, hap1, hap2, n_one_hap_samples, n_two_hap_samples;
     size_t n_haps;
-    float weight, min_weight, max_weight;
+    float weight, min_weight;
     vector<int64_t> read_ids;
     unordered_set<int64_t> tmp_set;
     vector<vector<int64_t>> neighbors;
@@ -1320,7 +1321,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
     hap_to_reads.reserve(N_HAPS); favored_haps.reserve(N_HAPS); tmp_set.reserve(N_HAPS);
     for_each_sample([&](const string& sample_name, int64_t sample_id) {
         read_ids.clear(); neighbors.clear(); weights.clear();
-        i=-1; max_weight=0;
+        i=-1; large_weight=false;
         for_each_read_of_sample(sample_id, [&](int64_t read_id) {
             i++; read_ids.emplace_back(read_id);
             neighbors.emplace_back(); weights.emplace_back();
@@ -1330,11 +1331,11 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
                 neighbors.at(i).emplace_back(path_id);
                 w=get_edge_weight(w,weight_quantum);
                 weights.at(i).emplace_back(w);
-                if (w>max_weight) max_weight=w;
+                if (w>=DELTA) large_weight=true;
             });
         });
         n_reads=read_ids.size();
-        if (n_reads==0 || max_weight<DELTA) return;
+        if (n_reads==0 || !large_weight) return;
         hap_to_reads.clear(); favored_haps.clear();
         for (i=0; i<n_reads; i++) {
             read_id=read_ids.at(i);
