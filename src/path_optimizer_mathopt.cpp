@@ -1289,7 +1289,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
         t4=t.elapsed_milliseconds().count();
         t.reset();
         has_large_weight=transmap_clone.has_large_weight(n_weight/n_max,d_weight/d_min,0);
-        auto t41 = t.elapsed_milliseconds().count();
+        t41=t.elapsed_milliseconds().count();
         if (has_large_weight) {
             t.reset();
             transmap_clone.solve_easy_samples(n_weight/n_max,d_weight/d_min,0);
@@ -1303,7 +1303,7 @@ TerminationReason optimize_reads_with_d_plus_n_compressed(
     transmap_clone.compress_samples(0);
     auto t6 = t.elapsed_milliseconds().count();
     t.reset();
-    cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "," << to_string(t31) << "," << to_string(t41) << to_string(t42) << "\n";
+    cerr << "Compression time d_plus_n: " << to_string(t1) << "," << to_string(t2) << "," << to_string(t3) << "," << to_string(t4) << "," << to_string(t5) << "," << to_string(t6) << "," << to_string(t31) << "," << to_string(t41) << "," << to_string(t42) << "\n";
     construct_joint_n_d_model(transmap_clone,model3,vars3,integral,use_ploidy_constraint,true);
     // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
     // using an arbitrary factor of 32.

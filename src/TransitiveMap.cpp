@@ -709,11 +709,9 @@ TransMap TransMap::partition_get_test_transmap() {
 
 
 void TransMap::compress_reads(float weight_quantum, bool verbose) {
-    const int64_t n_reads = get_n_reads();
-
     size_t length;
     int64_t i, j, k;
-    int64_t read_id, n_clusters;
+    int64_t read_id, n_clusters, n_reads;
     vector<bool> is_redundant, is_representative;
     vector<int64_t> node_ids, cluster_representative, cluster_size, sample_ids;
     vector<vector<int64_t>> neighbors;
@@ -722,6 +720,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
     graph.update_first_of_type();
 
     // Collecting all read-haplotype edges, with reads grouped by sample.
+    n_reads=get_n_reads();
     neighbors.reserve(n_reads);
     for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
@@ -745,6 +744,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
             });
         });
     });
+    n_reads=i+1;
     if (verbose) {
         cerr << "Read-hap weights before compression: \n";
         for (i=0; i<n_reads; i++) {
@@ -1461,7 +1461,7 @@ TransMap TransMap::solve_easy_samples_get_test_transmap(float n_weight, float d_
     out.add_edge("s1r3","path1",LARGE_WEIGHT); out.add_edge("s1r3","path2",LARGE_WEIGHT); out.add_edge("s1r3","path3",LARGE_WEIGHT);
 
     out.add_edge("s2r1","path2",SMALL_WEIGHT); out.add_edge("s2r1","path1",LARGE_WEIGHT); out.add_edge("s2r1","path3",LARGE_WEIGHT);
-    out.add_edge("s2r2","path3",SMALL_WEIGHT); out.add_edge("s2r2","path1",LARGE_WEIGHT); out.add_edge("s2r2","path3",LARGE_WEIGHT);
+    out.add_edge("s2r2","path3",SMALL_WEIGHT); out.add_edge("s2r2","path1",LARGE_WEIGHT); out.add_edge("s2r2","path2",LARGE_WEIGHT);
     out.add_edge("s2r3","path1",LARGE_WEIGHT); out.add_edge("s2r3","path2",LARGE_WEIGHT); out.add_edge("s2r3","path3",LARGE_WEIGHT);
 
     out.add_edge("s3r1","path1",SMALL_WEIGHT); out.add_edge("s3r1","path2",LARGE_WEIGHT); out.add_edge("s3r1","path3",LARGE_WEIGHT);
