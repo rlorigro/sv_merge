@@ -603,7 +603,7 @@ void TransMap::update_first_of_type() {
 }
 
 
-void TransMap::partition(vector<TransMap>& maps, vector<string>& partitioned_samples) {
+void TransMap::partition(vector<TransMap>& maps) {
     size_t i;
     size_t set_size;
     int64_t id, type, component_id;

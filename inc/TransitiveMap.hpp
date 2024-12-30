@@ -48,6 +48,7 @@ class TransMap {
     vector<int64_t> read_ids, cluster_ids;
     unordered_map<string,tuple<int64_t,int64_t,int64_t,int64_t>> sample_to_sample;  // from_sample_name -> from_sample_first, from_sample_last, to_sample_first, to_sample_last
     unordered_set<int64_t> solved_samples;
+    vector<string> partitioned_samples;
 
 
 public:
@@ -177,16 +178,16 @@ public:
 
     /**
      * Splits the read-path graph into its connected components (which are at least as many as the connected components
-     * of the sample-path graph).
+     * of the sample-path graph). Stores in object variable `partitioned_samples` the samples whose reads were assigned
+     * to 2 transmaps.
      *
      * Remark: the procedure assumes that the adjacencies of every node are already sorted in an order that is the same
      * for every node.
      *
      * @param maps output array, with one transmap per connected component; every transmap contains the corresponding
-     * samples;
-     * @param partitioned_samples output array, lists the samples whose reads were assigned to 2 transmaps.
+     * samples.
      */
-    void partition(vector<TransMap>& maps, vector<string>& partitioned_samples);
+    void partition(vector<TransMap>& maps);
 
     /**
      * @return a transmap with the following connected components (id, n_reads, n_paths, n_samples, n_edges):
