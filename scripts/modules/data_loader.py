@@ -39,6 +39,8 @@ def load_features_from_vcf(
     reader = vcfpy.Reader.from_path(vcf_path)
 
     type_vector = [0,0,0,0,0]
+    has_multiple_calls = False
+    tr_coverage_available = True
 
     r = 0
     for record in reader:
@@ -55,9 +57,13 @@ def load_features_from_vcf(
         records.append(record)
 
         if record.calls is None:
-            exit("ERROR: no calls in record: " + record.ID)
+            exit("ERROR: no calls in record: " + str(record.ID))
         elif len(record.calls) != 1:
-            exit("ERROR: multiple calls in record: " + record.ID)
+            if not has_multiple_calls:
+                sys.stderr.write("WARNING: multiple calls in record: " + str(record.ID) + " " + str(record.calls) + " " + str(record.CHROM) + " " + str(record.begin) + '\n')
+                sys.stderr.write("Only using first call for all future multi-call variants" + '\n')
+            record.calls = [record.calls[0]]
+            has_multiple_calls = True
 
         # q = 0, p(correct) <= 0.0  Merged with above
         # q = 1, p(correct) <= 0.5  Merged with above
@@ -88,7 +94,14 @@ def load_features_from_vcf(
         ref_length = float(len(record.REF))
         alt_length = float(len(record.ALT[0].serialize()))
 
-        is_tandem = info["tr_coverage"] > 0.9
+        is_tandem = False
+
+        if tr_coverage_available:
+            if "tr_coverage" in info:
+                is_tandem = info["tr_coverage"] > 0.9
+            else:
+                sys.stderr.write("WARNING: no tr_coverage INFO field found, attempting to use hapestry is_tandem bit...\n")
+                tr_coverage_available = False
 
         t = type_vector
         type_index = get_type_index(record)
@@ -100,6 +113,9 @@ def load_features_from_vcf(
         caller_support[2] = info["SUPP_SNIFFLES"] if "SUPP_SNIFFLES" in info else 0
 
         hapestry_data = list(map(float,info["HAPESTRY_READS"]))
+
+        if not tr_coverage_available:
+            is_tandem = hapestry_data[-2]
 
         y.append(is_true)
         x.append([])
