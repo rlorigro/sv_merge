@@ -1145,13 +1145,13 @@ void merge_thread_fn(
                     unordered_map<string,string> hapmap;
                     transmap.detangle_sample_paths(hapmap);
 
-                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
+                    termination_reason = optimize(transmap, opt_config, subdir, true);
 
                     // Reverse the detangling step
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, opt_config, subdir, !hapestry_config.skip_nonessential_logs);
+                    termination_reason = optimize(transmap, opt_config, subdir, true);
                 }
 
                 // Handle timeout case (do nothing)
@@ -1654,6 +1654,21 @@ void hapestry(
             cerr << t << "Writing output VCF: " << out_vcf << '\n';
             concatenate_output_vcfs(out_vcf, vcf, output_dir, regions, hapestry_config.flank_length, "failed_haps", "solution_haps");
         }
+
+        if (hapestry_config.skip_nonessential_logs) {
+            // Delete all the intermediate VCFs (this should really be done with a proper DB but for now we just remove them after concatenating them)
+            for (size_t i = 0; i < regions.size(); i++) {
+                const auto &region = regions[i];
+                path sub_vcf = output_dir / region.to_unflanked_string('_', hapestry_config.flank_length) / (vcf_prefix + ".vcf");
+
+                // Remove if the VCF was generated
+                if (exists(sub_vcf)) {
+                    std::filesystem::remove(sub_vcf);
+                    continue;
+                }
+            }
+        }
+
     }
     else{
         cerr << "WARNING: No regions to process" << '\n';
