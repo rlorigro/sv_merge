@@ -136,12 +136,23 @@ RUN mv gurobi1101/ /opt/
 # This is where the license will be placed during runtime
 RUN mkdir /opt/gurobi
 
-RUN apt remove cmake -y \
-    && pip3 install cmake --upgrade
+# HAPESTRY
+RUN apt remove cmake -y
+RUN pip3 install cmake --upgrade
+RUN pip3 install matplotlib
+RUN pip3 install networkx
+RUN pip3 install numpy
+RUN pip3 install pandas
+RUN pip3 install pysam
+RUN pip3 install scikit_learn
+RUN pip3 install scipy
+
+# NO GPU SUPPORT!
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN pip3 install vcfpy
 
 # HAPESTRY
-# MIMALLOC BRANCH COMMIT
-ARG HAPESTRY_COMMIT=991940ea1d5713ea9374b6925ca4b214d4d1afcb
+ARG HAPESTRY_COMMIT=384780860121d3611ae3f58d1da0bf9e8edc32ed
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
