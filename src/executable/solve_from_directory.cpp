@@ -318,8 +318,8 @@ int main(int argc, char** argv){
     app.add_option("--compress_transmap", compress_transmap, "TRUE: the transmap is compressed before running the solver.");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
-    app.add_option("-dw,--d_weight", d_weight, "d_weight (default: 1)");
-    app.add_option("-nw,--n_weight", n_weight, "n_weight (default: 1)");
+    app.add_option("-d,--d_weight", d_weight, "d_weight (default: 1)");
+    app.add_option("-n,--n_weight", n_weight, "n_weight (default: 1)");
 
     CLI11_PARSE(app, argc, argv);
 
