@@ -66,19 +66,16 @@ using std::ref;
 using namespace sv_merge;
 
 
-void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool compress, path output_dir){
+void optimize(TransMap& transmap, const SolverType& solver_type, size_t n_threads, bool use_ploidy_constraint, bool compress, path output_dir, double d_weight, double n_weight){
     if (not exists(output_dir)) create_directories(output_dir);
     else throw runtime_error("Directory already exists: " + output_dir.string());
 
-    const float D_WEIGHT = 60000;
-    const float N_WEIGHT = 1;
-
     if (compress) {
-        optimize_reads_with_d_plus_n_compressed(transmap, D_WEIGHT, N_WEIGHT, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
+        optimize_reads_with_d_plus_n_compressed(transmap, d_weight, n_weight, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
         vector<bool> used;
         transmap.decompress_samples(used);
     }
-    else optimize_reads_with_d_plus_n(transmap, D_WEIGHT, N_WEIGHT, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
+    else optimize_reads_with_d_plus_n(transmap, d_weight, n_weight, n_threads, 0, output_dir, solver_type, use_ploidy_constraint);
 }
 
 
@@ -89,7 +86,9 @@ size_t solve_from_csv(
         size_t n_threads,
         bool use_ploidy_constraint,
         bool compress_transmap,
-        path output_dir
+        path output_dir,
+        double d_weight,
+        double n_weight
         ){
 
     TransMap transmap;
@@ -158,7 +157,7 @@ size_t solve_from_csv(
     size_t q = tokens.find_last_of("/");
     size_t p = tokens.substr(0,q).find_last_of("/");
     if (compress_transmap) {
-        optimize(transmap, solver_type, 1, use_ploidy_constraint,true, output_dir/(tokens.substr(p+1,q-p-1)));
+        optimize(transmap, solver_type, 1, use_ploidy_constraint,true, output_dir/(tokens.substr(p+1,q-p-1)), d_weight, n_weight);
 
 
 
@@ -180,7 +179,7 @@ size_t solve_from_csv(
 
 
     }
-    else optimize(transmap, solver_type, 1, use_ploidy_constraint, false, output_dir/tokens.substr(p+1,q-p-1));
+    else optimize(transmap, solver_type, 1, use_ploidy_constraint, false, output_dir/tokens.substr(p+1,q-p-1), d_weight, n_weight);
     return i-1;
 }
 
@@ -194,7 +193,9 @@ void thread_fn(
         size_t n_threads,
         bool use_ploidy_constraint,
         bool compress_transmap,
-        path output_dir
+        path output_dir,
+        double d_weight,
+        double n_weight
         ){
 
     size_t i = job_index.fetch_add(1);
@@ -206,7 +207,7 @@ void thread_fn(
         bool success = true;
 
         try {
-            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir);
+            n_vars = solve_from_csv(jobs[i], solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir, d_weight, n_weight);
         }
         catch (const exception& e) {
             cerr << e.what() << '\n';
@@ -238,7 +239,9 @@ void solve_from_directory(
         size_t n_threads,
         bool use_ploidy_constraint,
         bool compress_transmap,
-        path output_dir
+        path output_dir,
+        double d_weight,
+        double n_weight
         ){
 
     if (not exists(output_dir)){
@@ -280,7 +283,9 @@ void solve_from_directory(
                 n_threads,
                 use_ploidy_constraint,
                 compress_transmap,
-                output_dir
+                output_dir,
+                d_weight,
+                n_weight
             );
     }
 
@@ -303,6 +308,8 @@ int main(int argc, char** argv){
     bool compress_transmap = false;
     size_t max_reads_per_sample = numeric_limits<size_t>::max();
     size_t n_threads = 1;
+    double d_weight = 1;
+    double n_weight = 1;
 
     app.add_option("-i,--input", input_directory, "Input directory containing subdirectories containing CSV files with sample-read-path data for optimizer")->required();
     app.add_option("-o,--output_dir", output_dir, "Output directory (must not exist)")->required();
@@ -311,6 +318,8 @@ int main(int argc, char** argv){
     app.add_option("--compress_transmap", compress_transmap, "TRUE: the transmap is compressed before running the solver.");
     app.add_option("-m,--max-reads", max_reads_per_sample, "Maximum number of reads to optimize per sample (default: all reads). Does NOT appy to samplewise optimization.");
     app.add_option("-t,--n_threads", n_threads, "Maximum number of threads to use for solver (default: 1)");
+    app.add_option("-dw,--d_weight", d_weight, "d_weight (default: 1)");
+    app.add_option("-nw,--n_weight", n_weight, "n_weight (default: 1)");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -337,5 +346,5 @@ int main(int argc, char** argv){
         cerr << "NOT using ploidy constraint...\n";
     }
 
-    solve_from_directory(input_directory, solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir);
+    solve_from_directory(input_directory, solver_type, max_reads_per_sample, n_threads, use_ploidy_constraint, compress_transmap, output_dir, d_weight, n_weight);
 }
