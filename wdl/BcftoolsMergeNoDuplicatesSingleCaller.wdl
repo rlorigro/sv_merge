@@ -160,7 +160,7 @@ task IntraSampleMerge {
             rm -f ${INPUT_FILE}
             i=$(( ${i} + 1 ))
         done
-        ${TIME_COMMAND} bcftools merge --threads ${N_THREADS} --merge none --force-samples --file-list list.txt --output-type z > tmp2.vcf.gz
+        ${TIME_COMMAND} bcftools merge --threads ${N_THREADS} --merge none --force-samples --force_single --file-list list.txt --output-type z > tmp2.vcf.gz
         tabix -f tmp2.vcf.gz
         
         # Removing multiallelic records, if any are generated during the merge.
