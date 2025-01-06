@@ -336,27 +336,6 @@ public:
      */
     static float get_edge_weight(float weight, float weight_quantum);
 
-    /// Steiner tree approximation
-
-    /**
-     * Builds a tripartite graph `(S,H,{r})`, where `S` contains one node per sample and `H` contains one node per
-     * possible solution (a solution is either one or two haplotypes that cover all the reads of at least one sample).
-     * An `(s,h)` edge means that all the reads from sample `s` can be covered by a haplotype in `h`; the weight is the
-     * smallest cost of such a cover. The weight of every `(h,r)` edge is the cost of `h`. The graph is directed
-     * outwards from `r`, which is not represented explicitly.
-     *
-     * Remark: the procedure assumes that the adjacencies of every transmap node are already sorted in an order that is
-     * the same for every node.
-     *
-     * @param solutions output vector: the procedure sets it to the list of all distinct solutions;
-     * @param solution_samples output matrix: the procedure sets it to the sample neighbors of each solution;
-     * @param solution_sample_weights output matrix: the procedure sets it to the weight of each solution-sample edge.
-     */
-    void build_solution_sample_graph(vector<pair<int64_t,int64_t>>& solutions, vector<vector<int64_t>>& solution_samples, vector<vector<float>>& solution_sample_weights);
-
-
-
-
 };
 
 
