@@ -87,6 +87,7 @@ public:
     /// Accessing
     bool empty() const;
 
+    size_t get_edge_count() const;
     size_t get_read_count() const;
     size_t get_path_count() const;
     size_t get_sample_count() const;
@@ -363,5 +364,7 @@ public:
     static float get_edge_weight(float weight, float weight_quantum);
 };
 
+/// WARNING: DOES NOT COMPARE EDGE WEIGHTS, ONLY COMPARES EDGE PRESENCE/ABSENCE
+bool operator==(const TransMap& a, const TransMap& b);
 
 }

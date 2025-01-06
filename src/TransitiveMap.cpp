@@ -87,6 +87,11 @@ int64_t TransMap::get_edge_count(int64_t id) const{
 }
 
 
+size_t TransMap::get_edge_count() const{
+    return graph.get_edge_count();
+}
+
+
 const HeteroNode& TransMap::get_node(int64_t id) const{
     return graph.get_node(id);
 }
@@ -296,6 +301,27 @@ void TransMap::get_sample_of_read(const string& read_name, string& result) const
 }
 
 
+string TransMap::get_sample_of_read(const string& read_name) const{
+    string result;
+
+    // Using the HeteroGraph back end means that we iterate, even for a 1:1 mapping.
+    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
+        // Check for cases that should be impossible
+        if (not result.empty()){
+            throw runtime_error("ERROR: multiple samples found for read: " + read_name);
+        }
+
+        result = neighbor.name;
+    });
+
+    if (result.empty()){
+        throw runtime_error("ERROR: no sample found for read: " + read_name);
+    }
+
+    return result;
+}
+
+
 void TransMap::get_sample_of_read(int64_t read_id, string& result) const{
     result.clear();
 
@@ -455,36 +481,6 @@ void TransMap::for_each_variant_of_path(int64_t path_id, const function<void(int
     graph.for_each_neighbor_of_type(path_id, 'V', [&](int64_t id){
         f(id);
     });
-}
-
-
-string TransMap::get_sample_of_read(const string& read_name) const{
-    string result;
-    size_t i=0;
-    graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
-        if (i > 0){
-            throw runtime_error("ERROR: multiple samples found for read: " + read_name);
-        }
-        result = neighbor.name;
-        i++;
-    });
-
-    return result;
-}
-
-
-int64_t TransMap::get_sample_of_read(int64_t read_id) const {
-    int64_t result;
-    size_t i=0;
-    for_each_sample_of_read(read_id, [&](int64_t sample_id){
-        if (i > 0){
-            throw runtime_error("ERROR: multiple samples found for read: " + to_string(read_id));
-        }
-        result = sample_id;
-        i++;
-    });
-
-    return result;
 }
 
 
@@ -863,7 +859,7 @@ void TransMap::partition(vector<TransMap>& maps) {
         component_size.emplace_back(new_map.get_read_count());
         component_size.emplace_back(new_map.get_path_count());
         component_size.emplace_back(new_map.get_sample_count());
-        component_size.emplace_back(new_map.get_n_edges());
+        component_size.emplace_back(new_map.get_edge_count());
     });
     cerr << "Number of connected components: " << to_string(component_id+1) << '\n';
     cerr << "Component \t n_reads \t n_paths \t n_samples \t n_edges\n";
@@ -924,7 +920,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
     graph.update_first_of_type();
 
     // Collecting all read-haplotype edges, with reads grouped by sample.
-    n_reads=get_n_reads();
+    n_reads=get_read_count();
     neighbors.reserve(n_reads);
     for (i=0; i<n_reads; i++) neighbors.emplace_back();
     weights.reserve(n_reads);
