@@ -75,3 +75,8 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/hapestry_filter.wdl
   testParameterFiles:
+- name: BcftoolsMergeNoDuplicatesSingleCaller
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/BcftoolsMergeNoDuplicates.wdl
+  testParameterFiles:
