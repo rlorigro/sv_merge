@@ -58,36 +58,52 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
 void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
+    int64_t n_paths;
+    unordered_set<int64_t> mandatory_haps;
+
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
         string name = "h" + std::to_string(hap_id);
-        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+        auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+
+        if (transmap.present_haps.contains(hap_id)) {
+            auto& h = result.first->second;
+            model.AddLinearConstraint(h == 1);
+        }
     });
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
-                string hap_name = transmap.get_node(hap_id).name;
-                string read_name = transmap.get_node(read_id).name;
+                bool rh_not_found = not vars.read_hap.contains({read_id, hap_id});
 
-                // DEFINE: read-hap vars
-                string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
-                auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
-                auto& r_h = result.first->second;
+                // Do only once for each unique pair of read-hap. After read clustering/compression, the same read-hap
+                // edge may be enumerated multiple times, since the same compressed read may belong to multiple samples.
+                if (rh_not_found){
+                    // DEFINE: read-hap vars
+                    string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
+                    auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
+                    auto& r_h = result.first->second;
 
-                // DEFINE: flow
-                vars.read_flow[read_id] += r_h;
+                    // DEFINE: flow
+                    vars.read_flow[read_id] += r_h;
 
-                auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
-                if (not success){
-                    throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                    auto [success, w] = transmap.try_get_edge_weight(read_id, hap_id);
+                    if (not success){
+                        throw runtime_error("ERROR: edge weight not found for read-hap: " + std::to_string(read_id) + ", " + std::to_string(hap_id));
+                    }
+
+                    // OBJECTIVE: accumulate d cost sum
+                    vars.cost_d += w*r_h;
+
+                    // Transmap compression may have already identified edges that are always 1 in the solution
+                    if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                        model.AddLinearConstraint(r_h == 1);
+                    }
                 }
 
-                // OBJECTIVE: accumulate d cost sum
-                vars.cost_d += w*r_h;
-
                 // Do only once for each unique pair of sample-hap
-                if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
+                if (not vars.sample_hap.contains({sample_id, hap_id})){
                     // DEFINE: sample-hap vars
                     string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
                     auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
@@ -98,10 +114,19 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
                     // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
+
+                    // Transmap compression may have identified edges that are always 1 in the solution.
+                    // This constraint is technically redundant in the transitive chain of read-hap --> sample-hap,
+                    // implications but we add it anyway
+                    if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                        model.AddLinearConstraint(s_h == 1);
+                    }
                 }
 
-                // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
-                model.AddLinearConstraint(r_h <= vars.sample_hap.at({sample_id, hap_id}));
+                if (rh_not_found) {
+                    // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
+                    model.AddLinearConstraint(vars.read_hap.at({read_id, hap_id}) <= vars.sample_hap.at({sample_id, hap_id}));
+                }
             });
         });
     });

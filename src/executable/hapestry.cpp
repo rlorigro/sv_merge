@@ -1151,7 +1151,23 @@ void merge_thread_fn(
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, opt_config, subdir, true);
+                    if (opt_config.use_compression) {
+                        transmap.sort_adjacency_lists();
+                        transmap.update_first_of_type();
+                        transmap.compress_haplotypes_global(0);
+                        transmap.compress_haplotypes_local(0, opt_config.d_weight, 0);
+                        transmap.solve_easy_samples(0, opt_config.d_weight, 0);
+                        transmap.compress_reads(0);
+                        transmap.compress_samples(0);
+
+                        termination_reason = optimize(transmap, opt_config, subdir, true);
+
+                        vector<bool> used;
+                        transmap.decompress_samples(used);
+                    }
+                    else {
+                        termination_reason = optimize(transmap, opt_config, subdir, true);
+                    }
                 }
 
                 // Handle timeout case (do nothing)
@@ -1791,6 +1807,8 @@ int main (int argc, char* argv[]){
     app.add_flag("--write_hap_vcf", hapestry_config.write_hap_vcf, "Invoke this to write an additional VCF which only writes solutions in the form of full window length haplotypes (replacement/substitution operations).");
 
     app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
+
+    app.add_flag("--compress", optimizer_config.use_compression, "Use reversible compression methods to simplify the problem before solving with LP solver");
 
     app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
 
