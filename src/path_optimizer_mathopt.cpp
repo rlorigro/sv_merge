@@ -1369,11 +1369,6 @@ TerminationReason optimize_reads_with_d_plus_n(
 
     // ------------------- Normalize -----------------------------
 
-    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
-    // using an arbitrary factor of 32.
-    Variable d_norm = model.AddContinuousVariable(0,32,"d");
-    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
-
     // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
     // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
     // so that the solver exits normally and the solution is parsed as given: no read-hap edges.
@@ -1389,13 +1384,12 @@ TerminationReason optimize_reads_with_d_plus_n(
     }
 
     // Normalize the costs
-    model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
-    model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+    const double d_multiplier = config.d_weight/d_min;
+    const double n_multiplier = config.n_weight/n_max;
 
     // --------------- Minimize joint model -------------------------
 
-    model.Minimize(d_norm*config.d_weight + n_norm*config.n_weight);
-
+    model.Minimize(vars.cost_d*d_multiplier + vars.cost_n*n_multiplier);
     t.reset();
 
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, config.solver_type, args);
