@@ -133,6 +133,8 @@ TerminationReason optimize_reads_with_d_and_n(
 
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
+        Model& model,
+        PathVariables& vars,
         size_t n_threads,
         path output_dir,
         const OptimizerConfig& config,

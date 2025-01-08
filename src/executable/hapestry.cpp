@@ -1151,23 +1151,7 @@ void merge_thread_fn(
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    if (opt_config.use_compression) {
-                        transmap.sort_adjacency_lists();
-                        transmap.update_first_of_type();
-                        transmap.compress_haplotypes_global(0);
-                        transmap.compress_haplotypes_local(0, opt_config.d_weight, 0);
-                        transmap.solve_easy_samples(0, opt_config.d_weight, 0);
-                        transmap.compress_reads(0);
-                        transmap.compress_samples(0);
-
-                        termination_reason = optimize(transmap, opt_config, subdir, true);
-
-                        vector<bool> used;
-                        transmap.decompress_samples(used);
-                    }
-                    else {
-                        termination_reason = optimize(transmap, opt_config, subdir, true);
-                    }
+                    termination_reason = optimize(transmap, opt_config, subdir, true);
                 }
 
                 // Handle timeout case (do nothing)
@@ -1789,8 +1773,6 @@ int main (int argc, char* argv[]){
     app.add_flag("--skip_solve", optimizer_config.skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
     app.add_flag("--rescale_weights", optimizer_config.rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
-
-    app.add_flag("--quadratic_objective", optimizer_config.use_quadratic_objective, "Invoke this to use quadratic objective which minimizes the square distance from the 'utopia point'. May incur large run time cost.");
 
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 

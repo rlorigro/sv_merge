@@ -282,7 +282,7 @@ public:
      *
      * @param used temporary space.
      */
-    void decompress_samples(vector<bool>& used);
+    void decompress_samples();
 
     /**
      * Adds to object variable `present_haps` all the mandatory haplotypes, and to `present_edges` the corresponding

@@ -1207,10 +1207,11 @@ void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_
 /**
  * Essentially the same as `compress_samples_update_weights()`.
  */
-void TransMap::decompress_samples(vector<bool>& used) {
+void TransMap::decompress_samples() {
     int64_t i, j;
     int64_t cluster_id, sample_id, from_first, from_last, to_first, to_last;
     string sample_name;
+    vector<bool> used;
 
     for (auto& pair: sample_to_sample) {
         sample_name=pair.first;
