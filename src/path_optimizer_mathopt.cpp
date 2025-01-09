@@ -1608,8 +1608,6 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     // For d_min step, n_weight is 0 and d_weight is 1 because n is not considered in the objective
     clone.sort_adjacency_lists();
     clone.update_first_of_type();
-    clone.get_mandatory_haplotypes();
-    clone.compress_haplotypes_global(0);
     clone.compress_haplotypes_local(0,1,0);
     clone.solve_easy_samples(0,1,0);
     clone.compress_reads(0);
@@ -1654,8 +1652,6 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     t.reset();
     clone.sort_adjacency_lists();
     clone.update_first_of_type();
-    clone.get_mandatory_haplotypes();
-    clone.compress_haplotypes_global(0);
 
     if (clone.has_large_weight(c_n,c_d)) {
         clone.compress_haplotypes_local(c_n,c_d,0);
