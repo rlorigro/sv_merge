@@ -326,7 +326,6 @@ workflow hapestry_merge_scattered {
         Boolean bam_not_hardclipped = false
         Boolean skip_solve = false
         Boolean samplewise = false
-        Boolean quadratic_objective = false
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
@@ -355,7 +354,6 @@ workflow hapestry_merge_scattered {
         reference_fa: "Reference fasta file"
         skip_solve: "Skip the solve step, only generate input CSV for the solve step"
         samplewise: "Solve each sample independently"
-        quadratic_objective: "Use quadratic objective which finds the normalized square distance from the utopia point"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         prune_with_d_min: "Use initial solution of d_min to prune haps before starting final joint solution"
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
@@ -405,7 +403,6 @@ workflow hapestry_merge_scattered {
                 force_unique_reads = force_unique_reads,
                 skip_solve = skip_solve,
                 samplewise = samplewise,
-                quadratic_objective = quadratic_objective,
                 rescale_weights = rescale_weights,
                 prune_with_d_min = prune_with_d_min,
                 skip_nonessential_logs = skip_nonessential_logs,

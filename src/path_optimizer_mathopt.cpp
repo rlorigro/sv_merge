@@ -784,18 +784,28 @@ double optimize_d(
 
 TerminationReason optimize_d(
         const TransMap& transmap,
-        Model& model,
-        PathVariables& vars,
         const OptimizerConfig& config,
         path output_dir,
         size_t n_threads,
         double& d_min,
         double& n_max
         ){
-
     TerminationReason termination_reason;
-
     SolveArguments args;
+    Model model;
+    PathVariables vars;
+
+    Timer t;
+
+    // Construct the model
+    if (config.use_sum_constraints) {
+        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    else {
+        construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    t.reset();
 
     args.parameters.threads = n_threads;
 
@@ -807,8 +817,6 @@ TerminationReason optimize_d(
     }
 
     model.Minimize(vars.cost_d);
-
-    Timer t;
 
     const absl::StatusOr<SolveResult> response = Solve(model, config.solver_type, args);
 
@@ -1283,6 +1291,9 @@ TerminationReason prune_paths_with_d_min(
 
     vector<int64_t> to_be_removed;
 
+    transmap.sort_adjacency_lists();
+    transmap.update_first_of_type();
+
     transmap.for_each_path([&](const string& path_name, int64_t path_id){
         size_t n_reads = 0;
         bool is_covered = false;
@@ -1336,8 +1347,6 @@ TerminationReason prune_paths_with_d_min(
  */
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
-        Model& model,
-        PathVariables& vars,
         size_t n_threads,
         path output_dir,
         const OptimizerConfig& config,
@@ -1346,11 +1355,23 @@ TerminationReason optimize_reads_with_d_plus_n(
         bool write_solution
         ){
 
-    Timer t;
-
-    SolveArguments args;
     TerminationReason termination_reason;
+    SolveArguments args;
+    Model model;
+    PathVariables vars;
+
+    Timer t;
     milliseconds duration;
+
+    // Construct the model
+    if (config.use_sum_constraints) {
+        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    else {
+        construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    t.reset();
 
     bool integral = true;
 
@@ -1528,6 +1549,37 @@ TerminationReason optimize_read_feasibility(
 
 
 TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
+    TerminationReason termination_reason;
+
+    double d_min = -1;
+    double n_max = -1;
+
+    // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
+    termination_reason = optimize_read_feasibility(transmap, 1, config.timeout_sec, subdir, config.solver_type);
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    // Find d_min and n_max and also prune the haps from the graph based on the d_min solution
+    if (config.prune_with_d_min) {
+        termination_reason = prune_paths_with_d_min(transmap, 1, subdir, config, d_min, n_max);
+    }
+    else{
+        termination_reason = optimize_d(transmap, config, subdir, 1, d_min, n_max);
+    }
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max, write_solution);
+
+    return termination_reason;
+}
+
+
+TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
     Timer t;
 
     TerminationReason termination_reason;
@@ -1542,57 +1594,80 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
         return termination_reason;
     }
 
+    TransMap clone;
+
     // TODO: cannot currently use read compression for the read_feasibility step, unless we store # of reads collapsed
-    if (config.use_compression) {
-        t.reset();
-        transmap.sort_adjacency_lists();
-        transmap.update_first_of_type();
-        transmap.compress_haplotypes_global(0);
-        transmap.compress_haplotypes_local(0, config.d_weight, 0);
-        transmap.solve_easy_samples(0, config.d_weight, 0);
-        transmap.compress_reads(0);
-        transmap.compress_samples(0);
-        write_time_log(subdir, "compress_transmap", t, true);
-        t.reset();
-    }
+    // t.reset();
+    // transmap.sort_adjacency_lists();
+    // transmap.update_first_of_type();
+    // transmap.get_mandatory_haplotypes();
+    // transmap.compress_haplotypes_global(0);
+    // write_time_log(subdir, "compress_transmap_initial", t, true);
+    // t.reset();
 
-    // Find d_min and n_max and also prune the haps from the graph based on the d_min solution
+    // Branch off from the parent Transmap after common compression steps
+    clone = transmap;
+
+    // For d_min step, n_weight is 0 and d_weight is 1 because n is not considered in the objective
+    clone.sort_adjacency_lists();
+    clone.update_first_of_type();
+    clone.get_mandatory_haplotypes();
+    clone.compress_haplotypes_global(0);
+    clone.compress_haplotypes_local(0,1,0);
+    clone.solve_easy_samples(0,1,0);
+    clone.compress_reads(0);
+    clone.compress_samples(0);
+
+    // Find d_min and n_max
     if (config.prune_with_d_min) {
-        termination_reason = prune_paths_with_d_min(transmap, 1, subdir, config, d_min, n_max);
-    }
+        // Also prune the haps from the graph based on the d_min solution, if requested
+        termination_reason = prune_paths_with_d_min(clone, 1, subdir, config, d_min, n_max);
 
-    // If not using d_min pruning, we don't want to construct the Model/Vars object twice for d_min and n_plus_d
-    // solvers, so we do it externally here. If we ARE using d_min pruning, then we have to update the model/vars anyway
-    // because pruning modifies the transmap
-    Model model;
-    PathVariables vars;
-    t.reset();
+        // Since we are working from a clone, need to also apply the changes to the parent transmap
+        vector<int64_t> to_be_deleted;
+        transmap.for_each_path([&](const string& name, int64_t id) {
+            if (not clone.has_node(name)) {
+                to_be_deleted.emplace_back(id);
+            }
+        });
 
-    // Construct the model
-    if (config.use_sum_constraints) {
-        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, true, config.use_ploidy_constraint);
+        // Must not modify while iterating Transmap
+        for (auto id: to_be_deleted) {
+            transmap.remove_node(id);
+        }
     }
-    else {
-        construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
-    }
-    write_time_log(subdir, "optimize_d_plus_n_construct", t, true);
-    t.reset();
-
-    // Optimize d first to get normalization values
-    if (not config.prune_with_d_min) {
-        termination_reason = optimize_d(transmap, model, vars, config, subdir, 1, d_min, n_max);
+    else{
+        termination_reason = optimize_d(clone, config, subdir, 1, d_min, n_max);
     }
 
     if (termination_reason != TerminationReason::kOptimal) {
         return termination_reason;
     }
 
-    termination_reason = optimize_reads_with_d_plus_n(transmap, model, vars, 1, subdir, config, d_min, n_max, write_solution);
+    // Branch off from the parent Transmap
+    clone = transmap;
 
-    // Finally decompress if transmap was compressed
-    if (config.use_compression) {
-        transmap.decompress_samples();
-    }
+    // For the final joint optimization we need to tell the compression methods what constants are used in the objective
+    // for both of the n and d terms
+    auto c_n = float(config.n_weight/n_max);
+    auto c_d = float(config.d_weight/d_min);
+
+    clone.sort_adjacency_lists();
+    clone.update_first_of_type();
+    clone.get_mandatory_haplotypes();
+    clone.compress_haplotypes_global(0);
+    clone.compress_haplotypes_local(c_n,c_d,0);
+    clone.solve_easy_samples(c_n,c_d,0);
+    clone.compress_reads(0);
+    clone.compress_samples(0);
+
+    termination_reason = optimize_reads_with_d_plus_n(clone, 1, subdir, config, d_min, n_max, write_solution);
+
+    // Finally decompress
+    clone.decompress_samples();
+
+    // Overwrite the original transmap
+    transmap = clone;
 
     return termination_reason;
 }

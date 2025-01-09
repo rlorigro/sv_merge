@@ -1137,7 +1137,7 @@ void merge_thread_fn(
         }
 
         if (not opt_config.skip_solve){
-            try {
+            // try {
                 TerminationReason termination_reason;
 
                 if (opt_config.samplewise) {
@@ -1151,7 +1151,13 @@ void merge_thread_fn(
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, opt_config, subdir, true);
+
+                    if (opt_config.use_compression) {
+                        termination_reason = optimize_compressed(transmap, opt_config, subdir, true);
+                    }
+                    else {
+                        termination_reason = optimize(transmap, opt_config, subdir, true);
+                    }
                 }
 
                 // Handle timeout case (do nothing)
@@ -1219,11 +1225,11 @@ void merge_thread_fn(
                         );
                     }
                 }
-            }
-            catch (const exception& e) {
-                cerr << e.what() << '\n';
-                cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
-            }
+            // }
+            // catch (const exception& e) {
+            //     cerr << e.what() << '\n';
+            //     cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
+            // }
         }
 
         if (HAPESTRY_DEBUG){

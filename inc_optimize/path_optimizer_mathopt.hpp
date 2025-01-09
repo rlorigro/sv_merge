@@ -133,8 +133,6 @@ TerminationReason optimize_reads_with_d_and_n(
 
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
-        Model& model,
-        PathVariables& vars,
         size_t n_threads,
         path output_dir,
         const OptimizerConfig& config,
@@ -171,6 +169,8 @@ TerminationReason optimize_read_feasibility(
 );
 
 TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
+
+TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
 TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
