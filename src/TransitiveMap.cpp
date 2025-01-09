@@ -861,9 +861,9 @@ void TransMap::partition(vector<TransMap>& maps) {
         component_size.emplace_back(new_map.get_sample_count());
         component_size.emplace_back(new_map.get_edge_count());
     });
-    cerr << "Number of connected components: " << to_string(component_id+1) << '\n';
-    cerr << "Component \t n_reads \t n_paths \t n_samples \t n_edges\n";
-    for (i=0; i<component_size.size(); i+=4) cerr << to_string(i/4) << '\t' << to_string(component_size.at(i)) << '\t' << to_string(component_size.at(i+1)) << '\t' << to_string(component_size.at(i+2)) << '\t' << to_string(component_size.at(i+3)) << '\n';
+    // cerr << "Number of connected components: " << to_string(component_id+1) << '\n';
+    // cerr << "Component \t n_reads \t n_paths \t n_samples \t n_edges\n";
+    // for (i=0; i<component_size.size(); i+=4) cerr << to_string(i/4) << '\t' << to_string(component_size.at(i)) << '\t' << to_string(component_size.at(i+1)) << '\t' << to_string(component_size.at(i+2)) << '\t' << to_string(component_size.at(i+3)) << '\n';
 
     // Collecting samples assigned to 2 components
     partitioned_samples.clear();
@@ -876,7 +876,7 @@ void TransMap::partition(vector<TransMap>& maps) {
         if (set_size>2) throw runtime_error("ERROR: the reads of sample "+sample_name+" were partitioned into "+to_string(set.size())+" connected components");
         else if (set_size==2) partitioned_samples.emplace_back(sample_name);
     });
-    cerr << "Number of samples assigned to 2 components: " << to_string(partitioned_samples.size()) << '\n';
+    // cerr << "Number of samples assigned to 2 components: " << to_string(partitioned_samples.size()) << '\n';
 }
 
 
@@ -978,7 +978,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
         }
     }
     compared_weights.clear();
-    cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) <<  " (after compressing reads)\n";
+    // cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) <<  " (after compressing reads)\n";
     if (verbose) {
         cerr << "Read-hap weights after compression: \n";
         for (i=0; i<n_reads; i++) {
@@ -1060,7 +1060,7 @@ void TransMap::compress_samples(float weight_quantum) {
         }
     }
     compared_weights.clear();
-    cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) << " (across all unsolved samples)\n";
+    // cerr << "n_reads=" << to_string(n_reads) << " -> n_read_clusters=" << to_string(n_clusters) << " (across all unsolved samples)\n";
 
     cluster_size.reserve(n_clusters);
     for (i=0; i<n_clusters; i++) cluster_size.emplace_back(0);
@@ -1143,7 +1143,7 @@ void TransMap::compress_samples(float weight_quantum) {
         }
         i=next_i;
     }
-    if (!sample_to_container_sample.empty()) cerr << "Removed " << to_string(sample_to_container_sample.size()) << " contained samples with trivial haplotypes\n";
+    // if (!sample_to_container_sample.empty()) cerr << "Removed " << to_string(sample_to_container_sample.size()) << " contained samples with trivial haplotypes\n";
 
     // Preparing data structures for decompression
     sample_to_sample.clear();
@@ -1297,7 +1297,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum) {
             to_remove.emplace(hap_ids.at(j));
         }
     }
-    if (n_equivalent!=0) cerr << "Removed " << to_string(n_equivalent) << " globally-equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
+    // if (n_equivalent!=0) cerr << "Removed " << to_string(n_equivalent) << " globally-equivalent haplotypes (out of " << to_string(n_haps) << " total)\n";
 
     // Removing globally-contained haps
     n_contained=0;
@@ -1314,7 +1314,7 @@ void TransMap::compress_haplotypes_global(float weight_quantum) {
         }
     }
     neighbors.clear(); weights.clear(); hap_ids.clear();
-    if (n_contained!=0) cerr << "Removed " << to_string(n_contained) << " globally-contained haplotypes (out of " << to_string(n_haps) << " total)\n";
+    // if (n_contained!=0) cerr << "Removed " << to_string(n_contained) << " globally-contained haplotypes (out of " << to_string(n_haps) << " total)\n";
 
     // Updating the transmap.
     // Remark: edge removal could be implemented much faster.
@@ -1360,7 +1360,7 @@ bool TransMap::has_large_weight(float n_weight, float d_weight) {
 void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum) {
     const float DELTA = n_weight/d_weight;
     const int64_t N_SAMPLES = get_sample_count();
-    cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
+    // cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';
 
     bool large_weight;
     int64_t i, j;
@@ -1447,7 +1447,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
         }
         neighbors.clear(); weights.clear(); hap_ids.clear();
     });
-    if (n_dominated!=0) cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/N_SAMPLES) << " avg per sample)\n";
+    // if (n_dominated!=0) cerr << "Found " << to_string(n_dominated) << " locally-dominated haplotypes (" << to_string(((float)n_dominated)/N_SAMPLES) << " avg per sample)\n";
 
     // Updating the transmap.
     // Remark: edge removal could be implemented much faster.
@@ -1463,7 +1463,7 @@ void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float w
         });
     }
     for (auto& pair: edges_to_remove_prime) remove_edge(pair.first,pair.second);
-    if (n_removed_edges!=0) cerr << "Removed " << to_string(n_removed_edges) << " edges to locally-dominated haplotypes\n";
+    // if (n_removed_edges!=0) cerr << "Removed " << to_string(n_removed_edges) << " edges to locally-dominated haplotypes\n";
 }
 
 
@@ -1626,7 +1626,7 @@ void TransMap::solve_easy_samples(float n_weight, float d_weight, float weight_q
             return;
         }
     });
-    if (n_one_hap_samples+n_two_hap_samples!=0) cerr << "Solved " << to_string(n_one_hap_samples) << " one-hap samples and " << to_string(n_two_hap_samples) << " two-hap samples. Removed " << to_string(edges_to_remove.size()) << " edges. Set to one " << to_string(present_haps.size()) << " haplotypes and " << to_string(present_edges.size()) << " edges.\n";
+    // if (n_one_hap_samples+n_two_hap_samples!=0) cerr << "Solved " << to_string(n_one_hap_samples) << " one-hap samples and " << to_string(n_two_hap_samples) << " two-hap samples. Removed " << to_string(edges_to_remove.size()) << " edges. Set to one " << to_string(present_haps.size()) << " haplotypes and " << to_string(present_edges.size()) << " edges.\n";
 
     // Updating the transmap.
     // Remark: edge removal could be implemented much faster.

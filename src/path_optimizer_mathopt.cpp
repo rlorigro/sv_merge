@@ -804,7 +804,7 @@ TerminationReason optimize_d(
     else {
         construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
     }
-    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    write_time_log(output_dir, "optimize_d_construct", t, true);
     t.reset();
 
     args.parameters.threads = n_threads;
@@ -1291,9 +1291,6 @@ TerminationReason prune_paths_with_d_min(
 
     vector<int64_t> to_be_removed;
 
-    transmap.sort_adjacency_lists();
-    transmap.update_first_of_type();
-
     transmap.for_each_path([&](const string& path_name, int64_t path_id){
         size_t n_reads = 0;
         bool is_covered = false;
@@ -1597,13 +1594,13 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     TransMap clone;
 
     // TODO: cannot currently use read compression for the read_feasibility step, unless we store # of reads collapsed
-    // t.reset();
-    // transmap.sort_adjacency_lists();
-    // transmap.update_first_of_type();
-    // transmap.get_mandatory_haplotypes();
-    // transmap.compress_haplotypes_global(0);
-    // write_time_log(subdir, "compress_transmap_initial", t, true);
-    // t.reset();
+    t.reset();
+    transmap.sort_adjacency_lists();
+    transmap.update_first_of_type();
+    transmap.get_mandatory_haplotypes();
+    transmap.compress_haplotypes_global(0);
+    write_time_log(subdir, "compress_transmap_initial", t, true);
+    t.reset();
 
     // Branch off from the parent Transmap after common compression steps
     clone = transmap;
@@ -1617,6 +1614,8 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     clone.solve_easy_samples(0,1,0);
     clone.compress_reads(0);
     clone.compress_samples(0);
+    write_time_log(subdir, "compress_transmap_d", t, true);
+    t.reset();
 
     // Find d_min and n_max
     if (config.prune_with_d_min) {
@@ -1652,14 +1651,24 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     auto c_n = float(config.n_weight/n_max);
     auto c_d = float(config.d_weight/d_min);
 
+    t.reset();
     clone.sort_adjacency_lists();
     clone.update_first_of_type();
     clone.get_mandatory_haplotypes();
     clone.compress_haplotypes_global(0);
-    clone.compress_haplotypes_local(c_n,c_d,0);
-    clone.solve_easy_samples(c_n,c_d,0);
+
+    if (clone.has_large_weight(c_n,c_d)) {
+        clone.compress_haplotypes_local(c_n,c_d,0);
+
+        if (clone.has_large_weight(c_n,c_d)) {
+            clone.solve_easy_samples(c_n,c_d,0);
+        }
+    }
+
     clone.compress_reads(0);
     clone.compress_samples(0);
+
+    write_time_log(subdir, "compress_transmap_d_plus_n", t, true);
 
     termination_reason = optimize_reads_with_d_plus_n(clone, 1, subdir, config, d_min, n_max, write_solution);
 

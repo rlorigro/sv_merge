@@ -523,12 +523,22 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-    if (result==edges.end()) return;
+    if (result == edges.end()) {
+        return;
+    }
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
-        int64_t first = first_of_type.at(type).at(id);
+        const auto result2 = first_of_type.at(type).find(id);
+
+        // Some nodes may have no neighbors
+        if (result2 == first_of_type.at(type).end()) {
+            return;
+        }
+
+        auto first = result2->second;
         const size_t length = result->second.size();
+
         for (size_t i=first; i<length; i++) {
             const int64_t id_b = result->second.at(i).first;
             const auto &node = nodes.at(id_b);
@@ -548,35 +558,53 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t)>& f) const{
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-    if (result==edges.end()) return;
+    if (result == edges.end()) {
+        return;
+    }
 
     // Iterate all edges, but only operate on the specified type
-    // if (is_first_of_type_updated) {
-    //     int64_t first = first_of_type.at(type).at(id);
-    //     const size_t length = result->second.size();
-    //     for (size_t i=first; i<length; i++) {
-    //         const int64_t id_b = result->second.at(i).first;
-    //         if (nodes.at(id_b).type!=type) break;
-    //         f(id_b);
-    //     }
-    // }
-    // else {
+    if (is_first_of_type_updated) {
+        const auto result2 = first_of_type.at(type).find(id);
+
+        if (result2 == first_of_type.at(type).end()) {
+            return;
+        }
+
+        auto first = result2->second;
+        const size_t length = result->second.size();
+
+        for (size_t i=first; i<length; i++) {
+            const int64_t id_b = result->second.at(i).first;
+            if (nodes.at(id_b).type!=type) break;
+            f(id_b);
+        }
+    }
+    else {
         for (const auto& [id_b,w]: result->second) {
             if (nodes.at(id_b).type==type) f(id_b);
         }
-    // }
+    }
 }
 
 
 template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, char type, const function<void(int64_t, float w)>& f) const{
     // Check if there are any edges from this node
     const auto result = edges.find(id);
-    if (result==edges.end()) return;
+    if (result == edges.end()) {
+        return;
+    }
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
-        int64_t first = first_of_type.at(type).at(id);
+        const auto result2 = first_of_type.at(type).find(id);
+
+        if (result2 == first_of_type.at(type).end()) {
+            return;
+        }
+
+        auto first = result2->second;
         const size_t length = result->second.size();
+
         for (size_t i=first; i<length; i++) {
             const int64_t id_b = result->second.at(i).first;
             if (nodes.at(id_b).type!=type) break;
