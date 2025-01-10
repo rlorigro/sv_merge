@@ -392,7 +392,7 @@ void SteinerTree::greedy_dense_solution_impl(vector<double> & density, priority_
     pair<int64_t,double> current_solution;
     unordered_set<int64_t> covered_samples_new;
 
-    covered_samples_new.reserve(n_samples);
+    covered_samples.clear(); covered_samples_new.clear();
     while (!queue.empty()) queue.pop();
     for (i=0; i<n_solutions; i++) {
         if (!selected_solutions.at(i)) queue.emplace(i,density.at(i));
@@ -402,6 +402,7 @@ void SteinerTree::greedy_dense_solution_impl(vector<double> & density, priority_
         solution_id=current_solution.first;
         if (current_solution.second!=density.at(solution_id)) continue;  // Out-of-date element
         greedy_dense_solution_iteration(solution_id,density,covered_samples,covered_samples_new,solutions_to_update,true,queue,hap_cost,edge_cost_multiplier);
+        if (covered_samples.size()==n_samples) break;
     }
 }
 
