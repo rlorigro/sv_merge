@@ -294,11 +294,11 @@ template<class T> void HeteroGraph<T>::update_first_of_type() {
     size_t i;
     size_t length;
 
-    // if (is_first_of_type_updated) return;
+    if (is_first_of_type_updated) return;
     first_of_type.clear();
     for (auto& element: edges) {
         length=element.second.size();
-        type='_';
+        type='\0';
         for (i=0; i<length; i++) {
             current_type=nodes.at(element.second.at(i).first).type;
             if (current_type!=type) {
@@ -529,6 +529,10 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(const string& n
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
+        if (not first_of_type.contains(type)) {
+            return;
+        }
+
         const auto result2 = first_of_type.at(type).find(id);
 
         // Some nodes may have no neighbors
@@ -564,6 +568,10 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
+        if (not first_of_type.contains(type)) {
+            return;
+        }
+
         const auto result2 = first_of_type.at(type).find(id);
 
         if (result2 == first_of_type.at(type).end()) {
@@ -596,6 +604,10 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 
     // Iterate all edges, but only operate on the specified type
     if (is_first_of_type_updated) {
+        if (not first_of_type.contains(type)) {
+            return;
+        }
+
         const auto result2 = first_of_type.at(type).find(id);
 
         if (result2 == first_of_type.at(type).end()) {
@@ -622,10 +634,23 @@ template<class T> void HeteroGraph<T>::for_each_neighbor_of_type(int64_t id, cha
 template<class T> bool HeteroGraph<T>::has_large_weight(int64_t root_id, char type_b, float delta) const {
     const auto result = edges.find(root_id);
     if (result==edges.end()) return false;
+
     for (const auto &[id_a, w]: result->second) {
         if (is_first_of_type_updated) {
+            if (not first_of_type.contains(type_b)) {
+                return false;
+            }
+
             const size_t length = result->second.size();
-            int64_t first = first_of_type.at(type_b).at(id_a);
+
+            const auto result2 = first_of_type.at(type_b).find(id_a);
+
+            if (result2 == first_of_type.at(type_b).end()) {
+                return false;
+            }
+
+            auto first = result2->second;
+
             for (size_t i=first; i<length; i++) {
                 const int64_t id_b = result->second.at(i).first;
                 if (nodes.at(id_b).type!=type_b) break;
