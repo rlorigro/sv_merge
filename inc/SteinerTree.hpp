@@ -50,11 +50,6 @@ namespace sv_merge {
 
 class SteinerTree {
     /**
-     * Objective function multipliers
-     */
-    float hap_cost, edge_cost_multiplier;
-
-    /**
      * The tripartite graph `(S,H,{r})` on which Steiner tree approximations are computed. `S` contains one node per
      * sample and `H` contains one node per possible solution (a solution is either one or two haplotypes that cover all
      * the reads of at least one sample). An `(s,h)` edge means that all the reads from sample `s` can be covered by a
@@ -62,11 +57,11 @@ class SteinerTree {
      * of `h`. The graph is directed outwards from `r`, which is not represented explicitly.
      */
     size_t n_samples, n_solutions;
-    vector<pair<int64_t,int64_t>> solutions;  // The list of all distinct solutions
-    vector<vector<int64_t>> solution_samples;  // The sample neighbors of each solution
-    vector<vector<float>> solution_sample_weights;  // The weight of each solution-sample edge
-    unordered_map<int64_t,vector<int64_t>> sample_solutions;  // The solution neighbors of each sample
-    unordered_map<int64_t,vector<float>> sample_solution_weights;  // The weight of each sample-solution edge
+    vector<pair<int64_t,int64_t>> solutions;  // List of all distinct solutions, not necessarily sorted.
+    vector<vector<int64_t>> solution_samples;  // solutionID -> sampleID
+    vector<vector<double>> solution_sample_weights;  // solutionID -> solutionSampleWeight (sum of from read-hap weights in the transmap)
+    unordered_map<int64_t,vector<pair<int64_t,double>>> sample_solutions;  // sampleID -> (solutionID,sampleSolutionWeight)
+    unordered_map<int64_t,vector<int64_t>> hap_solutions;  // hapID -> solutionID
 
     /**
      * Data structures needed by `parse_approximation()`.
@@ -77,6 +72,7 @@ class SteinerTree {
      * A Steiner tree approximation
      */
     double objective;
+    unordered_set<int64_t> selected_haps;  // Haplotypes in selected solutions.
     vector<bool> selected_solutions;  // Marks `solutions`.
     vector<vector<bool>> selected_edges;  // Marks `solution_samples` cells.
 
@@ -86,22 +82,27 @@ class SteinerTree {
     void approximate_clear();
 
     /**
-     * Builds object variable `sample_solutions`, and optionally `sample_solution_weights`.
+     * Builds object variable `sample_solutions`.
      *
      * Remark: the procedure does nothing if the variables are already non-empty.
      */
-    void build_sample_solutions(bool build_weights);
+    void build_sample_solutions();
+
+    /**
+     * Builds object variable `hap_solutions`, assuming that `solutions` has already been built.
+     *
+     * Remark: the procedure does nothing if the variables are already non-empty.
+     */
+    void build_hap_solutions();
 
 
 public:
     /**
      * Builds the directed graph on which Steiner tree approximations are computed.
      *
-     * @param transmap `transmap.sort_adjacency_lists()` must have already been called;
-     * @param hap_cost cost of a haplotype;
-     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge.
+     * @param transmap `transmap.sort_adjacency_lists()` must have already been called.
      */
-    SteinerTree(TransMap& transmap, float hap_cost, float edge_cost_multiplier);
+    SteinerTree(TransMap& transmap);
 
     /**
      * @param minimize computes the smallest (TRUE) or largest (FALSE) value of `d`;
@@ -114,9 +115,21 @@ public:
      * Uses the single-source shortest path tree as an approximation of the directed Steiner tree. This gives an
      * approximation factor of `n_samples`.
      *
+     * @param hap_cost cost of a haplotype;
+     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
      * @return the objective value of the approximation.
      */
-    double approximate_shortest_paths();
+    double approximate_shortest_paths(float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * Priority queue comparison criterion
+     */
+    class Compare {
+    public:
+        bool operator() (pair<int64_t,double> x, pair<int64_t,double> y) {
+            return x.second<y.second;
+        }
+    };
 
     /**
      * Greedily adds a solution with largest density, where the density is the ratio between the number of new covered
@@ -126,9 +139,34 @@ public:
      *
      * This gives an approximation factor of `\sqrt{n_samples}`.
      *
+     * @param hap_cost cost of a haplotype;
+     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
      * @return the objective value of the approximation.
      */
-    double approximate_dense_bunch();
+    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * @param solutions_to_update temporary space.
+     */
+    void greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * Initializes `greedy_dense_solution()` from a specific solution.
+     *
+     * @param solutions_to_update temporary space.
+     */
+    void greedy_dense_solution_set_initial_conditions(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * One iteration of procedure `greedy_dense_solution()`.
+     *
+     * @param covered_samples temporary space;
+     * @param covered_samples_new temporary space;
+     * @param solutions_to_update  temporary space;
+     * @param update_queue TRUE=updates `queue`;
+     * @param queue priority queue used in every iteration.
+     */
+    void greedy_dense_solution_iteration(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier);
 
     /**
      * Writes the current approximation to `output_dir`, and deletes every read-hap edge of `transmap` that does not
