@@ -517,6 +517,38 @@ message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 ##############################################
 # ------------------------------------------ #
 # -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- cpptrace ---------------- #
+# ------------------------------------------ #
+##############################################
+
+include(ExternalProject)
+
+message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
+message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+include(FetchContent)
+
+FetchContent_Declare(
+        cpptrace
+        GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+        GIT_TAG        v0.7.5
+)
+FetchContent_MakeAvailable(cpptrace)
+
+include_directories(
+        ${cpptrace_SOURCE_DIR}/include
+        ${libdwarf_SOURCE_DIR}
+#        ${libunwind_SOURCE_DIR}
+)
+
+message(STATUS "cpptrace location: ${cpptrace_SOURCE_DIR}")
+
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
 # ---------------- mimalloc ---------------- #
 # ------------------------------------------ #
 ##############################################
@@ -570,6 +602,7 @@ set(TESTS
         test_binary_sequence_memory
         test_bisection_method
         test_command_timeout
+        test_cpptrace
         test_fasta
         test_gaf
         test_gaf_summary
@@ -613,6 +646,7 @@ foreach(FILENAME_PREFIX ${TESTS})
     target_link_libraries(${FILENAME_PREFIX}
             sv_merge
             Threads::Threads
+            cpptrace::cpptrace
             htslib
             bdsg
             ${ZLIB_LIBRARIES}
@@ -669,6 +703,7 @@ foreach(FILENAME_PREFIX ${EXECUTABLES})
     target_link_libraries(${FILENAME_PREFIX}
             sv_merge
             Threads::Threads
+            cpptrace::cpptrace
             htslib
             bdsg
             ${ZLIB_LIBRARIES}
