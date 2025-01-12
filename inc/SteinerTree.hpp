@@ -56,7 +56,7 @@ class SteinerTree {
      * haplotype in `h`; the weight is the smallest cost of such a cover. The weight of every `(h,r)` edge is the cost
      * of `h`. The graph is directed outwards from `r`, which is not represented explicitly.
      */
-    size_t n_samples, n_solutions;
+    size_t n_samples, n_solutions, n_haps;
     vector<pair<int64_t,int64_t>> solutions;  // List of all distinct solutions, not necessarily sorted.
     vector<vector<int64_t>> solution_samples;  // solutionID -> sampleID
     vector<vector<double>> solution_sample_weights;  // solutionID -> solutionSampleWeight (sum of from read-hap weights in the transmap)
@@ -105,74 +105,91 @@ public:
     SteinerTree(TransMap& transmap);
 
     /**
-     * @param minimize computes the smallest (TRUE) or largest (FALSE) value of `d`;
-     * @param build_solution TRUE: builds an optimal solution, which can be retrieved with `parse_approximation()`;
-     * @return the optimal value of `d`.
-     */
-    double optimize_d(bool minimize, bool build_solution);
-
-    /**
-     * Uses the single-source shortest path tree as an approximation of the directed Steiner tree. This gives an
-     * approximation factor of `n_samples`.
-     *
-     * @param hap_cost cost of a haplotype;
-     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
-     * @return the objective value of the approximation.
-     */
-    double approximate_shortest_paths(float hap_cost, float edge_cost_multiplier);
-
-    /**
-     * Priority queue comparison criterion
-     */
-    class Compare {
-    public:
-        bool operator() (pair<int64_t,double> x, pair<int64_t,double> y) {
-            return x.second<y.second;
-        }
-    };
-
-    /**
-     * Greedily adds a solution with largest density, where the density is the ratio between the number of new covered
-     * samples and the cost of assigning them to the solution. This implements the algorithm in Figure 1 of:
-     *
-     * Charikar et al. "Approximation algorithms for directed Steiner problems." Journal of Algorithms 33.1 (1999).
-     *
-     * This gives an approximation factor of `\sqrt{n_samples}`.
-     *
-     * @param hap_cost cost of a haplotype;
-     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
-     * @return the objective value of the approximation.
-     */
-    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier);
-
-    /**
-     * @param solutions_to_update temporary space.
-     */
-    void greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
-
-    /**
-     * Initializes `greedy_dense_solution()` from a specific solution.
-     *
-     * @param solutions_to_update temporary space.
-     */
-    void greedy_dense_solution_set_initial_conditions(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
-
-    /**
-     * One iteration of procedure `greedy_dense_solution()`.
-     *
-     * @param covered_samples temporary space;
-     * @param covered_samples_new temporary space;
-     * @param solutions_to_update  temporary space;
-     * @param update_queue TRUE=updates `queue`;
-     * @param queue priority queue used in every iteration.
-     */
-    void greedy_dense_solution_iteration(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier);
-
-    /**
      * Writes the current approximation to `output_dir`, and deletes every read-hap edge of `transmap` that does not
      * belong to the approximation. This is similar to `path_optimizer_mathopt.parse_read_model_solution()`.
      */
     void parse_approximation(TransMap& transmap, path output_dir);
+
+
+
+
+    // ------------------------------------------- GREEDY DENSE SOLUTION -----------------------------------------------
+    /**
+     * @param covered_samples temporary space;
+     */
+    double get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * A simpler version of `get_density()` to be used when no solution has been selected yet.
+     */
+    double get_density_init(int64_t solution_id, float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * Priority of the max-queue used by `greedy_dense_solution()`.
+     */
+    class Compare {
+    public:
+        bool operator() (pair<int64_t,double> x, pair<int64_t,double> y) { return x.second<y.second; }
+    };
+
+    /**
+     * Iteratively adds a solution with largest density, where the density is the ratio between the number of new
+     * samples that can be covered, and the cost of assigning such samples to the solution. This is inspired by:
+     *
+     * Charikar et al. "Approximation algorithms for directed Steiner problems." Journal of Algorithms 33.1 (1999).
+     *
+     * Remark: to minimize/maximize only `d` exactly, use `approximate_shortest_paths()`. To minimize/maximize just `n`,
+     * set `edge_cost_multiplier=0`: this gives just an approximation.
+     *
+     * @param hap_cost cost of a haplotype;
+     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
+     * @param mode 0=computes a single sequence of greedy steps; 1=starts a sequence of greedy steps from every solution
+     * and selects the min;
+     * @return the objective value of the approximation.
+     */
+    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode);
+
+    /**
+     * A sequence of greedy steps driven by solution density.
+     *
+     * @param density temporary space;
+     * @param queue temporary space;
+     * @param covered_samples temporary space;
+     * @param covered_samples_new temporary space;
+     * @param solutions_to_update temporary space.
+     */
+    void greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
+
+    /**
+     * The main step of `greedy_dense_solution_impl()`: `solution_id` is added to the current solution and some
+     * densities are updated.
+     *
+     * @param density temporary space;
+     * @param covered_samples temporary space;
+     * @param covered_samples_new temporary space;
+     * @param solutions_to_update  temporary space;
+     * @param update_queue FALSE=updates only `density`; TRUE=updates also `queue`;
+     * @param queue the priority queue used in every iteration.
+     */
+    void greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier);
+
+
+
+
+    // ----------------------------------------------- SHORTEST PATHS --------------------------------------------------
+    /**
+     * Uses a single-source shortest path tree of the tripartite graph (sample,solution,root) as an approximation. This
+     * does not model the fact that different solutions can share haplotypes.
+     *
+     * Remark: to minimize/maximize only `d`, set `hap_cost=0`: this solves the problem exactly. To minimize/maximize
+     * just `n`, set `edge_cost_multiplier=0`: this gives just an approximation.
+     *
+     * @param hap_cost cost of a haplotype;
+     * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
+     * @return the objective value of the approximation.
+     */
+    double approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution);
+
 };
 
 

@@ -13,9 +13,7 @@ SteinerTree::SteinerTree(TransMap& transmap):
     solution_sample_weights(),
     solution_sample_reads()
 {
-    const int64_t N_HAPS = transmap.get_n_paths();
-
-    size_t n_haps, n_reads, n_solutions1, n_solutions2, n_solutions;
+    size_t n_reads, n_solutions1, n_solutions2, n_haps_prime, n_solutions;
     int64_t i, j;
     int64_t read_id, hap_id, hap1, hap2;
     double weight1, weight2;
@@ -30,13 +28,14 @@ SteinerTree::SteinerTree(TransMap& transmap):
     unordered_map<tuple<int64_t,int64_t>, vector<pair<int64_t,double>>> solutions2;  // (hapID1,hapID2) -> (sampleID,weight)
 
     n_samples=transmap.get_n_samples();
+    n_haps=transmap.get_n_paths();
     transmap.update_first_of_type();
 
     // Enumerating solution-sample edges
-    hap_to_reads.reserve(N_HAPS);
-    solutions1.reserve(N_HAPS); solutions2.reserve(N_HAPS);
-    solutions1_prime.reserve(N_HAPS); solutions2_prime.reserve(N_HAPS);
-    solution_sample_reads.reserve(N_HAPS);
+    hap_to_reads.reserve(n_haps);
+    solutions1.reserve(n_haps); solutions2.reserve(n_haps);
+    solutions1_prime.reserve(n_haps); solutions2_prime.reserve(n_haps);
+    solution_sample_reads.reserve(n_haps);
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id) {
         // Building read-hap and hap-read maps for this sample
         read_ids.clear(); neighbors.clear(); weights.clear();
@@ -56,8 +55,8 @@ SteinerTree::SteinerTree(TransMap& transmap):
         hap_to_reads.clear();
         for (i=0; i<n_reads; i++) {
             read_id=read_ids.at(i);
-            n_haps=neighbors.at(i).size();
-            for (j=0; j<n_haps; j++) {
+            n_haps_prime=neighbors.at(i).size();
+            for (j=0; j<n_haps_prime; j++) {
                 hap_id=neighbors.at(i).at(j);
                 if (hap_to_reads.contains(hap_id)) hap_to_reads.at(hap_id).insert(read_id);
                 else {
@@ -74,8 +73,8 @@ SteinerTree::SteinerTree(TransMap& transmap):
         }
         for (i=0; i<n_reads; i++) {
             read_id=read_ids.at(i);
-            n_haps=neighbors.at(i).size();
-            for (j=0; j<n_haps; j++) {
+            n_haps_prime=neighbors.at(i).size();
+            for (j=0; j<n_haps_prime; j++) {
                 hap_id=neighbors.at(i).at(j);
                 if (!solutions1_prime.contains(hap_id)) continue;
                 solutions1_prime.at(hap_id)+=weights.at(i).at(j);
@@ -115,9 +114,9 @@ SteinerTree::SteinerTree(TransMap& transmap):
         for (auto& element: solutions2_prime) {
             hap1=std::get<0>(element.first); hap2=std::get<1>(element.first);
             for (i=0; i<n_reads; i++) {
-                n_haps=neighbors.at(i).size();
+                n_haps_prime=neighbors.at(i).size();
                 weight1=-1; weight2=-1;
-                for (j=0; j<n_haps; j++) {
+                for (j=0; j<n_haps_prime; j++) {
                     hap_id=neighbors.at(i).at(j);
                     if (hap_id==hap1) weight1=weights.at(i).at(j);
                     else if (hap_id==hap2) weight2=weights.at(i).at(j);
@@ -158,7 +157,7 @@ SteinerTree::SteinerTree(TransMap& transmap):
         solutions2_prime.clear();
     });
     n_solutions1=solutions1.size(); n_solutions2=solutions2.size(); n_solutions=n_solutions1+n_solutions2;
-    cerr << "Found " << to_string(n_solutions1) << " one-hap candidate solutions (" << to_string((100.0*n_solutions1)/N_HAPS) << "% of haps) and " << to_string(n_solutions2) << " two-hap candidate solutions (" << to_string((100.0*n_solutions2)/(N_HAPS*N_HAPS)) << "% of hap pairs)\n";
+    cerr << "Found " << to_string(n_solutions1) << " one-hap candidate solutions (" << to_string((100.0*n_solutions1)/n_haps) << "% of haps) and " << to_string(n_solutions2) << " two-hap candidate solutions (" << to_string((100.0*n_solutions2)/(n_haps*n_haps)) << "% of hap pairs)\n";
 
     // Building output matrices
     solutions.clear(); solutions.reserve(n_solutions);
@@ -253,233 +252,6 @@ void SteinerTree::approximate_clear() {
 }
 
 
-double SteinerTree::optimize_d(bool minimize, bool build_solution) {
-    size_t length;
-    int64_t i;
-    int64_t sample_id, solution_id, solution_min, solution_max;
-    double weight, weight_min, weight_max;
-
-    build_sample_solutions();
-    approximate_clear();
-    for (auto& element: sample_solutions) {
-        sample_id=element.first;
-        weight_min=INT32_MAX; solution_min=-1; weight_max=0; solution_max=-1;
-        for (auto& solution: element.second) {
-            weight=solution.second;
-            if (weight<weight_min) { weight_min=weight; solution_min=solution.first; }
-            if (weight>weight_max) { weight_max=weight; solution_max=solution.first; }
-        }
-        solution_id=minimize?solution_min:solution_max;
-        objective+=minimize?weight_min:weight_max;
-        if (build_solution) {
-            selected_solutions.at(solution_id)=true;
-            length=solution_samples.at(solution_id).size();
-            for (i=0; i<length; i++) {
-                if (solution_samples.at(solution_id).at(i)==sample_id) {
-                    selected_edges.at(solution_id).at(i)=true;
-                    break;
-                }
-            }
-        }
-    }
-    return objective;
-}
-
-
-double SteinerTree::approximate_shortest_paths(float hap_cost, float edge_cost_multiplier) {
-    size_t length;
-    int64_t i;
-    int64_t solution_id, sample_id;
-    double d, distance;
-
-    vector<double> solution_distance;
-    unordered_map<int64_t,int64_t> sample_previous;
-    unordered_map<int64_t,double> sample_distance;
-
-    // Initializing data structures
-    solution_distance.reserve(n_solutions);
-    for (i=0; i<n_solutions; i++) solution_distance.emplace_back(solutions.at(i).first==solutions.at(i).second?hap_cost:(2*hap_cost));
-    sample_distance.reserve(n_samples);
-    for (i=0; i<n_samples; i++) sample_distance[i]=INT32_MAX;
-    sample_previous.reserve(n_samples);
-
-    // Shortest path iteration
-    for (solution_id=0; solution_id<n_solutions; solution_id++) {
-        distance=solution_distance.at(solution_id);
-        length=solution_samples.at(solution_id).size();
-        for (i=0; i<length; i++) {
-            sample_id=solution_samples.at(solution_id).at(i);
-            d=distance+solution_sample_weights.at(solution_id).at(i)*edge_cost_multiplier;
-            if (d<sample_distance[sample_id]) {
-                sample_distance[sample_id]=d;
-                sample_previous[sample_id]=solution_id;
-            }
-        }
-    }
-
-    // Outputting
-    approximate_clear();
-    for (auto& element: sample_previous) {
-        sample_id=element.first; solution_id=element.second;
-        selected_solutions.at(solution_id)=true;
-        length=solution_samples.at(solution_id).size();
-        for (i=0; i<length; i++) {
-            if (solution_samples.at(solution_id).at(i)!=sample_id) continue;
-            selected_edges.at(solution_id).at(i)=true;
-            objective+=solution_sample_weights.at(solution_id).at(i)*edge_cost_multiplier;
-            break;
-        }
-    }
-    for (i=0; i<n_solutions; i++) {
-        if (selected_solutions.at(i)) objective+=solution_distance.at(solution_id);
-    }
-    return objective;
-}
-
-
-double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multiplier) {
-    int64_t i;
-    double d, denominator, objective_min;
-    vector<double> density, density_prime;
-    unordered_set<int64_t> covered_samples, covered_samples_new, selected_haps_min, solutions_to_update;
-    vector<bool> selected_solutions_min;
-    vector<vector<bool>> selected_edges_min;
-    priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue;
-
-    // Initializing data structures
-    covered_samples.reserve(n_samples); covered_samples_new.reserve(n_samples);
-    build_sample_solutions();
-    build_hap_solutions();
-    density.reserve(n_solutions);
-    i=-1;
-    for (i=0; i<n_solutions; i++) {
-        i++;
-        denominator=solutions.at(i).first==solutions.at(i).second?hap_cost:(2*hap_cost);
-        d=0.0;
-        for (auto& weight: solution_sample_weights.at(i)) d+=weight;
-        denominator+=d*edge_cost_multiplier;
-        density.emplace_back(((double)solution_samples.at(i).size())/denominator);
-    }
-
-    // Running the greedy algorithm from several initial conditions
-    objective_min=INT32_MAX;
-    for (i=0; i<n_solutions; i++) {
-        approximate_clear();
-        density_prime=density;
-        greedy_dense_solution_iteration(i,density_prime,covered_samples,covered_samples_new,solutions_to_update,false,queue,hap_cost,edge_cost_multiplier);
-        greedy_dense_solution_impl(density_prime,queue,covered_samples,solutions_to_update,hap_cost,edge_cost_multiplier);
-        if (objective<objective_min) {
-            objective_min=objective;
-            selected_haps_min=selected_haps;
-            selected_solutions_min=selected_solutions;
-            selected_edges_min=selected_edges;
-        }
-    }
-    objective=objective_min;
-    selected_haps=selected_haps_min;
-    selected_solutions=selected_solutions_min;
-    selected_edges=selected_edges_min;
-    return objective;
-}
-
-
-void SteinerTree::greedy_dense_solution_impl(vector<double> & density, priority_queue<pair<int64_t, double>, vector<pair<int64_t, double>>, Compare> & queue, unordered_set<int64_t> & covered_samples, unordered_set<int64_t> & solutions_to_update, float hap_cost, float edge_cost_multiplier) {
-    bool new1, new2;
-    size_t length;
-    int64_t i;
-    int64_t sample_id, solution_id, hap1, hap2;
-    double d, numerator, denominator;
-    pair<int64_t,double> current_solution;
-    unordered_set<int64_t> covered_samples_new;
-
-    covered_samples.clear(); covered_samples_new.clear();
-    while (!queue.empty()) queue.pop();
-    for (i=0; i<n_solutions; i++) {
-        if (!selected_solutions.at(i)) queue.emplace(i,density.at(i));
-    }
-    while (true) {
-        current_solution=queue.top(); queue.pop();
-        solution_id=current_solution.first;
-        if (current_solution.second!=density.at(solution_id)) continue;  // Out-of-date element
-        greedy_dense_solution_iteration(solution_id,density,covered_samples,covered_samples_new,solutions_to_update,true,queue,hap_cost,edge_cost_multiplier);
-        if (covered_samples.size()==n_samples) break;
-    }
-}
-
-
-void SteinerTree::greedy_dense_solution_iteration(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier) {
-    bool new1, new2;
-    size_t length;
-    int64_t i;
-    int64_t hap1, hap2, sample_id;
-    double d, denominator, numerator;
-
-    // Updating the approximation
-    selected_solutions.at(solution_id)=true;
-    hap1=solutions.at(solution_id).first; hap2=solutions.at(solution_id).second;
-    if (!selected_haps.contains(hap1)) {
-        objective+=hap_cost;
-        selected_haps.insert(hap1);
-        new1=true;
-    }
-    else new1=false;
-    if (hap2!=hap1 && !selected_haps.contains(hap2)) {
-        objective+=hap_cost;
-        selected_haps.insert(hap2);
-        new2=true;
-    }
-    else new2=false;
-    covered_samples_new.clear();
-    d=0; length=solution_samples.at(solution_id).size();
-    for (i=0; i<length; i++) {
-        sample_id=solution_samples.at(solution_id).at(i);
-        if (covered_samples.contains(sample_id)) continue;
-        covered_samples_new.insert(sample_id);
-        selected_edges.at(solution_id).at(i)=true;
-        d+=solution_sample_weights.at(solution_id).at(i);
-    }
-    objective+=d*edge_cost_multiplier;
-
-    // Updating the priority queue
-    solutions_to_update.clear();
-    for (auto& sample: covered_samples_new) {
-        for (auto& solution: sample_solutions.at(sample)) {
-            if (!selected_solutions.at(solution.first)) solutions_to_update.insert(solution.first);
-        }
-    }
-    covered_samples.merge(covered_samples_new);
-    if (covered_samples.size()==n_samples) return;
-    if (new1) {
-        for (auto& solution: hap_solutions.at(hap1)) {
-            if (!selected_solutions.at(solution)) solutions_to_update.insert(solution);
-        }
-    }
-    if (new2) {
-        for (auto& solution: hap_solutions.at(hap2)) {
-            if (!selected_solutions.at(solution)) solutions_to_update.insert(solution);
-        }
-    }
-    for (auto& solution: solutions_to_update) {
-        hap1=solutions.at(solution).first; hap2=solutions.at(solution).second;
-        denominator=0;
-        if (!selected_haps.contains(hap1)) denominator+=hap_cost;
-        if (hap2!=hap1 && !selected_haps.contains(hap2)) denominator+=hap_cost;
-        length=solution_sample_weights.at(solution).size();
-        d=0; numerator=0.0;
-        for (i=0; i<length; i++) {
-            sample_id=solution_samples.at(solution).at(i);
-            if (!covered_samples.contains(sample_id)) {
-                numerator+=1.0;
-                d+=solution_sample_weights.at(solution).at(i);
-            }
-        }
-        denominator+=d*edge_cost_multiplier;
-        density.at(solution)=numerator/denominator;
-        if (update_queue) queue.emplace(solution,density.at(solution));
-    }
-}
-
-
 void SteinerTree::parse_approximation(TransMap& transmap, path output_dir) {
     size_t length;
     int64_t i, j;
@@ -524,6 +296,213 @@ void SteinerTree::parse_approximation(TransMap& transmap, path output_dir) {
 
 
 
+
+// -------------------------------------------- GREEDY DENSE SOLUTION --------------------------------------------------
+
+double SteinerTree::get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, float hap_cost, float edge_cost_multiplier) {
+    const size_t length = solution_sample_weights.at(solution_id).size();
+    const int64_t hap1 = solutions.at(solution_id).first;
+    const int64_t hap2 = solutions.at(solution_id).second;
+    int64_t i;
+    int64_t sample_id;
+    double d, denominator, numerator;
+
+    denominator=0.0;
+    if (!selected_haps.contains(hap1)) denominator+=hap_cost;
+    if (hap2!=hap1 && !selected_haps.contains(hap2)) denominator+=hap_cost;
+    d=0; numerator=0.0;
+    for (i=0; i<length; i++) {
+        sample_id=solution_samples.at(solution_id).at(i);
+        if (!covered_samples.contains(sample_id)) {
+            numerator+=1.0;
+            d+=solution_sample_weights.at(solution_id).at(i);
+        }
+    }
+    denominator+=d*edge_cost_multiplier;
+    return numerator/denominator;
+}
+
+
+double SteinerTree::get_density_init(int64_t solution_id, float hap_cost, float edge_cost_multiplier) {
+    double denominator = solutions.at(solution_id).first==solutions.at(solution_id).second?hap_cost:(2.0*hap_cost);
+    double d = 0.0;
+    for (auto& weight: solution_sample_weights.at(solution_id)) d+=weight;
+    denominator+=d*edge_cost_multiplier;
+    return ((double)solution_samples.at(solution_id).size())/denominator;
+}
+
+
+double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode) {
+    int64_t i;
+    vector<double> density;
+    unordered_set<int64_t> covered_samples, solutions_to_update;
+    priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue;
+
+    // Initializing reused data structures
+    covered_samples.reserve(n_samples);
+    build_sample_solutions();
+    build_hap_solutions();
+    density.reserve(n_solutions);
+    for (i=0; i<n_solutions; i++) density.emplace_back(get_density_init(i,hap_cost,edge_cost_multiplier));
+
+    // Greedy steps
+    if (mode==0) {
+        approximate_clear();
+        greedy_dense_solution_impl(density,queue,covered_samples,solutions_to_update,hap_cost,edge_cost_multiplier);
+    }
+    else if (mode==1) {
+        double objective_min;
+        vector<bool> selected_solutions_min;
+        vector<double> density_prime;
+        vector<vector<bool>> selected_edges_min;
+        unordered_set<int64_t> covered_samples_new, selected_haps_min;
+
+        covered_samples_new.reserve(n_samples);
+        objective_min=INT32_MAX;
+        for (i=0; i<n_solutions; i++) {
+            approximate_clear();
+            density_prime=density;
+            greedy_dense_solution_step(i,density_prime,covered_samples,covered_samples_new,solutions_to_update,false,queue,hap_cost,edge_cost_multiplier);
+            greedy_dense_solution_impl(density_prime,queue,covered_samples,covered_samples_new,solutions_to_update,hap_cost,edge_cost_multiplier);
+            if (objective<objective_min) {
+                objective_min=objective;
+                selected_haps_min=selected_haps;
+                selected_solutions_min=selected_solutions;
+                selected_edges_min=selected_edges;
+            }
+        }
+        objective=objective_min;
+        selected_haps=selected_haps_min;
+        selected_solutions=selected_solutions_min;
+        selected_edges=selected_edges_min;
+    }
+    return objective;
+}
+
+
+void SteinerTree::greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t, double>, vector<pair<int64_t, double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier) {
+    int64_t i;
+    int64_t solution_id;
+    pair<int64_t,double> current_solution;
+
+    covered_samples.clear(); covered_samples_new.clear();
+    while (!queue.empty()) queue.pop();
+    for (i=0; i<n_solutions; i++) {
+        if (!selected_solutions.at(i)) queue.emplace(i,density.at(i));
+    }
+    while (covered_samples.size()<n_samples) {
+        current_solution=queue.top(); queue.pop();
+        solution_id=current_solution.first;
+        if (current_solution.second!=density.at(solution_id)) continue;  // Skipping out-of-date elements
+        greedy_dense_solution_step(solution_id,density,covered_samples,covered_samples_new,solutions_to_update,true,queue,hap_cost,edge_cost_multiplier);
+    }
+}
+
+
+void SteinerTree::greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier) {
+    bool new1, new2;
+    size_t length;
+    int64_t i;
+    int64_t hap1, hap2, sample_id;
+    double d, denominator, numerator;
+
+    // Updating the approximation
+    selected_solutions.at(solution_id)=true;
+    hap1=solutions.at(solution_id).first; hap2=solutions.at(solution_id).second;
+    if (!selected_haps.contains(hap1)) {
+        objective+=hap_cost;
+        selected_haps.insert(hap1);
+        new1=true;
+    }
+    else new1=false;
+    if (hap2!=hap1 && !selected_haps.contains(hap2)) {
+        objective+=hap_cost;
+        selected_haps.insert(hap2);
+        new2=true;
+    }
+    else new2=false;
+    covered_samples_new.clear();
+    d=0; length=solution_samples.at(solution_id).size();
+    for (i=0; i<length; i++) {
+        sample_id=solution_samples.at(solution_id).at(i);
+        if (covered_samples.contains(sample_id)) continue;
+        covered_samples_new.insert(sample_id);
+        selected_edges.at(solution_id).at(i)=true;
+        d+=solution_sample_weights.at(solution_id).at(i);
+    }
+    objective+=d*edge_cost_multiplier;
+
+    // Updating solution densities
+    solutions_to_update.clear();
+    for (auto& sample: covered_samples_new) {
+        for (auto& solution: sample_solutions.at(sample)) {
+            if (!selected_solutions.at(solution.first)) solutions_to_update.insert(solution.first);
+        }
+    }
+    covered_samples.merge(covered_samples_new);
+    covered_samples_new.clear();
+    if (covered_samples.size()==n_samples) {
+        // No need to update densities for the next iteration
+        return;
+    }
+    if (new1) {
+        for (auto& solution: hap_solutions.at(hap1)) {
+            if (!selected_solutions.at(solution)) solutions_to_update.insert(solution);
+        }
+    }
+    if (new2) {
+        for (auto& solution: hap_solutions.at(hap2)) {
+            if (!selected_solutions.at(solution)) solutions_to_update.insert(solution);
+        }
+    }
+    for (auto& solution: solutions_to_update) {
+        density.at(solution)=get_density(solution,covered_samples,hap_cost,edge_cost_multiplier);
+        if (update_queue) queue.emplace(solution,density.at(solution));
+    }
+}
+
+
+
+
+// ------------------------------------------------- SHORTEST PATHS ----------------------------------------------------
+
+double SteinerTree::approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution) {
+    size_t length;
+    int64_t i;
+    int64_t sample_id, solution_id, solution_min, solution_max;
+    double weight, weight_min, weight_max, distance, distance_min, distance_max;
+
+    build_sample_solutions();
+    approximate_clear();
+    for (auto& element: sample_solutions) {
+        sample_id=element.first;
+        distance_min=INT32_MAX; solution_min=-1; weight_min=-1; distance_max=0; solution_max=-1; weight_max=-1;
+        for (auto& solution: element.second) {
+            solution_id=solution.first;
+            weight=solution.second*edge_cost_multiplier;
+            distance=weight+(solutions.at(solution_id).first==solutions.at(solution_id).second?hap_cost:(2.0*hap_cost));
+            if (distance<distance_min) { distance_min=distance; weight_min=weight; solution_min=solution.first; }
+            if (distance>distance_max) { distance_max=distance; weight_max=weight; solution_max=solution.first; }
+        }
+        if (minimize) { solution_id=solution_min; objective+=weight_min; }
+        else { solution_id=solution_max; objective+=weight_max; }
+        if (build_solution) {
+            selected_solutions.at(solution_id)=true;
+            length=solution_samples.at(solution_id).size();
+            for (i=0; i<length; i++) {
+                if (solution_samples.at(solution_id).at(i)==sample_id) {
+                    selected_edges.at(solution_id).at(i)=true;
+                    break;
+                }
+            }
+        }
+    }
+    for (i=0; i<n_solutions; i++) {
+        if (selected_solutions.at(i)) { selected_haps.insert(solutions.at(i).first); selected_haps.insert(solutions.at(i).second); }
+    }
+    objective+=((double)selected_haps.size())*hap_cost;
+    return objective;
+}
 
 
 
