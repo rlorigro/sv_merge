@@ -89,6 +89,11 @@ class SteinerTree {
     void build_sample_solutions();
 
     /**
+     * Adds to `out[i]` the number of samples that can be assigned to `i` solutions.
+     */
+    void get_sample_solutions_histogram(vector<int64_t> out);
+
+    /**
      * Builds object variable `hap_solutions`, assuming that `solutions` has already been built.
      *
      * Remark: the procedure does nothing if the variables are already non-empty.
@@ -133,8 +138,9 @@ public:
     };
 
     /**
-     * Iteratively adds a solution with largest density, where the density is the ratio between the number of new
-     * samples that can be covered, and the cost of assigning such samples to the solution. This is inspired by:
+     * Iteratively adds a solution with largest density (or "cost-effectiveness"), where the density is the ratio
+     * between the number of new samples that can be covered, and the cost of assigning such samples to the solution.
+     * This is inspired by the usual greedy approximation of min-weight set cover and of Steiner tree: see e.g.
      *
      * Charikar et al. "Approximation algorithms for directed Steiner problems." Journal of Algorithms 33.1 (1999).
      *
@@ -145,9 +151,10 @@ public:
      * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
      * @param mode 0=computes a single sequence of greedy steps; 1=starts a sequence of greedy steps from every solution
      * and selects the min;
+     * @param n_samples_with_solutions adds to position `i` the number of samples with `i` possible solutions;
      * @return the objective value of the approximation.
      */
-    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode);
+    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions);
 
     /**
      * A sequence of greedy steps driven by solution density.
@@ -186,9 +193,10 @@ public:
      *
      * @param hap_cost cost of a haplotype;
      * @param edge_cost_multiplier multiplier of the cost of each solution-sample edge;
+     * @param n_samples_with_solutions adds to position `i` the number of samples with `i` possible solutions;
      * @return the objective value of the approximation.
      */
-    double approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution);
+    double approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions);
 
 };
 

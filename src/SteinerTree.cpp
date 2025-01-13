@@ -210,6 +210,18 @@ void SteinerTree::build_sample_solutions() {
 }
 
 
+void SteinerTree::get_sample_solutions_histogram(vector<int64_t> out) {
+    const size_t OUT_LENGTH = out.size();
+    size_t length;
+
+    build_sample_solutions();
+    for (int64_t i=0; i<n_samples; i++) {
+        length=sample_solutions.at(i).size();
+        out[length>=OUT_LENGTH?OUT_LENGTH-1:length]++;
+    }
+}
+
+
 void SteinerTree::build_hap_solutions() {
     int64_t i;
     int64_t hap_id;
@@ -332,7 +344,7 @@ double SteinerTree::get_density_init(int64_t solution_id, float hap_cost, float 
 }
 
 
-double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode) {
+double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions) {
     int64_t i;
     vector<double> density;
     unordered_set<int64_t> covered_samples, solutions_to_update;
@@ -341,6 +353,7 @@ double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multip
     // Initializing reused data structures
     covered_samples.reserve(n_samples);
     build_sample_solutions();
+    get_sample_solutions_histogram(n_samples_with_solutions);
     build_hap_solutions();
     density.reserve(n_solutions);
     for (i=0; i<n_solutions; i++) density.emplace_back(get_density_init(i,hap_cost,edge_cost_multiplier));
@@ -466,13 +479,14 @@ void SteinerTree::greedy_dense_solution_step(int64_t solution_id, vector<double>
 
 // ------------------------------------------------- SHORTEST PATHS ----------------------------------------------------
 
-double SteinerTree::approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution) {
+double SteinerTree::approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions) {
     size_t length;
     int64_t i;
     int64_t sample_id, solution_id, solution_min, solution_max;
     double weight, weight_min, weight_max, distance, distance_min, distance_max;
 
     build_sample_solutions();
+    get_sample_solutions_histogram(n_samples_with_solutions);
     approximate_clear();
     for (auto& element: sample_solutions) {
         sample_id=element.first;
