@@ -53,6 +53,7 @@ using std::min;
 using std::cref;
 using std::ref;
 
+#include "cpptrace/from_current.hpp"
 
 using namespace sv_merge;
 
@@ -1137,7 +1138,7 @@ void merge_thread_fn(
         }
 
         if (not opt_config.skip_solve){
-            // try {
+            CPPTRACE_TRY {
                 TerminationReason termination_reason;
 
                 if (opt_config.samplewise) {
@@ -1225,11 +1226,11 @@ void merge_thread_fn(
                         );
                     }
                 }
-            // }
-            // catch (const exception& e) {
-            //     cerr << e.what() << '\n';
-            //     cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
-            // }
+            } CPPTRACE_CATCH(const std::exception& e) {
+                cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
+                std::cerr<<"Exception: "<<e.what()<<std::endl;
+                cpptrace::from_current_exception().print_with_snippets();
+            }
         }
 
         if (HAPESTRY_DEBUG){
