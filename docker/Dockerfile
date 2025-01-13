@@ -152,18 +152,24 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN pip3 install vcfpy
 
 # HAPESTRY
-ARG HAPESTRY_COMMIT=384780860121d3611ae3f58d1da0bf9e8edc32ed
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
-WORKDIR /hapestry/sv_merge
-
-RUN git checkout ${HAPESTRY_COMMIT} \
-    && mkdir build
-
+# Initially build with `dev` branch commit so that we can compile all the common dependencies like ORTools, htslib, etc
 WORKDIR /hapestry/sv_merge/build
 
+# This is an arbitrarily close commit to whichever commit we ultimately want. If building becomes slow, then ratchet up
+ARG HAPESTRY_COMMIT=60122fe34b8f6abbb09f9a5bf6ae339f5464c4b3
+RUN git checkout ${HAPESTRY_COMMIT}
+
 RUN cmake ..
-RUN make -j 31
+RUN make -j 16
+
+# Now checkout any specific changes/branches we want and rebuild WITHOUT REDOWNLOADING all the dependencies
+ARG HAPESTRY_COMMIT=1f8220fa136cc9fe583e9a32631a8cdd20ae7717
+RUN git checkout ${HAPESTRY_COMMIT}
+
+RUN cmake .. -Ddev=1
+RUN make -j 16
 
 WORKDIR /hapestry
 
