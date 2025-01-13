@@ -64,7 +64,7 @@ else()
     message(STATUS "---- Building with optimization ----")
 
     # Standard compilation
-    add_definitions(-O3 -Wall)              # Much optimization
+    add_definitions(-g -O3 -Wall)              # Much optimization, but retain debug symbols
 endif()
 
 

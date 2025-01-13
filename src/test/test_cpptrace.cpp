@@ -9,11 +9,12 @@ using std::cerr;
 void foo() {
     throw std::runtime_error("foo failed");
 }
+
 int main() {
     CPPTRACE_TRY {
         foo();
     } CPPTRACE_CATCH(const std::exception& e) {
         std::cerr<<"Exception: "<<e.what()<<std::endl;
-        cpptrace::from_current_exception().print();
+        cpptrace::from_current_exception().print_with_snippets();
     }
 }
