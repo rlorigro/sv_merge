@@ -46,6 +46,7 @@ public:
         float min_read_hap_identity = 0.5;
         float d_weight = 1.0;
         float n_weight = 1.0;
+        float compress_quantum = 0;
         bool skip_solve = false;
         bool rescale_weights = false;
         bool use_quadratic_objective = false;

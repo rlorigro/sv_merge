@@ -165,7 +165,7 @@ public:
     pair<int64_t,int64_t> get_n_paths_of_read(int64_t read_id) const;
 
     /// Writing
-    void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const;
+    void write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph, bool use_sample_id = false) const;
 
     /// Clearing
     void clear_non_samples();

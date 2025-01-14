@@ -615,7 +615,7 @@ void TransMap::for_edge_in_bfs(
 }
 
 
-void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph) const{
+void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& variant_graph, bool use_sample_id) const{
     ofstream out(output_path);
 
     // Write header
@@ -647,7 +647,13 @@ void TransMap::write_edge_info_to_csv(path output_path, const VariantGraph& vari
                     path_length += int32_t(node_length);
                 }
 
-                out << sample_name << ',' << get_node(read_id).name << ',' << read_length << ',' << get_node(path_id).name << ',' << path_length << ',' << weight << '\n';
+                string s = sample_name;
+
+                if (use_sample_id) {
+                    s = to_string(sample_id);
+                }
+
+                out << s << ',' << get_node(read_id).name << ',' << read_length << ',' << get_node(path_id).name << ',' << path_length << ',' << weight << '\n';
             });
         });
     });

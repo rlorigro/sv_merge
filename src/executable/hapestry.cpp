@@ -1127,7 +1127,7 @@ void merge_thread_fn(
         if (not hapestry_config.skip_nonessential_logs){
             // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
             path output_csv = subdir / "reads_to_paths.csv";
-            transmap.write_edge_info_to_csv(output_csv, variant_graph);
+            transmap.write_edge_info_to_csv(output_csv, variant_graph, hapestry_config.obscure_sample_names);
         }
 
         if (opt_config.rescale_weights) {
@@ -1797,9 +1797,13 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
 
-    app.add_flag("--compress", optimizer_config.use_compression, "Use reversible compression methods to simplify the problem before solving with LP solver");
+    app.add_flag("--compress", optimizer_config.use_compression, "Use reversible compression methods to simplify the TransMap (problem input) before solving with LP solver");
+
+    app.add_flag("--compress_quantum", optimizer_config.compress_quantum, "Constant by which to quantize the weight comparisons. By default (quantum=0) edges may have a maximum of up to 1000 different values. E.g. quantum=2, possible values = 500");
 
     app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
+
+    app.add_flag("--obscure_sample_names_from_csv", hapestry_config.obscure_sample_names, "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID.");
 
     try{
         app.parse(argc, argv);
