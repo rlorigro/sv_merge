@@ -1446,14 +1446,14 @@ TerminationReason optimize_reads_with_d_plus_n(
     write_time_log(output_dir, "optimize_d_plus_n_parse", t, true);
 
 
-    cerr << "-----------------" << '\n' <<
-            output_dir << '\n' <<
-            "Objective=" << to_string(result_n_d.objective_value()) << '\n' <<
-            "d_min=" << to_string(d_min) << '\n' <<
-            "n_max=" << to_string(n_max) << '\n' <<
-            "n=" << to_string(n) << '\n' <<
-            "d=" << to_string(d) << '\n' <<
-            "-----------------" << '\n';
+    // cerr << "-----------------" << ' ' <<
+    //         output_dir << ' ' <<
+    //         "Objective=" << to_string(result_n_d.objective_value()) << ' ' <<
+    //         "d_min=" << to_string(d_min) << ' ' <<
+    //         "n_max=" << to_string(n_max) << ' ' <<
+    //         "n=" << to_string(n) << ' ' <<
+    //         "d=" << to_string(d) << ' ' <<
+    //         "-----------------" << '\n';
 
     return termination_reason;
 }
