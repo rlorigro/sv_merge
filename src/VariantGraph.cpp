@@ -493,8 +493,8 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             q=first_positions.at(j);
             split_node=false;
             if (q-p>=interior_flank_length) {
-                p_prime=get_flank_boundary_right(chromosome,p,flank_length);
-                q_prime=get_flank_boundary_left(chromosome,q,flank_length);
+                p_prime=get_flank_boundary_right(chromosome,p,interior_flank_length);
+                q_prime=get_flank_boundary_left(chromosome,q,interior_flank_length);
                 if (p_prime!=INT32_MAX && q_prime!=INT32_MAX && p_prime<q_prime) {
                     split_node=true;
                     const handle_t reference_handle_1 = sequence2handle(chrom_sequence.substr(p,p_prime-p+1),tmp_buffer_2);
