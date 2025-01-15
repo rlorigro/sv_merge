@@ -43,6 +43,7 @@ public:
     bool bam_not_hardclipped = false;
     bool write_hap_vcf = false;
     bool skip_nonessential_logs = false;
+    bool obscure_sample_names = false;
 };
 
 

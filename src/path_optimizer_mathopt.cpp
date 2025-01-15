@@ -49,6 +49,41 @@ string termination_reason_to_string(const TerminationReason& reason){
 }
 
 
+void write_optimization_log(
+    const TerminationReason& termination_reason,
+    const milliseconds& duration,
+    const TransMap& transmap,
+    const string& name,
+    path output_dir
+){
+    string time_csv;
+    duration_to_csv(duration, time_csv);
+
+    size_t n_reads = transmap.get_read_count();
+    size_t n_paths = transmap.get_path_count();
+    size_t n_edges = 0;
+
+    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
+        n_edges++;
+    });
+
+    string notes;
+    notes += termination_reason_to_string(termination_reason);
+    notes += ";";
+    notes += "n_reads=" + to_string(n_reads);
+    notes += ";";
+    notes += "n_paths=" + to_string(n_paths);
+    notes += ";";
+    notes += "n_edges=" + to_string(n_edges);
+
+    bool success = termination_reason == TerminationReason::kOptimal;
+
+    // Append log line to output file which contains the result of each optimization
+    write_time_log(output_dir, name, time_csv, success, notes);
+
+}
+
+
 /**
  * Construct a model such that each read must be assigned to exactly one path and each sample must have at most 2 paths.
  * For the sake of modularity, no explicit call to CpModelBuilder::Minimize(vars.cost_n + vars.cost_d) is made here, it
@@ -58,18 +93,23 @@ string termination_reason_to_string(const TerminationReason& reason){
  * @param vars - container to hold ORTools objects which are filled in and queried later after solving
  */
 void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVariables& vars, bool integral, bool use_ploidy_constraint){
+    int64_t n_paths;
+    unordered_set<int64_t> mandatory_haps;
+
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
         string name = "h" + std::to_string(hap_id);
-        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+        auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+
+        if (transmap.present_haps.contains(hap_id)) {
+            auto& h = result.first->second;
+            model.AddLinearConstraint(h == 1);
+        }
     });
 
     transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
         transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
             transmap.for_each_path_of_read(read_id, [&](int64_t hap_id) {
-                string hap_name = transmap.get_node(hap_id).name;
-                string read_name = transmap.get_node(read_id).name;
-
                 // DEFINE: read-hap vars
                 string r_h_name = "r" + std::to_string(read_id) + "h" + std::to_string(hap_id);
                 auto result = vars.read_hap.emplace(std::make_pair(read_id, hap_id), model.AddVariable(0,1,integral,r_h_name));
@@ -86,8 +126,13 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
                 // OBJECTIVE: accumulate d cost sum
                 vars.cost_d += w*r_h;
 
+                // Transmap compression may have already identified edges that are always 1 in the solution
+                if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                    model.AddLinearConstraint(r_h == 1);
+                }
+
                 // Do only once for each unique pair of sample-hap
-                if (vars.sample_hap.find({sample_id, hap_id}) == vars.sample_hap.end()){
+                if (not vars.sample_hap.contains({sample_id, hap_id})){
                     // DEFINE: sample-hap vars
                     string s_h_name = "s" + std::to_string(sample_id) + "h" + std::to_string(hap_id);
                     auto result2 = vars.sample_hap.emplace(std::make_pair(sample_id, hap_id),model.AddVariable(0,1,integral,s_h_name));
@@ -98,10 +143,17 @@ void construct_joint_n_d_model(const TransMap& transmap, Model& model, PathVaria
 
                     // CONSTRAINT: vsh <= vh (indicator for usage of hap w.r.t. sample-hap)
                     model.AddLinearConstraint(s_h <= vars.haps.at(hap_id));
+
+                    // Transmap compression may have identified edges that are always 1 in the solution.
+                    // This constraint is technically redundant in the transitive chain of read-hap --> sample-hap
+                    // implications, but we add it anyway
+                    if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                        model.AddLinearConstraint(s_h == 1);
+                    }
                 }
 
                 // CONSTRAINT: vrh <= vsh (indicator for usage of read-hap, w.r.t. sample-hap)
-                model.AddLinearConstraint(r_h <= vars.sample_hap.at({sample_id, hap_id}));
+                model.AddLinearConstraint(vars.read_hap.at({read_id, hap_id}) <= vars.sample_hap.at({sample_id, hap_id}));
             });
         });
     });
@@ -138,7 +190,12 @@ void construct_joint_n_d_model_with_sum_constraints(const TransMap& transmap, Mo
     // DEFINE: hap vars
     transmap.for_each_path([&](const string& hap_name, int64_t hap_id){\
         string name = "h" + std::to_string(hap_id);
-        vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+        auto result = vars.haps.emplace(hap_id, model.AddVariable(0,1,integral,name));
+
+        if (transmap.present_haps.contains(hap_id)) {
+            auto& h = result.first->second;
+            model.AddLinearConstraint(h == 1);
+        }
     });
 
     unordered_map <pair <int64_t,int64_t>, LinearExpression> sample_hap_read_sums;
@@ -166,6 +223,11 @@ void construct_joint_n_d_model_with_sum_constraints(const TransMap& transmap, Mo
                 // OBJECTIVE: accumulate d cost sum
                 vars.cost_d += w*r_h;
 
+                // Transmap compression may have already identified edges that are always 1 in the solution
+                if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                    model.AddLinearConstraint(r_h == 1);
+                }
+
                 // Do only once for each unique pair of sample-hap
                 if (not vars.sample_hap.contains({sample_id, hap_id})){
                     // DEFINE: sample-hap vars
@@ -178,6 +240,13 @@ void construct_joint_n_d_model_with_sum_constraints(const TransMap& transmap, Mo
 
                     // Accumulated sum for use later: sum(vsh) <= vh (indicator for usage of hap w.r.t. sample-hap)
                     hap_vsh_sums[hap_id] += s_h;
+
+                    // Transmap compression may have identified edges that are always 1 in the solution.
+                    // This constraint is technically redundant in the transitive chain of read-hap --> sample-hap
+                    // implications, but we add it anyway
+                    if (transmap.present_edges.contains(std::make_pair(read_id,hap_id))) {
+                        model.AddLinearConstraint(s_h == 1);
+                    }
                 }
 
                 sample_hap_read_sums[{sample_id, hap_id}] += r_h;
@@ -713,6 +782,65 @@ double optimize_d(
 }
 
 
+TerminationReason optimize_d(
+        const TransMap& transmap,
+        const OptimizerConfig& config,
+        path output_dir,
+        size_t n_threads,
+        double& d_min,
+        double& n_max
+        ){
+    TerminationReason termination_reason;
+    SolveArguments args;
+    Model model;
+    PathVariables vars;
+
+    Timer t;
+
+    // Construct the model
+    if (config.use_sum_constraints) {
+        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    else {
+        construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    write_time_log(output_dir, "optimize_d_construct", t, true);
+    t.reset();
+
+    args.parameters.threads = n_threads;
+
+    if (config.timeout_sec > 0){
+        args.parameters.time_limit = absl::Seconds(config.timeout_sec);
+    }
+    else{
+        args.parameters.time_limit = absl::InfiniteDuration();
+    }
+
+    model.Minimize(vars.cost_d);
+
+    const absl::StatusOr<SolveResult> response = Solve(model, config.solver_type, args);
+
+    const auto result = response.value();
+    termination_reason = result.termination.reason;
+    auto duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
+
+    auto initialize_time = t.elapsed_milliseconds() - duration;
+    write_time_log(output_dir, "optimize_d_init", initialize_time, true);
+    write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
+
+    // Check if the first solution is feasible/optimal
+    if (termination_reason != TerminationReason::kOptimal){
+        return termination_reason;
+    }
+
+    // Ideally we would minimize( n | d=d_min ) but we are choosing to be lazy here because it is a costly step
+    d_min = round(vars.cost_d.Evaluate(result.variable_values()));
+    n_max = round(vars.cost_n.Evaluate(result.variable_values()));
+
+    return termination_reason;
+}
+
+
 double get_normalized_distance(double d, double n, double n_min, double n_max, double d_min, double d_max, double n_weight=1, double d_weight=1){
     double n_range = n_max - n_min;
     double d_range = d_max - d_min;
@@ -978,41 +1106,6 @@ void optimize_reads_with_d_and_n_using_golden_search(
 }
 
 
-void write_optimization_log(
-    const TerminationReason& termination_reason,
-    const milliseconds& duration,
-    const TransMap& transmap,
-    const string& name,
-    path output_dir
-){
-	string time_csv;
-    duration_to_csv(duration, time_csv);
-
-    size_t n_reads = transmap.get_read_count();
-    size_t n_paths = transmap.get_path_count();
-    size_t n_edges = 0;
-
-    transmap.for_each_read_to_path_edge([&](int64_t read_id, int64_t path_id, float weight){
-        n_edges++;
-    });
-
-    string notes;
-    notes += termination_reason_to_string(termination_reason);
-    notes += ";";
-    notes += "n_reads=" + to_string(n_reads);
-    notes += ";";
-    notes += "n_paths=" + to_string(n_paths);
-    notes += ";";
-    notes += "n_edges=" + to_string(n_edges);
-
-    bool success = termination_reason == TerminationReason::kOptimal;
-
-	// Append log line to output file which contains the result of each optimization
-    write_time_log(output_dir, name, time_csv, success, notes);
-
-}
-
-
 TerminationReason optimize_reads_with_d_and_n(
         TransMap& transmap,
         double d_weight,
@@ -1196,8 +1289,6 @@ TerminationReason prune_paths_with_d_min(
     d_min_result = round(vars.cost_d.Evaluate(result.variable_values()));
     n_max_result = round(vars.cost_n.Evaluate(result.variable_values()));
 
-    cerr << "estimated d_min and n_max: " << d_min_result << ' ' << n_max_result << '\n';
-
     vector<int64_t> to_be_removed;
 
     transmap.for_each_path([&](const string& path_name, int64_t path_id){
@@ -1239,7 +1330,17 @@ TerminationReason prune_paths_with_d_min(
 
 
 /**
- * This reproduces the function from hapslap
+ * Perform joint optimization on edit distance + total haps used
+ * @param transmap Filled in Transmap which may or may not be compressed
+ * @param model Model resulting from calling construct_*_model
+ * @param vars Vars corresponding to construct_*_model
+ * @param n_threads number of threads to use
+ * @param output_dir where to write/append logs
+ * @param config configuration for optimization, such as use_ploidy, use_sum_constraints, etc
+ * @param d_min used for normalizing the objective terms
+ * @param n_max used for normalizing the objective terms
+ * @param write_solution if true, write a CSV containing the assigned variables
+ * @return result of attempting optimization with ORTools
  */
 TerminationReason optimize_reads_with_d_plus_n(
         TransMap& transmap,
@@ -1250,13 +1351,24 @@ TerminationReason optimize_reads_with_d_plus_n(
         double n_max,
         bool write_solution
         ){
-    Timer t;
 
-    Model model;
-    SolveArguments args;
-    PathVariables vars;
     TerminationReason termination_reason;
-    std::chrono::milliseconds duration;
+    SolveArguments args;
+    Model model;
+    PathVariables vars;
+
+    Timer t;
+    milliseconds duration;
+
+    // Construct the model
+    if (config.use_sum_constraints) {
+        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    else {
+        construct_joint_n_d_model(transmap, model, vars, true, config.use_ploidy_constraint);
+    }
+    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
+    t.reset();
 
     bool integral = true;
 
@@ -1273,51 +1385,7 @@ TerminationReason optimize_reads_with_d_plus_n(
         args.parameters.time_limit = absl::InfiniteDuration();
     }
 
-    if (config.use_sum_constraints) {
-        construct_joint_n_d_model_with_sum_constraints(transmap, model, vars, integral, config.use_ploidy_constraint);
-    }
-    else {
-        construct_joint_n_d_model(transmap, model, vars, integral, config.use_ploidy_constraint);
-    }
-
-    write_time_log(output_dir, "optimize_d_plus_n_construct", t, true);
-    t.reset();
-
-    // ---- First find one extreme of the pareto set (D_MIN) ----
-
-    // If d_min or n_max are not provided, find them from scratch
-    if (d_min == -1 and n_max == -1){
-
-        cerr << "no bounds given, re-optimizing for d_min: " << d_min << ' ' << n_max << '\n';
-        model.Minimize(vars.cost_d);
-
-        const absl::StatusOr<SolveResult> response = Solve(model, config.solver_type, args);
-
-        const auto result = response.value();
-        termination_reason = result.termination.reason;
-        duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
-
-        auto initialize_time = t.elapsed_milliseconds() - duration;
-        write_time_log(output_dir, "optimize_d_init", initialize_time, true);
-        write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
-        t.reset();
-
-        // Check if the first solution is feasible/optimal
-        if (termination_reason != TerminationReason::kOptimal){
-            return termination_reason;
-        }
-
-        // Ideally we would minimize( n | d=d_min ) but we are choosing to be lazy here because it is a costly step
-        d_min = round(vars.cost_d.Evaluate(result.variable_values()));
-        n_max = round(vars.cost_n.Evaluate(result.variable_values()));
-    }
-
     // ------------------- Normalize -----------------------------
-
-    // Playing it safe with the variable domains. We actually don't know how much worse the d_max value could be, so
-    // using an arbitrary factor of 32.
-    Variable d_norm = model.AddContinuousVariable(0,32,"d");
-    Variable n_norm = model.AddContinuousVariable(0,n_max,"n");
 
     // In rare cases, all the edges in the graph are pruned, which indicates that none of the candidates are viable,
     // and therefore the d_min and n_max are 0, resulting in a NaN for the norm step. Here we simply set them to 1
@@ -1334,12 +1402,13 @@ TerminationReason optimize_reads_with_d_plus_n(
     }
 
     // Normalize the costs
-    model.AddLinearConstraint(d_norm == vars.cost_d/d_min);
-    model.AddLinearConstraint(n_norm == vars.cost_n/n_max);
+    const double d_multiplier = config.d_weight/d_min;
+    const double n_multiplier = config.n_weight/n_max;
 
     // --------------- Minimize joint model -------------------------
 
-    model.Minimize(d_norm*config.d_weight + n_norm*config.n_weight);
+    model.Minimize(vars.cost_d*d_multiplier + vars.cost_n*n_multiplier);
+    t.reset();
 
     const absl::StatusOr<SolveResult> response_n_d = Solve(model, config.solver_type, args);
     const auto& result_n_d = response_n_d.value();
@@ -1375,6 +1444,16 @@ TerminationReason optimize_reads_with_d_plus_n(
     }
 
     write_time_log(output_dir, "optimize_d_plus_n_parse", t, true);
+
+
+    // cerr << "-----------------" << ' ' <<
+    //         output_dir << ' ' <<
+    //         "Objective=" << to_string(result_n_d.objective_value()) << ' ' <<
+    //         "d_min=" << to_string(d_min) << ' ' <<
+    //         "n_max=" << to_string(n_max) << ' ' <<
+    //         "n=" << to_string(n) << ' ' <<
+    //         "d=" << to_string(d) << ' ' <<
+    //         "-----------------" << '\n';
 
     return termination_reason;
 }
@@ -1467,6 +1546,38 @@ TerminationReason optimize_read_feasibility(
 
 
 TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
+    TerminationReason termination_reason;
+
+    double d_min = -1;
+    double n_max = -1;
+
+    // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
+    termination_reason = optimize_read_feasibility(transmap, 1, config.timeout_sec, subdir, config.solver_type);
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    // Find d_min and n_max and also prune the haps from the graph based on the d_min solution
+    if (config.prune_with_d_min) {
+        termination_reason = prune_paths_with_d_min(transmap, 1, subdir, config, d_min, n_max);
+    }
+    else{
+        termination_reason = optimize_d(transmap, config, subdir, 1, d_min, n_max);
+    }
+
+    if (termination_reason != TerminationReason::kOptimal) {
+        return termination_reason;
+    }
+
+    termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max, write_solution);
+
+    return termination_reason;
+}
+
+
+TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution){
+    Timer t;
 
     TerminationReason termination_reason;
 
@@ -1480,23 +1591,88 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
         return termination_reason;
     }
 
+    TransMap clone;
+
+    // TODO: cannot currently use read compression for the read_feasibility step, unless we store # of reads collapsed
+    t.reset();
+    transmap.sort_adjacency_lists();
+    transmap.update_first_of_type();
+    transmap.get_mandatory_haplotypes();
+    transmap.compress_haplotypes_global(0);
+    write_time_log(subdir, "compress_transmap_initial", t, true);
+    t.reset();
+
+    // Branch off from the parent Transmap after common compression steps
+    clone = transmap;
+
+    // For d_min step, n_weight is 0 and d_weight is 1 because n is not considered in the objective
+    clone.sort_adjacency_lists();
+    clone.update_first_of_type();
+    clone.compress_haplotypes_local(0,1,0);
+    clone.solve_easy_samples(0,1,0);
+    clone.compress_reads(0);
+    clone.compress_samples(0);
+    write_time_log(subdir, "compress_transmap_d", t, true);
+    t.reset();
+
+    // Find d_min and n_max
     if (config.prune_with_d_min) {
-        termination_reason = prune_paths_with_d_min(transmap, 1, subdir, config, d_min, n_max);
+        // Also prune the haps from the graph based on the d_min solution, if requested
+        termination_reason = prune_paths_with_d_min(clone, 1, subdir, config, d_min, n_max);
+
+        // Since we are working from a clone, need to also apply the changes to the parent transmap
+        vector<int64_t> to_be_deleted;
+        transmap.for_each_path([&](const string& name, int64_t id) {
+            if (not clone.has_node(name)) {
+                to_be_deleted.emplace_back(id);
+            }
+        });
+
+        // Must not modify while iterating Transmap
+        for (auto id: to_be_deleted) {
+            transmap.remove_node(id);
+        }
+    }
+    else{
+        termination_reason = optimize_d(clone, config, subdir, 1, d_min, n_max);
     }
 
     if (termination_reason != TerminationReason::kOptimal) {
         return termination_reason;
     }
 
-    // Then optimize the reads with the joint model
-    if (config.use_quadratic_objective) {
-        // TODO: implement latest simplifications on bound-finding/normalization?
-        // This solver is not realistically practical given the time it takes to run
-        termination_reason = optimize_reads_with_d_and_n(transmap, config.d_weight, 1, 1, config.timeout_sec, subdir, config.solver_type, write_solution);
+    // Branch off from the parent Transmap
+    clone = transmap;
+
+    // For the final joint optimization we need to tell the compression methods what constants are used in the objective
+    // for both of the n and d terms
+    auto c_n = float(config.n_weight/n_max);
+    auto c_d = float(config.d_weight/d_min);
+
+    t.reset();
+    clone.sort_adjacency_lists();
+    clone.update_first_of_type();
+
+    if (clone.has_large_weight(c_n,c_d)) {
+        clone.compress_haplotypes_local(c_n,c_d,0);
+
+        if (clone.has_large_weight(c_n,c_d)) {
+            clone.solve_easy_samples(c_n,c_d,0);
+        }
     }
-    else {
-        termination_reason = optimize_reads_with_d_plus_n(transmap, 1, subdir, config, d_min, n_max, write_solution);
-    }
+
+    clone.compress_reads(0);
+    clone.compress_samples(0);
+
+    write_time_log(subdir, "compress_transmap_d_plus_n", t, true);
+
+    termination_reason = optimize_reads_with_d_plus_n(clone, 1, subdir, config, d_min, n_max, write_solution);
+
+    // Finally decompress
+    clone.decompress_samples();
+
+    // Overwrite the original transmap
+    transmap = clone;
 
     return termination_reason;
 }
