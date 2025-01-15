@@ -80,3 +80,7 @@ workflows:
   publish: True
   primaryDescriptorPath: /wdl/BcftoolsMergeNoDuplicatesSingleCaller.wdl
   testParameterFiles:
+- name: subset_n_samples_from_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/subset_n_samples_from_vcf.wdl

@@ -152,18 +152,18 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN pip3 install vcfpy
 
 # HAPESTRY
-ARG HAPESTRY_COMMIT=384780860121d3611ae3f58d1da0bf9e8edc32ed
 RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
 
-RUN git checkout ${HAPESTRY_COMMIT} \
-    && mkdir build
+ARG HAPESTRY_COMMIT=60122fe34b8f6abbb09f9a5bf6ae339f5464c4b3
+RUN git checkout ${HAPESTRY_COMMIT}
+RUN mkdir build
 
 WORKDIR /hapestry/sv_merge/build
 
 RUN cmake ..
-RUN make -j 31
+RUN make -j 16
 
 WORKDIR /hapestry
 
