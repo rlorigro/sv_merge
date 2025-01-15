@@ -4,6 +4,8 @@
 #include "VcfReader.hpp"
 #include "bdsg/hash_graph.hpp"
 #include "misc.hpp"
+#include "BinarySequence.hpp"
+#include "Sequence.hpp"
 
 using sv_merge::Region;
 using sv_merge::VcfRecord;
@@ -28,6 +30,7 @@ using std::unordered_map;
 using std::unordered_set;
 using std::ofstream;
 using std::reverse;
+using std::tuple;
 
 namespace sv_merge {
 
@@ -97,9 +100,12 @@ public:
      * @param deallocate_ref_alt TRUE: the procedure deallocates every REF and ALT field in `records`; this can be
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
-     * field of a VCF record in order to be considered.
+     * field of a VCF record in order to be considered;
+     * @param acyclic builds a bidirected graph with no cycle, by treating DUP and CNV calls like INS of just one copy,
+     * INV calls like replacements, and by not including any BND call; DUP/CNV calls (respectively, INV calls) with
+     * identical intervals do not create duplicated nodes/edges.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {});
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {}, bool acyclic = false);
 
     /**
      * If `p<q` (zero-based), the procedure builds a trivial graph that contains one node for string `chromosome[p..q)`
@@ -317,6 +323,11 @@ public:
     void load_edge_record_map(const vector<pair<edge_t,size_t>>& map, size_t n_vcf_records);
 
     /**
+     * @return a copy of `edge_to_vcf_record`.
+     */
+    unordered_map<edge_t,vector<size_t>> get_edge_record_map();
+
+    /**
      * Erases `node_to_chromosome`.
      */
     void node_to_chromosome_clear();
@@ -420,6 +431,7 @@ private:
      */
     vector<handle_t> insertion_handles;
     unordered_set<handle_t> insertion_handles_set;  // Same content as above
+    unordered_map<tuple<int32_t,int32_t,int32_t>,handle_t> interval_to_insertion_handle;  // Used only for building acyclic bidirected graphs
 
     /**
      * Maps every non-reference edge of the graph (in canonical form) to the VCF records that support it.
