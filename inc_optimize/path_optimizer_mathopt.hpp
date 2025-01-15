@@ -46,11 +46,13 @@ public:
         float min_read_hap_identity = 0.5;
         float d_weight = 1.0;
         float n_weight = 1.0;
+        float compress_quantum = 0;
         bool skip_solve = false;
         bool rescale_weights = false;
         bool use_quadratic_objective = false;
         bool use_golden_search = false;
         bool use_sum_constraints = true;
+        bool use_compression = false;
         bool samplewise = false;
         bool prune_with_d_min = false;
         bool use_ploidy_constraint = true;
@@ -168,6 +170,8 @@ TerminationReason optimize_read_feasibility(
 );
 
 TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
+
+TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 
 TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig& config, path subdir, bool write_solution = false);
 

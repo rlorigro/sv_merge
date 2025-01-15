@@ -53,6 +53,7 @@ using std::min;
 using std::cref;
 using std::ref;
 
+#include "cpptrace/from_current.hpp"
 
 using namespace sv_merge;
 
@@ -1126,7 +1127,7 @@ void merge_thread_fn(
         if (not hapestry_config.skip_nonessential_logs){
             // Write the full transmap to CSV (in the form of annotated edges) BEFORE RESCALING WEIGHTS!
             path output_csv = subdir / "reads_to_paths.csv";
-            transmap.write_edge_info_to_csv(output_csv, variant_graph);
+            transmap.write_edge_info_to_csv(output_csv, variant_graph, hapestry_config.obscure_sample_names);
         }
 
         if (opt_config.rescale_weights) {
@@ -1137,7 +1138,7 @@ void merge_thread_fn(
         }
 
         if (not opt_config.skip_solve){
-            try {
+            CPPTRACE_TRY {
                 TerminationReason termination_reason;
 
                 if (opt_config.samplewise) {
@@ -1151,7 +1152,13 @@ void merge_thread_fn(
                     transmap.retangle_sample_paths(hapmap);
                 }
                 else {
-                    termination_reason = optimize(transmap, opt_config, subdir, true);
+
+                    if (opt_config.use_compression) {
+                        termination_reason = optimize_compressed(transmap, opt_config, subdir, true);
+                    }
+                    else {
+                        termination_reason = optimize(transmap, opt_config, subdir, true);
+                    }
                 }
 
                 // Handle timeout case (do nothing)
@@ -1219,10 +1226,10 @@ void merge_thread_fn(
                         );
                     }
                 }
-            }
-            catch (const exception& e) {
-                cerr << e.what() << '\n';
+            } CPPTRACE_CATCH(const std::exception& e) {
                 cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
+                std::cerr<<"Exception: "<<e.what()<<std::endl;
+                cpptrace::from_current_exception().print_with_snippets();
             }
         }
 
@@ -1774,8 +1781,6 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--rescale_weights", optimizer_config.rescale_weights, "Invoke this to use quadratic difference-from-best match rescaling for read-to-path edges.");
 
-    app.add_flag("--quadratic_objective", optimizer_config.use_quadratic_objective, "Invoke this to use quadratic objective which minimizes the square distance from the 'utopia point'. May incur large run time cost.");
-
     app.add_flag("--debug", HAPESTRY_DEBUG, "Invoke this to add more logging and output");
 
     app.add_flag("--use_gurobi", use_gurobi, "Invoke this to use Gurobi instead of SCIP. License must be in conventional location.");
@@ -1792,7 +1797,13 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--samplewise", optimizer_config.samplewise, "Use samplewise solver instead of global solver");
 
+    app.add_flag("--compress", optimizer_config.use_compression, "Use reversible compression methods to simplify the TransMap (problem input) before solving with LP solver");
+
+    app.add_flag("--compress_quantum", optimizer_config.compress_quantum, "Constant by which to quantize the weight comparisons. By default (quantum=0) edges may have a maximum of up to 1000 different values. E.g. quantum=2, possible values = 500");
+
     app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
+
+    app.add_flag("--obscure_sample_names_from_csv", hapestry_config.obscure_sample_names, "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID.");
 
     try{
         app.parse(argc, argv);
