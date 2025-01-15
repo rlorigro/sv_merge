@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
 
 using std::runtime_error;
 using std::ifstream;
@@ -38,6 +39,10 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
 
     while (file.get(c)){
 //        cerr << c << " - " << s.name << ' ' << s.sequence << '\n';
+
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + fasta_path.string());
+        }
 
         if (c == header_char){
             if (is_sequence){

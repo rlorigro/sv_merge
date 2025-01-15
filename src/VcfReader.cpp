@@ -17,7 +17,9 @@ const uint8_t VcfReader::VCF_HEADER_PREFIX_LENGTH = VCF_HEADER_PREFIX.length();
 const uint8_t VcfReader::N_NONSAMPLE_FIELDS_VCF = 9;
 const char VcfReader::LINE_END = '\n';
 const char VcfReader::VCF_SEPARATOR = '\t';
-const char VcfReader::VCF_MISSING_CHAR = '.';
+const char VcfReader::VCF_MISSING_CHAR_1 = '.';
+const string VcfReader::VCF_MISSING_STRING_1 = ".";
+const string VcfReader::VCF_MISSING_STRING_2 = "*";
 const char VcfReader::SYMBOLIC_CHAR_OPEN = '<';
 const char VcfReader::SYMBOLIC_CHAR_CLOSE = '>';
 const char VcfReader::BREAKEND_CHAR_OPEN = '[';
@@ -28,9 +30,15 @@ const char VcfReader::GT_SEPARATOR = ':';
 const char VcfReader::BREAKEND_SEPARATOR = ':';
 const char VcfReader::UNPHASED_CHAR = '/';
 const char VcfReader::PHASED_CHAR = '|';
+const string VcfReader::CHR_STR_LOWER = "chr";
+const string VcfReader::CHR_STR_UPPER = "CHR";
+const char VcfReader::UNKNOWN_BASE = 'N';
+const string VcfReader::MISSING_GT = VcfReader::VCF_MISSING_STRING_1+VcfReader::UNPHASED_CHAR+VcfReader::VCF_MISSING_STRING_1;
 
 const char VcfReader::INFO_ASSIGNMENT = '=';
 const char VcfReader::INFO_SEPARATOR = ';';
+const string VcfReader::INFO_REDUNDANT = "HAPESTRY_REDUNDANT";
+const string VcfReader::INFO_REDUNDANT_HEADER = "##INFO=<ID="+VcfReader::INFO_REDUNDANT+",Number=1,Type=String,Description=\"The call is equivalent to another call in this VCF. This can happen, since the same call might have distinct VCF representations that are not collapsed by e.g. bcftools merge (e.g. an implicit and an explicit DEL).\">";
 const string VcfReader::SVTYPE_STR = "SVTYPE";
 const string VcfReader::SVLEN_STR = "SVLEN";
 const string VcfReader::END_STR = "END";
@@ -58,6 +66,7 @@ const uint8_t VcfReader::TYPE_DUPLICATION = 4;
 const uint8_t VcfReader::TYPE_BREAKEND = 5;
 const uint8_t VcfReader::TYPE_REPLACEMENT = 6;
 const uint8_t VcfReader::TYPE_CNV = 7;
+const uint8_t VcfReader::TYPE_SNP = 8;
 
 const string VcfReader::DEL_STR = "DEL";
 const string VcfReader::DEL_ME_STR = "DEL:ME";
@@ -74,13 +83,30 @@ const string VcfReader::CNV_STR = "CNV";
 const uint64_t VcfRecord::STREAMSIZE_MAX = numeric_limits<streamsize>::max();
 
 
-VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency) {
+string get_vcf_name_prefix(const path& vcf){
+    string name_prefix = vcf.filename().string();
+
+    if (name_prefix.ends_with(".gz")){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - 3);
+    }
+    if (name_prefix.ends_with(".vcf")){
+        name_prefix = name_prefix.substr(0,name_prefix.size() - 4);
+    }
+
+    std::replace(name_prefix.begin(), name_prefix.end(), '.', '_');
+
+    return name_prefix;
+}
+
+
+VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_allele_frequency, double min_nonmissing_frequency) {
     this->vcf_path=vcf_path;
     this->progress_n_lines=progress_n_lines;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->pass_only=pass_only;
     this->min_sv_length=min_sv_length;
+    this->max_sv_length=max_sv_length;
     this->n_samples_to_load=n_samples_to_load;
     sample_ids=vector<string>(0);
     n_samples_in_vcf=0;
@@ -91,11 +117,12 @@ VcfReader::VcfReader(const path& vcf_path, int32_t progress_n_lines, bool high_q
 
 VcfReader::VcfReader(const path& vcf_path) {
     this->vcf_path=vcf_path;
-    progress_n_lines=10000;
+    progress_n_lines=0;
     high_qual_only=false;
     min_qual=0.0;
     pass_only=false;
     min_sv_length=0;
+    max_sv_length=INT32_MAX;
     n_samples_to_load=INT32_MAX;
     sample_ids=vector<string>(0);
     n_samples_in_vcf=0;
@@ -136,11 +163,12 @@ int8_t string_to_svtype_alt(const string& type) {
 }
 
 
-VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf) {
+VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, int32_t n_samples_to_load, double min_af, double min_nmf) {
     this->pass_only=pass_only;
     this->high_qual_only=high_qual_only;
     this->min_qual=min_qual;
     this->min_sv_length=min_sv_length;
+    this->max_sv_length=max_sv_length;
     this->n_samples_to_load=n_samples_to_load;
     this->min_af=min_af;
     this->min_nmf=min_nmf;
@@ -156,11 +184,12 @@ VcfRecord::VcfRecord(bool high_qual_only, double min_qual, bool pass_only, int32
     }
     tmp_buffer_1=""; tmp_buffer_2="";
     tmp_pair.first=0; tmp_pair.second=0;
+    this->is_redundant=false;
 }
 
 
 VcfRecord VcfRecord::clone() const {
-    VcfRecord out = VcfRecord(false,0.0,false,0,0,0.0,0.0);
+    VcfRecord out = VcfRecord(false,0.0,false,0,0,0,0.0,0.0);
     out.is_autosomal=this->is_autosomal;
     out.qual=this->qual;
     out.pos=this->pos;
@@ -181,6 +210,7 @@ VcfRecord VcfRecord::clone() const {
     out.n_samples=this->n_samples;
     out.n_haplotypes_ref=this->n_haplotypes_ref;
     out.n_haplotypes_alt=this->n_haplotypes_alt;
+    out.is_redundant=this->is_redundant;
     return out;
 }
 
@@ -195,7 +225,7 @@ void VcfRecord::set_from_stream(ifstream& stream) {
     tmp_buffer_1.clear();
     while (stream.get(c)) {
         if (c==VcfReader::VCF_SEPARATOR || c==VcfReader::LINE_END) {
-            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
+            fields_skipped=set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
             if (fields_skipped) break;
             else {
                 tmp_buffer_1.clear(); current_field++;
@@ -216,11 +246,11 @@ void VcfRecord::set_from_stream(ifstream& stream) {
             if (current_field==4 && c==VcfReader::ALT_SEPARATOR) n_alts++;
         }
     }
-    if (!fields_skipped && !tmp_buffer_1.empty()) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
+    if (!fields_skipped && !tmp_buffer_1.empty()) set_field(tmp_buffer_1,current_field,high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,min_af,min_nmf,stream,tmp_buffer_2,tmp_pair);
 }
 
 
-bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
+bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_only, double min_qual, bool pass_only, int32_t min_sv_length, int32_t max_sv_length, double min_af, double min_nmf, ifstream& stream, string& tmp_buffer, pair<uint8_t, uint8_t>& tmp_pair) {
     if (field_id==0) {
         chrom=field;
         is_autosomal = chrom!="chrX" && chrom!="X" &&  chrom!="chrY" && chrom!="Y" && chrom!="chrM" && chrom!="M";
@@ -233,7 +263,8 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
     else if (field_id==4) {
         alt.append(field);
         is_symbolic=is_alt_symbolic();
-        if (n_alts>1) {
+        missing_alt=is_alt_missing();
+        if (n_alts>1 || missing_alt) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -247,7 +278,7 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         }
     }
     else if (field_id==5) {
-        if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) { qual=-1; is_high_quality=false; }
+        if (field.starts_with(VcfReader::VCF_MISSING_CHAR_1)) { qual=-1; is_high_quality=false; }
         else {
             qual=stof(field);
             is_high_quality=qual>=min_qual;
@@ -259,7 +290,7 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
     }
     else if (field_id==6) {
         filter.append(field);
-        if (field.starts_with(VcfReader::VCF_MISSING_CHAR)) is_pass=false;
+        if (field.starts_with(VcfReader::VCF_MISSING_CHAR_1)) is_pass=false;
         else {
             is_pass=filter==VcfReader::PASS_STR;
             if (pass_only && !is_pass) {
@@ -272,7 +303,9 @@ bool VcfRecord::set_field(const string& field, int32_t field_id, bool high_qual_
         info.append(field);
         set_sv_type(tmp_buffer);
         set_sv_length(tmp_buffer);
-        if (sv_type==-1 || sv_length<min_sv_length) {
+        const auto alt_length = (int32_t)alt.length();
+        if (sv_type==VcfReader::TYPE_INSERTION && !is_symbolic && sv_length!=alt_length-1) sv_length=alt_length-1;
+        if (sv_type==-1 || sv_length<min_sv_length || sv_length>max_sv_length) {
             stream.ignore(STREAMSIZE_MAX,VcfReader::LINE_END);
             return true;
         }
@@ -307,12 +340,19 @@ void VcfRecord::set_sv_type(string& tmp_buffer) {
     if (found) sv_type=string_to_svtype_info(tmp_buffer);
     else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_type=string_to_svtype_alt(alt);
-    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR)) {
+    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR_1) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR_1)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
-        if (ref_length==1 && alt_length>ref_length) sv_type=VcfReader::TYPE_INSERTION;
-        else if (alt_length==1 && ref_length>alt_length) sv_type=VcfReader::TYPE_DELETION;
+        if (ref_length==1 && alt_length>ref_length) {
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_type=VcfReader::TYPE_INSERTION;
+            else sv_type=VcfReader::TYPE_REPLACEMENT;
+        }
+        else if (alt_length==1 && ref_length>alt_length) {
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_type=VcfReader::TYPE_DELETION;
+            else sv_type=VcfReader::TYPE_REPLACEMENT;
+        }
         else if (ref_length>1 && alt_length>1) sv_type=VcfReader::TYPE_REPLACEMENT;
+        else if (ref_length==1 && alt_length==1) sv_type=VcfReader::TYPE_SNP;
         else sv_type=-1;
     }
     else sv_type=-1;
@@ -324,29 +364,49 @@ void VcfRecord::set_sv_length(string& tmp_buffer) {
     if (get_info_field(VcfReader::SVLEN_STR,0,tmp_buffer)!=string::npos) {
         const int32_t length = stoi(tmp_buffer);
         sv_length=length<0?-length:length;
+        if (sv_length>0) return;
     }
-    else if (get_info_field(VcfReader::END_STR,0,tmp_buffer)!=string::npos) {
+    if (get_info_field(VcfReader::END_STR,0,tmp_buffer)!=string::npos) {
         const int32_t end = stoi(tmp_buffer);
         sv_length=end-pos;
+        if (sv_length>0) return;
     }
-    else if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=INT32_MAX;
+    if (alt.starts_with(VcfReader::SYMBOLIC_CHAR_OPEN) && alt.ends_with(VcfReader::SYMBOLIC_CHAR_CLOSE)) sv_length=INT32_MAX;
     else if (alt.starts_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.starts_with(VcfReader::BREAKEND_CHAR_CLOSE) || alt.ends_with(VcfReader::BREAKEND_CHAR_OPEN) || alt.ends_with(VcfReader::BREAKEND_CHAR_CLOSE)) sv_length=INT32_MAX;
-    else {
+    else if (!alt.starts_with(VcfReader::VCF_MISSING_CHAR_1) && !ref.starts_with(VcfReader::VCF_MISSING_CHAR_1)) {
         const size_t ref_length = ref.length();
         const size_t alt_length = alt.length();
-        if (ref_length==1 && alt_length>ref_length) sv_length=(int32_t)(alt_length-1);  // INS
-        else if (alt_length==1 && ref_length>alt_length) sv_length=(int32_t)(ref_length-1);  // DEL
-        else sv_length=(int32_t)(ref_length-1);  // Replacement
+        if (ref_length==1 && alt_length>ref_length) {
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_length=(int32_t)(alt_length-1);  // INS
+            else sv_length=(int32_t)ref_length;  // Replacement
+        }
+        else if (alt_length==1 && ref_length>alt_length) {
+            if (toupper(ref.at(0))==toupper(alt.at(0))) sv_length=(int32_t)(ref_length-1);  // DEL
+            else sv_length=(int32_t)ref_length;  // Replacement
+        }
+        else if (ref_length==1 && alt_length==1) sv_length=1;  // SNP
+        else if (ref_length>1) sv_length=(int32_t)ref_length;  // Replacement
+        else sv_length=INT32_MAX;
     }
+    else sv_length=INT32_MAX;
 }
 
 
 void VcfRecord::print(ostream& stream) const {
+    const int32_t N_SAMPLES = genotypes.size();
+
     stream << chrom << VcfReader::VCF_SEPARATOR << pos << VcfReader::VCF_SEPARATOR << id << VcfReader::VCF_SEPARATOR << ref << VcfReader::VCF_SEPARATOR << alt << VcfReader::VCF_SEPARATOR;
-    if (qual==-1) stream << '.';
+    if (qual==-1) stream << VcfReader::VCF_MISSING_CHAR_1;
     else stream << qual;
-    stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR << info << VcfReader::VCF_SEPARATOR << format;
-    for (int32_t i=0; i<n_samples; i++) stream << VcfReader::VCF_SEPARATOR << genotypes[i];
+    stream << VcfReader::VCF_SEPARATOR << filter << VcfReader::VCF_SEPARATOR;
+    if (is_redundant) stream << VcfReader::INFO_REDUNDANT << VcfReader::INFO_ASSIGNMENT << "true" << VcfReader::INFO_SEPARATOR;
+    stream << info << VcfReader::VCF_SEPARATOR << format;
+    if (is_redundant) {
+        for (int32_t i=0; i<N_SAMPLES; i++) stream << VcfReader::VCF_SEPARATOR << VcfReader::MISSING_GT;
+    }
+    else {
+        for (const auto& item: genotypes) stream << VcfReader::VCF_SEPARATOR << item;
+    }
 }
 
 
@@ -361,26 +421,26 @@ uint8_t VcfRecord::get_gt(int32_t sample, pair<int8_t,int8_t>& out) {
     for (i=0; i<LENGTH; i++) {
         c=genotypes[sample].at(i);
         if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
-            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.first=(int8_t)stoi(tmp_buffer_1);
+            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR_1)) out.first=(int8_t)stoi(tmp_buffer_1);
             tmp_buffer_1.clear();
         }
         else if (c==VcfReader::GT_SEPARATOR) {
-            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
+            if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR_1)) out.second=(int8_t)stoi(tmp_buffer_1);
             return 2;
         }
         else tmp_buffer_1+=c;
     }
-    if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=(int8_t)stoi(tmp_buffer_1);
+    if (!tmp_buffer_1.starts_with(VcfReader::VCF_MISSING_CHAR_1)) out.second=(int8_t)stoi(tmp_buffer_1);
     if (out.first==-1 && out.second!=-1) { out.first=out.second; out.second=-1; return 1; }
     else return 2;
 }
 
 
 bool VcfRecord::passes_constraints() const {
-    return n_alts==1 &&
+    return n_alts==1 && !missing_alt &&
            (is_high_quality || !high_qual_only) &&
-           (!pass_only || is_pass || filter.starts_with(VcfReader::VCF_MISSING_CHAR)) &&
-           sv_type!=-1 && sv_length>=min_sv_length &&
+           (!pass_only || is_pass || filter.starts_with(VcfReader::VCF_MISSING_CHAR_1)) &&
+           sv_type!=-1 && sv_length>=min_sv_length && sv_length<=max_sv_length &&
            (n_samples_to_load==0 || (n_samples==n_samples_to_load && n_haplotypes_alt>=min_n_haplotypes_alt && n_haplotypes_ref+n_haplotypes_alt>=min_n_haplotypes_nonmissing));
 }
 
@@ -419,19 +479,19 @@ void VcfRecord::ncalls_in_sample(const string& buffer, pair<uint8_t, uint8_t>& o
         c=buffer.at(i);
         if (c==VcfReader::PHASED_CHAR || c==VcfReader::UNPHASED_CHAR) {
             if (buffer.starts_with('0')) out.first=1;
-            else if (!buffer.starts_with(VcfReader::VCF_MISSING_CHAR)) out.second=1;
+            else if (!buffer.starts_with(VcfReader::VCF_MISSING_CHAR_1)) out.second=1;
             j=i+1;
         }
         else if (c==VcfReader::GT_SEPARATOR) {
             c=buffer.at(j);
             if (c=='0') out.first++;
-            else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
+            else if (c!=VcfReader::VCF_MISSING_CHAR_1) out.second++;
             return;
         }
     }
     c=buffer.at(j);
     if (c=='0') out.first++;
-    else if (c!=VcfReader::VCF_MISSING_CHAR) out.second++;
+    else if (c!=VcfReader::VCF_MISSING_CHAR_1) out.second++;
 }
 
 
@@ -474,7 +534,7 @@ void VcfRecord::info2map(unordered_map<string,string>& map) {
 
 void VcfRecord::get_samples_with_alt(unordered_set<int32_t>& out) {
     int32_t i;
-    const uint32_t SIZE = genotypes.size();
+    const auto SIZE = (int32_t)genotypes.size();
 
     out.clear();
     for (i=0; i<SIZE; i++) {
@@ -487,7 +547,7 @@ void VcfRecord::get_samples_with_alt(unordered_set<int32_t>& out) {
 
 void VcfRecord::get_samples_with_alt(set<int32_t>& out) {
     int32_t i;
-    const uint32_t SIZE = genotypes.size();
+    const auto SIZE = (int32_t)genotypes.size();
 
     out.clear();
     for (i=0; i<SIZE; i++) {
@@ -501,8 +561,13 @@ void VcfRecord::get_samples_with_alt(set<int32_t>& out) {
 bool VcfRecord::is_alt_symbolic() const { return alt.at(0)==VcfReader::SYMBOLIC_CHAR_OPEN && alt.at(alt.length()-1)==VcfReader::SYMBOLIC_CHAR_CLOSE; }
 
 
+bool VcfRecord::is_alt_missing() const { return alt==VcfReader::VCF_MISSING_STRING_1 || alt==VcfReader::VCF_MISSING_STRING_2; }
+
+
 uint8_t VcfRecord::is_breakend_single() const {
-    if (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(alt.length()-1)==VcfReader::VCF_MISSING_CHAR) {
+    const char first = alt.at(0);
+    const char last = alt.at(alt.length()-1);
+    if ((first==VcfReader::VCF_MISSING_CHAR_1&&last!=VcfReader::VCF_MISSING_CHAR_1) || (first!=VcfReader::VCF_MISSING_CHAR_1&&last==VcfReader::VCF_MISSING_CHAR_1)) {
         const uint32_t length = alt.length();
         if (length==2) return 0;
         else if (length>2) return 1;
@@ -513,12 +578,12 @@ uint8_t VcfRecord::is_breakend_single() const {
 
 bool VcfRecord::is_breakend_virtual(const unordered_map<string,string>& chromosomes) {
     if (is_symbolic) return false;
-    if (pos==0 || pos==chromosomes.at(chrom).length()+1) return true;
+    if (pos==0 || pos==(int32_t)(chromosomes.at(chrom).length()+1)) return true;
     const int32_t p = get_breakend_pos();
     if (p==INT32_MAX) return false;
     string chr_trans;
     get_breakend_chromosome(chr_trans);
-    return (p==0 || p==chromosomes.at(chr_trans).length()+1);
+    return (p==0 || p==(int32_t)(chromosomes.at(chr_trans).length()+1));
 }
 
 
@@ -535,6 +600,7 @@ void VcfRecord::get_breakend_chromosome(string& out) const {
         else if (c==VcfReader::BREAKEND_SEPARATOR) break;
         else if (p!=UINT16_MAX) out.push_back(c);
     }
+    if (out.starts_with(VcfReader::CHR_STR_UPPER)) out.replace(0,VcfReader::CHR_STR_LOWER.length(),VcfReader::CHR_STR_LOWER);
 }
 
 
@@ -562,7 +628,7 @@ int32_t VcfRecord::get_breakend_pos() {
 uint8_t VcfRecord::get_breakend_orientation_cis() const {
     if (is_symbolic) return 0;
     const char c = alt.at(0);
-    return (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE && c!=VcfReader::VCF_MISSING_CHAR)?1:2;
+    return (c!=VcfReader::BREAKEND_CHAR_OPEN && c!=VcfReader::BREAKEND_CHAR_CLOSE && c!=VcfReader::VCF_MISSING_CHAR_1)?1:2;
 }
 
 
@@ -596,7 +662,49 @@ void VcfRecord::get_breakend_inserted_sequence(string& out) const {
         }
         else if (i<LENGTH-2) { out.append(alt.substr(i+1,LENGTH-i-2)); return; }
     }
-    if (LENGTH>2 && (alt.at(0)==VcfReader::VCF_MISSING_CHAR || alt.at(LENGTH-1)==VcfReader::VCF_MISSING_CHAR)) { out.append(alt.substr(1,LENGTH-2)); return; }
+    if (LENGTH>2 && (alt.at(0)==VcfReader::VCF_MISSING_CHAR_1 || alt.at(LENGTH-1)==VcfReader::VCF_MISSING_CHAR_1)) { out.append(alt.substr(1,LENGTH-2)); return; }
+}
+
+
+void VcfRecord::get_alt_of_breakend_mate(const unordered_map<string,string>& chromosomes, string& out) {
+    const int32_t pos2 = get_breakend_pos();
+    get_breakend_chromosome(tmp_buffer_1);
+    const char char2 = chromosomes.at(tmp_buffer_1).at(pos2-1);
+
+    out.clear();
+    const char c = alt.at(0);
+    if (c==VcfReader::BREAKEND_CHAR_OPEN) {
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.push_back(char2);
+    }
+    else if (c==VcfReader::BREAKEND_CHAR_CLOSE) {
+        out.push_back(char2);
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_OPEN);
+    }
+    else if (alt.find(VcfReader::BREAKEND_CHAR_OPEN)!=string::npos) {
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.push_back(char2);
+    }
+    else {
+        out.push_back(char2);
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+        out.append(chrom);
+        out.push_back(VcfReader::BREAKEND_SEPARATOR);
+        out.append(std::to_string(pos));
+        out.push_back(VcfReader::BREAKEND_CHAR_CLOSE);
+    }
 }
 
 
@@ -689,10 +797,31 @@ void VcfRecord::get_reference_coordinates(bool use_confidence_intervals, coord_t
         }
     }
     else if (sv_type==VcfReader::TYPE_REPLACEMENT) {
-        out.first=pos;
-        out.second=pos+sv_length;
+        out.first=pos-1;
+        out.second=pos-1+sv_length;
+    }
+    else if (sv_type==VcfReader::TYPE_SNP) {
+        out.first=pos-1;
+        out.second=pos;
     }
     else { out.first=INT32_MAX; out.second=INT32_MAX; }
+}
+
+
+bool VcfRecord::is_valid_bnd_alt() {
+    if (is_symbolic) return true;
+    const bool is_single = is_breakend_single();
+    bool is_nonsingle;
+    size_t p;
+
+    p=alt.find(VcfReader::BREAKEND_CHAR_OPEN);
+    if (p!=string::npos) is_nonsingle=alt.find(VcfReader::BREAKEND_CHAR_OPEN,p+1)!=string::npos;
+    else {
+        p=alt.find(VcfReader::BREAKEND_CHAR_CLOSE);
+        if (p!=string::npos) is_nonsingle=alt.find(VcfReader::BREAKEND_CHAR_CLOSE,p+1)!=string::npos;
+        else is_nonsingle=false;
+    }
+    return is_single!=is_nonsingle;
 }
 
 
@@ -702,13 +831,13 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
     uint8_t i;
     int32_t n_fields;
     int64_t n_lines;
-    VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
+    VcfRecord record(high_qual_only,min_qual,pass_only,min_sv_length,max_sv_length,n_samples_to_load,min_allele_frequency,min_nonmissing_frequency);
     ifstream file;
     string buffer;
 
     file.open(vcf_path,std::ifstream::in);
     if (!file.is_open() || !file.good()) throw runtime_error("ERROR: could not read file: " + vcf_path);
-    n_lines=0;
+    n_lines=0; vcf_header.clear();
     while (!file.eof()) {
         c=(char)file.peek();
         if (c==VCF_COMMENT) {
@@ -716,8 +845,10 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
             for (i=0; i<VCF_HEADER_PREFIX_LENGTH; i++) {
                 file.get(c);
                 if (toupper(c)!=VCF_HEADER_PREFIX.at(i)) { is_header=false; break; }
+                else vcf_header.push_back(c);
             }
             if (!is_header) {
+                vcf_header.clear();
                 file.ignore(VcfRecord::STREAMSIZE_MAX,LINE_END);
                 continue;
             }
@@ -733,15 +864,19 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
                     n_fields++;
                     if (n_fields>N_NONSAMPLE_FIELDS_VCF) sample_ids.push_back(buffer);
                     buffer.clear();
+                    vcf_header.push_back(c);
                 }
-                else buffer+=c;
+                else {
+                    buffer+=c;
+                    vcf_header.push_back(c);
+                }
             }
             n_samples_in_vcf=n_fields-N_NONSAMPLE_FIELDS_VCF;
             n_samples_to_load=min(n_samples_to_load,n_samples_in_vcf);
             record.min_n_haplotypes_alt_baseline=n_samples_to_load*min_allele_frequency;
             record.min_n_haplotypes_nonmissing_baseline=n_samples_to_load*min_nonmissing_frequency;
             record.n_samples_to_load=n_samples_to_load;
-            if (n_samples_to_load>record.genotypes.size()) record.genotypes.resize(n_samples_to_load);
+            if (n_samples_to_load>(int32_t)record.genotypes.size()) record.genotypes.resize(n_samples_to_load);
             continue;
         }
         else if (c==EOF) break;
@@ -752,6 +887,22 @@ void VcfReader::for_record_in_vcf(const function<void(VcfRecord& record)>& callb
     }
     file.close();
     if (progress_n_lines!=0) cerr << "Scanned " << n_lines << " total records\n";
+}
+
+
+void VcfReader::print_minimal_header(ofstream& out) const {
+    out << VCF_FORMAT_LINE << '\n';
+    out << vcf_header << '\n';
+}
+
+
+void VcfReader::get_minimal_header(string& out) const {
+    out=VCF_FORMAT_LINE+'\n'+vcf_header;
+}
+
+
+void VcfReader::get_file_path(path& out) const {
+    out=vcf_path;
 }
 
 }

@@ -76,7 +76,7 @@ void test(const function<void(VcfRecord& record)>& callback, const string& test_
     cerr << "   n_samples_to_load: " << n_samples_to_load << '\n';
     cerr << "   min_allele_frequency: " << min_af << '\n';
     cerr << "   min_nonmissing_frequency: " << min_nmf << '\n';
-    VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf);
+    VcfReader reader(input_vcf,10000,high_qual_only,min_qual,pass_only,min_sv_length,INT32_MAX,n_samples_to_load,min_af,min_nmf);
     outstream.open(test_vcf);
     reader.for_record_in_vcf(callback);
     outstream.close();
@@ -203,6 +203,61 @@ void test_joint_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOME
 }
 
 
+/**
+ * Currently tuned for the conventions of a specific file
+ */
+void test_joint_snp_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMOSOMES, const vector<double>& MIN_QUALS, const vector<double>& MIN_AFS, const vector<double>& MIN_NMFS, const string& N_THREADS, const path& tmp1_vcf, const path& tmp2_vcf, const path& input_vcf, const path& truth_vcf, const path& test_vcf) {
+    bool high_qual_only, pass_only;
+    size_t min_sv_length, n_samples_to_load, n_haplotypes;
+    double min_qual, min_af, min_nmf;
+    string command;
+
+    n_samples_to_load=47;
+    for (auto& chromosome: CHROMOSOMES) {
+        n_haplotypes=n_samples_to_load<<1;
+        command="bcftools norm --threads "+N_THREADS+" --multiallelics - "+joint_vcf.string();
+        run_command(command,tmp2_vcf);
+        command="bcftools annotate --threads "+N_THREADS+" -x INFO/AC,INFO/AF,INFO/AN "+tmp2_vcf.string();
+        run_command(command,tmp1_vcf);
+        command="rm -f "+tmp2_vcf.string(); run_command(command);
+        command="bcftools +fill-tags "+tmp1_vcf.string()+" -Ob -o "+input_vcf.string()+" -- -t AC,AF,AN,F_MISSING"; run_command(command);
+        command="rm -f tmp1_vcf"; run_command(command);
+        // Testing get_samples_with_alt()
+        command="bcftools view -H "+input_vcf.string()+R"( | awk '{for (i=10; i<=56; i++) { if (substr($i,1,3)=="0/1" || substr($i,1,3)=="0|1" || substr($i,1,3)=="1/0" || substr($i,1,3)=="1|0" || substr($i,1,3)=="1/1" || substr($i,1,3)=="1|1" || substr($i,1,3)=="./1" || substr($i,1,3)==".|1" || substr($i,1,3)=="1/." || substr($i,1,3)=="1|.") printf("%d,",(i-10)); } printf("\n");}')";
+        run_command(command,truth_vcf);
+        high_qual_only=false; min_qual=0; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
+        test(test_callback_2,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        // Filtering by QUAL
+        high_qual_only=true; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
+        for (auto& min_qual: MIN_QUALS) {
+            command="bcftools filter --threads "+N_THREADS+R"( --include "QUAL>=)"+to_string(min_qual)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
+            run_command(command,truth_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        }
+        // Filtering by FILTER skipped, since FILTER is always '.'
+        // Removing all sample columns
+        high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_af=0.0; min_nmf=0.0;
+        command="cut -f 1-9 "+input_vcf.string()+R"( | grep "^[^#]")";
+        run_command(command,truth_vcf);
+        test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,0,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        // Filtering by AF
+        high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_nmf=0.0;
+        for (auto& min_af: MIN_AFS) {
+            command="bcftools filter --threads "+N_THREADS+R"( --include "AC/)"+to_string(n_haplotypes)+">="+to_string(min_af)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
+            run_command(command,truth_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        }
+        // Filtering by MIN_NMF
+        high_qual_only=false; min_qual=0.0; pass_only=false; min_sv_length=0; min_af=0.0;
+        for (auto& min_nmf: MIN_NMFS) {
+            command="bcftools filter --threads "+N_THREADS+R"( --include "AN/)"+to_string(n_haplotypes)+">="+to_string(min_nmf)+R"(" )"+input_vcf.string()+R"( | grep "^[^#]" | sed 's/PASS/./g')";
+            run_command(command,truth_vcf);
+            test(test_callback,"HPRC",chromosome,high_qual_only,min_qual,pass_only,min_sv_length,n_samples_to_load,min_af,min_nmf,input_vcf,truth_vcf,test_vcf);
+        }
+    }
+}
+
+
 int main(int argc, char* argv[]) {
     const path ROOT_DIR = path(argv[1]);  // Assumed to contain every raw input file used for testing
     const char* BCFTOOLS_PLUGINS_DIR = argv[2];  // Needed by bcftools +fill-tags
@@ -222,6 +277,7 @@ int main(int argc, char* argv[]) {
     const vector<string> CHROMOSOMES_HPRC = {"chr1","chr2","chr3","chr4","chr5","chr6","chr7","chr8","chr9","chr10","chr11","chr12","chr13","chr14","chr15","chr16","chr17","chr18","chr19","chr20","chr21","chr22"};
     const vector<string> SAMPLE_IDS = {"NA24385", "HG03125", "HG00512"};
     const string HPRC_FILE_ID = "hprc-v1.1-mc-chm13.raw.sv";
+    const string HPRC_SNP_FILE_ID = "HPRC.DV.joint.g";
 
     string command;
     path input_vcf, test_vcf, truth_vcf, tmp1_vcf, tmp2_vcf;  // Temporary files created during the tests
@@ -240,5 +296,8 @@ int main(int argc, char* argv[]) {
     command="rm -f "+input_vcf.string()+" "+test_vcf.string()+" "+truth_vcf.string(); run_command(command);
     test_joint_vcf_hprc(ROOT_DIR/(HPRC_FILE_ID+".vcf.gz"),CHROMOSOMES_HPRC,MIN_QUALS,MIN_AFS,MIN_NMFS,N_THREADS,tmp1_vcf,tmp2_vcf,input_vcf,truth_vcf,test_vcf);
     command="rm -f "+input_vcf.string()+" "+test_vcf.string()+" "+truth_vcf.string()+" "+tmp1_vcf.string()+" "+tmp2_vcf.string(); run_command(command);
+    test_joint_snp_vcf_hprc(ROOT_DIR/(HPRC_SNP_FILE_ID+".vcf.gz"),CHROMOSOMES_HPRC,MIN_QUALS,MIN_AFS,MIN_NMFS,N_THREADS,tmp1_vcf,tmp2_vcf,input_vcf,truth_vcf,test_vcf);
+    command="rm -f "+input_vcf.string()+" "+test_vcf.string()+" "+truth_vcf.string()+" "+tmp1_vcf.string()+" "+tmp2_vcf.string(); run_command(command);
+
     return 0;
 }

@@ -37,12 +37,18 @@ interval_t CigarInterval::get_forward_ref_interval() const{
 
 
 int32_t CigarInterval::get_ref_length() const{
-    return labs(ref_stop-ref_start);
+    return abs(ref_stop-ref_start);
 }
 
 
 int32_t CigarInterval::get_query_length() const{
-    return labs(query_stop-query_start);
+    return abs(query_stop-query_start);
+}
+
+
+int32_t CigarInterval::get_op_length() const{
+    // Return the maximum of the two lengths, since the cigar interval could be a deletion or insertion
+    return max(abs(ref_stop-ref_start), abs(query_stop-query_start));
 }
 
 
@@ -158,6 +164,7 @@ bool CigarInterval::is_clip() const{
 // Cigar      [-----)
 // Window     [-----)
 void for_cigar_interval_in_alignment(
+        bool unclip_coords,
         Alignment& alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,
@@ -190,17 +197,17 @@ void for_cigar_interval_in_alignment(
     // Make sure to transfer the reversal status
     intersection.is_reverse = alignment.is_reverse();
 
-    alignment.for_each_cigar_interval([&](const sv_merge::CigarInterval& c) {
-//        cerr << "-- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
+    alignment.for_each_cigar_interval(unclip_coords, [&](const sv_merge::CigarInterval& c) {
+//        cerr << "(" << cigar_code_to_char[c.code] << "," << c.length << ") " << c.is_reverse << " -- r:" << c.ref_start << ',' << c.ref_stop << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
         while (ref_iter != ref_intervals.end()) {
             intersection.code = c.code;
-            intersection.length = c.length;
 
             intersection.ref_start = max(ref_iter->first, c.ref_start);
             intersection.ref_stop = min(ref_iter->second, c.ref_stop);
 
             auto l = intersection.ref_stop - intersection.ref_start;
+            intersection.length = l;
 
 //            cerr << "++ r:" << ref_iter->first << ',' << ref_iter->second << " q:" << c.query_start << ',' << c.query_stop << '\n';
 
@@ -264,12 +271,12 @@ void for_cigar_interval_in_alignment(
 
         while (query_iter != query_intervals.end()) {
             intersection.code = c.code;
-            intersection.length = c.length;
 
             intersection.query_start = max(query_iter->first, c.query_start);
             intersection.query_stop = min(query_iter->second, c.query_stop);
 
             auto l = intersection.query_stop - intersection.query_start;
+            intersection.length = l;
 
 //            cerr << "++ r:" << c.ref_start << ',' << c.ref_stop << " q:" << query_iter->first << ',' << query_iter->second << '\n';
 
@@ -350,7 +357,7 @@ void get_formatted_sequence_of_cigar_interval(
         auto l_ref = b_ref - a_ref;
         auto l = max(l_ref,l_query);
 
-//        cerr << l_query << ',' << l_ref << '\n';
+//        cerr << l_query << ',' << l_ref << ',' << a_query << ',' << a_query + l_ref << '\n';
 
         s_query = query_sequence.substr(a_query, l_query);
         s_ref = ref_sequence.substr(a_ref, l_ref);

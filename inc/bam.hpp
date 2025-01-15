@@ -1,3 +1,6 @@
+#pragma once
+
+#include <filesystem>
 #include <functional>
 #include <cstdlib>
 #include <utility>
@@ -5,6 +8,7 @@
 #include <array>
 #include <span>
 
+using std::filesystem::path;
 using std::function;
 using std::string;
 using std::array;
@@ -12,11 +16,10 @@ using std::pair;
 using std::span;
 
 #include "htslib/include/htslib/sam.h"
-#include "Filesystem.hpp"
 #include "Alignment.hpp"
 #include "Sequence.hpp"
+#include "Region.hpp"
 
-using ghc::filesystem::path;
 
 
 namespace sv_merge {
@@ -38,6 +41,7 @@ static const uint8_t bam_cigar_mask = 15;          // 0b1111
 class HtsAlignment: public Alignment{
 private:
     string query_sequence;
+    vector<uint8_t> qualities;
     bam1_t* hts_alignment;
     bool is_decompressed = false;
     bool reverse;
@@ -46,7 +50,7 @@ public:
     HtsAlignment(bam1_t* a);
 
     /// Iterating
-    void for_each_cigar_interval(const function<void(const CigarInterval&)>& f) override;
+    void for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval&)>& f) override;
     void for_each_cigar_tuple(const function<void(const CigarTuple&)>& f) override;
 
     /// Accessing
@@ -55,7 +59,10 @@ public:
     // needed. Unfortunately this makes the getter non-const...
     void get_query_sequence(string& result, int32_t start, int32_t stop) override;
     void get_query_sequence(string& result) override;
+    void get_query_sequence(BinarySequence<uint64_t>& result) override;
+    void get_qualities(vector<uint8_t>& result) override;
     void get_query_name(string& result) const override;
+    void get_tag_as_string(const string& name, string& result, bool allow_missing=false) const override;
     [[nodiscard]] int32_t get_query_length() const override;
     [[nodiscard]] int32_t get_ref_start() const override;
     [[nodiscard]] int32_t get_ref_stop() const override;
@@ -63,6 +70,7 @@ public:
     [[nodiscard]] bool is_unmapped() const override;
     [[nodiscard]] bool is_reverse() const override;
     [[nodiscard]] bool is_primary() const override;
+    [[nodiscard]] bool is_supplementary() const override;
     [[nodiscard]] bool is_not_primary() const;
 };
 
@@ -97,14 +105,18 @@ void decompress_bam_sequence(const bam1_t* alignment, string& sequence, int32_t 
 
 void decompress_cigar_bytes(uint32_t bytes, CigarTuple& cigar);
 
+void for_alignment_in_bam(path bam_path, const function<void(Alignment& alignment)>& f);
+
 void for_alignment_in_bam_region(path bam_path, string region, const function<void(Alignment& alignment)>& f);
+
+void for_read_in_bam(path bam_path, const function<void(Sequence& sequence)>& f);
 
 void for_read_in_bam_region(path bam_path, string region, const function<void(Sequence& sequence)>& f);
 
 void for_alignment_in_bam_subregions(
         path bam_path,
         string region,
-        const vector<Region>& subregions,
+        const span<const Region>& subregions,
         const function<void(Alignment& alignment, span<const Region>& overlapping_regions)>& f
 );
 

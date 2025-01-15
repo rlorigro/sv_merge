@@ -1,15 +1,15 @@
 #pragma once
 
-#include "Filesystem.hpp"
 #include "Region.hpp"
 #include "VcfReader.hpp"
 #include "bdsg/hash_graph.hpp"
 #include "misc.hpp"
+#include "BinarySequence.hpp"
+#include "Sequence.hpp"
 
 using sv_merge::Region;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
-using ghc::filesystem::path;
 using bdsg::nid_t;
 using bdsg::HashGraph;
 using bdsg::handle_t;
@@ -21,11 +21,16 @@ using bdsg::path_handle_t;
 #include <unordered_map>
 #include <unordered_set>
 #include <ostream>
+#include <filesystem>
+#include <algorithm>
 
+using std::filesystem::path;
 using std::string;
 using std::unordered_map;
 using std::unordered_set;
 using std::ofstream;
+using std::reverse;
+using std::tuple;
 
 namespace sv_merge {
 
@@ -54,8 +59,10 @@ public:
      * A chromosome might not appear in the map. A chromosome might appear in the map and its list of intervals might be
      * empty. The tandem track is used for adding flanking regions with enough non-tandem sequence to the graph, which
      * is useful for seeding graph alignments: see `build()` for more details.
+     * @param min_variant_length variants that involve less than this number of basepairs are used to build the graph,
+     * but they are not associated with nodes and edges.
      */
-    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {});
+    VariantGraph(const unordered_map<string,string>& chromosomes, const unordered_map<string,vector<interval_t>>& tandem_track = {}, int32_t min_variant_length = 1, bool force_uppercase = false, bool silent = true);
 
     /**
      * Given a list of VCF records from the same chromosome, the procedure builds a corresponding bidirected graph and
@@ -87,12 +94,48 @@ public:
      * created; otherwise, a single node [A..B) is created; this is useful to avoid creating long nodes when the
      * breakpoints of a chromosome form clusters that are far away from one another; this parameter should be set to a
      * small multiple of average read length;
+     * @param x,y (zero-based) if these are specified, and if `x` is smaller (resp. `y` is greater) than all the
+     * breakpoints in `records` on the chromosome in the CHROM field: compute flanks based on `x` and `y` rather than on
+     * the leftmost/rightmost breakpoints in `records`;
      * @param deallocate_ref_alt TRUE: the procedure deallocates every REF and ALT field in `records`; this can be
      * useful for reducing space, since these fields might contain explicit DNA sequences;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
-     * field of a VCF record in order to be considered.
+     * field of a VCF record in order to be considered;
+     * @param acyclic builds a bidirected graph with no cycle, by treating DUP and CNV calls like INS of just one copy,
+     * INV calls like replacements, and by not including any BND call; DUP/CNV calls (respectively, INV calls) with
+     * identical intervals do not create duplicated nodes/edges.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, bool deallocate_ref_alt, const vector<string>& callers={});
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {}, bool acyclic = false);
+
+    /**
+     * If `p<q` (zero-based), the procedure builds a trivial graph that contains one node for string `chromosome[p..q)`
+     * and one node for each of its flanking sequences (if they exist). If `p=q`, the central node is replaced by a
+     * single edge.
+     *
+     * @param flank_length (>0) ensures that an interval of this length, with no overlap to the tandem track, is present
+     * before `p` and at or after `q`.
+     */
+    void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
+
+    /**
+     * Two VCF records are equivalent iff they have the same elements in `vcf_record_to_edge`, and if such elements
+     * appear in the same order or in reverse order. For each maximal set of equivalent records, the procedure sets
+     * `is_redundant=true` for all records except one (chosen arbitrarily).
+     */
+    void mark_redundant_records();
+
+    /**
+     * Adds a new handle to `graph`. Just a simple wrapper of `HashGraph.create_handle()`.
+     *
+     * @param tmp_buffer temporary space.
+     */
+    handle_t sequence2handle(const string& sequence, string& tmp_buffer);
+
+    /**
+     * @return TRUE iff a graph built from `records` would contain at least one non-reference edge.
+     * This can be useful for deciding which `build()` function to call.
+     */
+    bool would_graph_be_nontrivial(vector<VcfRecord>& records);
 
     /**
      * Serializes the bidirected graph, including paths, if any.
@@ -108,9 +151,17 @@ public:
     vector<string> load_gfa(const path& gfa_path);
 
     /**
+     * Helper function to construct an internal BDSG graph path using GAF path convention
+     * @param alignment_name name which must be unique to all other paths
+     * @param path a vector of node names and reversals
+     */
+    void add_gaf_path_to_graph(const string& alignment_name, const vector <pair<string,bool> >& path);
+
+    /**
      * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a
      * sequence of non-reference edges. The procedure writes to a file every R such that there is a (possibly circular)
-     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse.
+     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse. The procedure
+     * writes to another file every R for which this does not hold.
      *
      * Remark: in the current implementation, DELs that remove a prefix or suffix of a chromosome create no edge in the
      * graph, so they cannot be supported by a path and they are not printed in output. This could be solved by creating
@@ -121,12 +172,18 @@ public:
      *
      * Remark: for every pair of mated BND records, the procedure outputs just one of them.
      *
-     * @param print_all_records TRUE=disregard paths and print every VCF record in input (including those that were not
-     * used for building the graph);
+     * @param print_all_records TRUE=disregard paths and print every VCF record to `supported` (including those that
+     * were not used for building the graph), and no VCF record to `unsupported`;
      * @param callers caller names (lowercase), used just for printing statistics; caller names must occur in the ID
      * field of a VCF record to be counted.
      */
-    void print_supported_vcf_records(ofstream& outstream, bool print_all_records, const vector<string>& callers= {});
+    void print_supported_vcf_records(ofstream& supported, ofstream& unsupported, bool print_all_records, const vector<string>& callers = {});
+
+    /**
+     * Iterates over every VCF record and the names of its supporting paths (if any). See
+     * `print_supported_vcf_records()` for details on supporting paths.
+     */
+    void for_each_vcf_record_with_supporting_paths(const function<void(size_t id, const VcfRecord& record, const vector<string>& supporting_paths)>& callback);
 
     /**
      * Writes every path handle in `graph` as a distinct VCF record:
@@ -146,12 +203,45 @@ public:
     void paths_to_vcf_records(ofstream& outstream);
 
     /**
-     * If `mode=TRUE`, makes `out` the set of all IDs of nodes that have edges only on one side. Otherwise, prints
+     * Sets `output_path` to the lexicographically smaller between `input_path` and its reverse.
+     *
+     * @param buffer temporary space.
+     */
+    static void canonize_gaf_path(string& input_path, string& output_path, string& buffer);
+
+    void get_main_chromosome(string& result);
+
+    void get_region_of_node(const handle_t& h, Region& result);
+
+    /**
+     * If `mode=TRUE`, makes `out` the set of all IDs of nodes that have neighbors only on one side. Otherwise, prints
      * information about dangling nodes to STDERR.
      */
     void get_dangling_nodes(bool mode, unordered_set<nid_t>& out) const;
 
     size_t get_n_dangling_nodes() const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side.
+     */
+    bool is_dangling_node(const handle_t& node_handle) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side.
+     */
+    bool is_dangling_node(const nid_t& node_id) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side, and belongs to the chromosome where all the POS
+     * fields of `vcf_records` are located.
+     */
+    bool is_flanking_node(const handle_t& node_handle) const;
+
+    /**
+     * @return TRUE iff the node has neighbors only on one side, and belongs to the chromosome where all the POS
+     * fields of `vcf_records` are located.
+     */
+    bool is_flanking_node(const nid_t& node_id) const;
 
     /**
      * @return the number of edges between two reference nodes that belong to different chromosomes. This might be
@@ -165,12 +255,12 @@ public:
      */
     size_t get_n_ins_edges() const;
 
-    bool is_reference_node(const nid_t& node_id);
+    bool is_reference_node(const nid_t& node_id) const;
 
     /**
      * @param node_handle in any orientation.
      */
-    bool is_reference_node(const handle_t& node_handle);
+    bool is_reference_node(const handle_t& node_handle) const;
 
     /**
      * @param edge in any orientation.
@@ -233,6 +323,11 @@ public:
     void load_edge_record_map(const vector<pair<edge_t,size_t>>& map, size_t n_vcf_records);
 
     /**
+     * @return a copy of `edge_to_vcf_record`.
+     */
+    unordered_map<edge_t,vector<size_t>> get_edge_record_map();
+
+    /**
      * Erases `node_to_chromosome`.
      */
     void node_to_chromosome_clear();
@@ -251,6 +346,42 @@ public:
      * Inserts elements into `insertion_handles_set`.
      */
     void insertion_handles_set_insert(const string& node_label, const vector<string>& node_labels);
+
+    /**
+     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
+     *
+     * @param pos zero-based; can be equal to `chromosome_length`;
+     * @param flank_length >0;
+     * @return the largest `x` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
+     * `y<pos`; returns `INT32_MAX` if no such interval exists.
+     */
+    int32_t get_flank_boundary_left(const string& chromosome_id, int32_t pos, int32_t flank_length);
+
+    /**
+     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
+     *
+     * @param pos zero-based;
+     * @param flank_length >0;
+     * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
+     * `x>=pos`; returns `INT32_MAX` if no such interval exists.
+     */
+    int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
+
+    /**
+     * A VCF record that is covered by `path` corresponds to a (not necessarily consecutive) sequence of non-reference
+     * edges in `path`. If `path` uses the VCF record multiple times, the same sequence of edges occurs multiple times
+     * in `path` (possibly in different orientations). Every such occurrence corresponds to an interval in the string
+     * that corresponds to `path`. The procedure pads every such interval to the left and to the right by `flank_length`
+     * positions, as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
+     *
+     * @param edges_of_the_record sequence of edges that represents the VCF record; assumed to be canonized and all
+     * distinct;
+     * @param out the procedure sets this array to the sorted list of padded intervals.
+     */
+    void vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<pair<int32_t, int32_t>>& out);
+
+
+
 
 private:
     /**
@@ -272,7 +403,12 @@ private:
     const unordered_map<string,string>& chromosomes;
     const uint8_t n_chromosomes;
     const unordered_map<string,vector<interval_t>>& tandem_track;
+    int32_t min_variant_length;
+    bool force_uppercase;
+    bool silent;
     size_t n_vcf_records;
+    string main_chromosome;  // The CHROM field of every VCF record
+    int32_t main_chromosome_length;
     unordered_set<string> bnd_ids;  // ID field of every BND record
 
     /**
@@ -295,6 +431,7 @@ private:
      */
     vector<handle_t> insertion_handles;
     unordered_set<handle_t> insertion_handles_set;  // Same content as above
+    unordered_map<tuple<int32_t,int32_t,int32_t>,handle_t> interval_to_insertion_handle;  // Used only for building acyclic bidirected graphs
 
     /**
      * Maps every non-reference edge of the graph (in canonical form) to the VCF records that support it.
@@ -310,9 +447,14 @@ private:
      * Reused temporary space
      */
     vector<bool> printed, initialized;
+    vector<bool> is_reverse_buffer;
+    vector<int32_t> node_lengths_buffer;
+    vector<nid_t> node_ids_buffer;
+    vector<vector<string>> path_names;
     vector<vector<size_t>> flags;
     interval_t tmp_interval;
     vector<edge_t> tmp_edges;
+    vector<interval_t> intervals_buffer;
 
     /**
      * @return the index of a closest element to `position` in `chunk_first`.
@@ -322,6 +464,8 @@ private:
     /**
      * Adds `(from,to)` to `graph` if not already present, and connects `record_id` to the edge in `edge_to_vcf_record`
      * and `vcf_record_to_edge`.
+     *
+     * @param record_id if `SIZE_MAX`, the record is not associated with the edge.
      */
     void add_nonreference_edge(const handle_t& from, const handle_t& to, size_t record_id);
 
@@ -378,26 +522,6 @@ private:
     void get_vcf_records_with_edges_impl(const vector<edge_t>& edges, bool identical, vector<size_t>& out);
 
     /**
-     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
-     *
-     * @param pos zero-based;
-     * @param tandem_track a sorted list of non-overlapping intervals per chromosome, with format `[x..y)`;
-     * @return the smallest `y` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
-     * `x>pos`; returns `INT32_MAX` if no such interval exists.
-     */
-    int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
-
-    /**
-     * Remark: for simplicity this is implemented as a linear scan. It could be made faster.
-     *
-     * @param pos zero-based; can be equal to `chromosome_length`;
-     * @param tandem_track a sorted list of non-overlapping intervals per chromosome, with format `[x..y)`;
-     * @return the largest `x` such that `[x..y]` has no intersection with `tandem_track`, `y-x+1=flank_length`, and
-     * `y<pos`; returns `INT32_MAX` if no such interval exists.
-     */
-    int32_t get_flank_boundary_left(const string& chromosome_id, int32_t pos, int32_t flank_length);
-
-    /**
      * Remark: this is a recursive procedure that creates new string objects. It should be implemented more efficiently
      * with a stack of characters and without recursion.
      */
@@ -413,6 +537,31 @@ private:
     static void print_bnds(vector<pair<string,string>>& bnds) ;
 
     static void increment_caller_count(const VcfRecord& record, const vector<string>& callers, vector<vector<size_t>>& caller_count, uint8_t column);
+
+    int32_t get_flank_boundary_right_impl(int32_t pos, int32_t sequence_length, const vector<interval_t>& intervals, int32_t flank_length);
+
+    int32_t get_flank_boundary_left_impl(int32_t pos, const vector<interval_t>& intervals, int32_t flank_length);
+
+    /**
+     * Appends to `out` every interval `[x..y)` that results from the intersection of `tandem_track` and `node_id`.
+     * Positions are expressed relative to the the first character of `node_id` when laid out in the specified
+     * orientation. The order of the intervals is the same as in `tandem_track`.
+     *
+     * @param node_id assumed to be a reference node;
+     * @param offset the procedure adds this offset to every position in output.
+     */
+    void get_tandem_intervals(nid_t node_id, int32_t node_length, bool is_reverse, int32_t offset, vector<interval_t>& out);
+
+    /**
+     * Given a path, the set of tandem intervals of each reference node in the path (considered in its orientation)
+     * induces a list of maximal non-adjacent tandem intervals `[x..y)` on the sequence of characters spelled out by the
+     * path, where positions are expressed relative to the the first character of the path. The procedure sets `out` to
+     * such a sorted list.
+     *
+     * Remark: if a non-reference node in the path is adjacent to a tandem interval, it is assumed to consist entirely
+     * of tandems. This is arbitrary and may be wrong.
+     */
+    void get_tandem_intervals(const vector<nid_t>& node_ids, const vector<bool>& is_reverse, const vector<int32_t>& node_lengths, vector<interval_t>& out);
 };
 
 }

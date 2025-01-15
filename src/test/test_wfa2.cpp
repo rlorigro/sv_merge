@@ -6,9 +6,8 @@ using std::runtime_error;
 using std::string;
 using std::cerr;
 
-#include "Filesystem.hpp"
-
-using ghc::filesystem::path;
+#include <filesystem>
+using std::filesystem::path;
 
 #include "wfa2/include/wfa2lib/bindings/cpp/WFAligner.hpp"
 
@@ -24,6 +23,9 @@ int main(){
 
     // Display CIGAR & score
     string cigar = aligner.getCIGAR(true);
+
+
+
     cerr << "CIGAR: " << cigar  << '\n';
     cerr << "Alignment score " << aligner.getAlignmentScore() << '\n';
     return 0;

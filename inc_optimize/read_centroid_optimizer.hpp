@@ -1,6 +1,6 @@
 #pragma once
 #include "TransitiveMap.hpp"
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -37,10 +37,11 @@ namespace sv_merge {
 
 
 /// Data class to contain the variables of the ILP, int64_t IDs intended to be reused from the TransMap
-class ReadClusterVariables{
+class ReadCentroidVariables{
 public:
     // Edges where the left node is the parent
     unordered_map <pair<int64_t,int64_t>, BoolVar> edges;
+    unordered_map <int64_t, BoolVar> is_parent;
 
     // Cost of all edges assigned
     LinearExpr cost_d;
@@ -50,22 +51,24 @@ public:
 };
 
 
-void construct_cluster_model(
+void construct_read_model(
         const TransMap& transmap,
         int64_t sample_id,
         CpModelBuilder& model,
-        ReadClusterVariables& vars,
-        vector <vector<int64_t> >& clusters
-);
+        ReadCentroidVariables& vars,
+        vector<int64_t>& representatives);
 
 
-void cluster_reads(
+void optimize_reads_with_d(TransMap& transmap, int64_t sample_id, vector<int64_t>& representatives);
+
+
+void optimize_reads_with_d_and_n(
         TransMap& transmap,
         int64_t sample_id,
         int64_t d_weight,
         int64_t n_weight,
-        vector <vector<int64_t> >& clusters
-);
+        vector<int64_t>& representatives
+        );
 
 
 }

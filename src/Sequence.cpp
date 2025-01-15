@@ -9,8 +9,66 @@ namespace sv_merge {
 
 
 Sequence::Sequence(const string& name, const string& sequence):
+        sequence(sequence),
+        name(name)
+{}
+
+
+StrandedSequence::StrandedSequence(const string& name, const string& sequence, bool is_reverse):
+        sequence(sequence),
         name(name),
-        sequence(sequence)
+        is_reverse(is_reverse)
+{}
+
+
+StrandedSequence::StrandedSequence(const string& name, const string& sequence):
+        sequence(sequence),
+        name(name),
+        is_reverse(false)
+{}
+
+
+StrandedSequence::StrandedSequence():
+        sequence(),
+        name(),
+        is_reverse(false)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities, bool is_reverse):
+        sequence(sequence),
+        name(name),
+        qualities(qualities),
+        is_reverse(is_reverse)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, const vector<uint8_t>& qualities):
+        sequence(sequence),
+        name(name),
+        qualities(qualities),
+        is_reverse(false)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const string& sequence, bool is_reverse):
+        sequence(sequence),
+        name(name),
+        is_reverse(is_reverse)
+{}
+
+
+StrandedQSequence::StrandedQSequence(const string& name, const BinarySequence<uint64_t>& sequence):
+        sequence(sequence),
+        name(name),
+        is_reverse(false)
+{}
+
+
+StrandedQSequence::StrandedQSequence():
+        sequence(),
+        name(),
+        is_reverse(false)
 {}
 
 
