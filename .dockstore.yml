@@ -84,3 +84,7 @@ workflows:
   subclass: wdl
   publish: True
   primaryDescriptorPath: /wdl/subset_n_samples_from_vcf.wdl
+- name: subset_csv_samples_using_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/subset_csv_samples_using_vcf.wdl

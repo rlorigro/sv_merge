@@ -1,7 +1,7 @@
 version 1.0
 
 
-task SubsetNSamplesFromVcf {
+task SubsetNSamples {
     input {
         File vcf_gz
         File vcf_gz_tbi
@@ -34,14 +34,14 @@ task SubsetNSamplesFromVcf {
 }
 
 
-workflow VcfdistEvaluation {
+workflow SubsetNSamplesFromVcf {
     input {
         Int n
         File vcf_gz
         File vcf_gz_tbi
     }
 
-    call SubsetNSamplesFromVcf as subset { input:
+    call SubsetNSamples as subset { input:
         vcf_gz = vcf_gz,
         vcf_gz_tbi = vcf_gz_tbi,
         n = n
