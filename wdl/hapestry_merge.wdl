@@ -38,6 +38,7 @@ task merge {
         Boolean skip_solve = false
         Boolean samplewise = false
         Boolean compress = false
+        Int compress_quantum = 0
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
@@ -107,6 +108,7 @@ task merge {
         ~{if skip_solve then "--skip_solve" else ""} \
         ~{if samplewise then "--samplewise" else ""} \
         ~{if compress then "--compress" else ""} \
+        ~{if compress then "--compress_quantum " + compress_quantum else ""} \
         ~{if rescale_weights then "--rescale_weights" else ""} \
         ~{if prune_with_d_min then "--prune_with_d_min" else ""} \
         ~{if skip_nonessential_logs then "--skip_nonessential_logs" else ""} \
@@ -167,6 +169,7 @@ task merge {
         samplewise: "Solve each sample independently"
         rescale_weights: "Use quadratic difference-from-best scaling for weights"
         compress: "Use reversible compression of the transmap to simplify before passing to solver"
+        compress_quantum: "Rate at which weights should be compressed. By default there are 1000 possible values. If quantum=2, then 500. etc."
         prune_with_d_min: "Use initial solution of d_min to prune haps before starting final joint solution"
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         obscure_sample_names_from_csv: "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID."
@@ -220,6 +223,8 @@ workflow hapestry_merge {
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
         Boolean obscure_sample_names_from_csv = false
+        Boolean compress = false
+        Int compress_quantum = 0
 
         String docker
         File? monitoring_script
@@ -247,6 +252,8 @@ workflow hapestry_merge {
         prune_with_d_min: "Use initial solution of d_min to prune unused haplotypes before starting final joint model"
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         obscure_sample_names_from_csv: "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID."
+        compress: "Use reversible compression of the transmap to simplify before passing to solver"
+        compress_quantum: "Rate at which weights should be compressed. By default there are 1000 possible values. If quantum=2, then 500. etc."
         tandems_bed: "BED file of tandem repeats"
         windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
@@ -276,6 +283,8 @@ workflow hapestry_merge {
             prune_with_d_min = prune_with_d_min,
             skip_nonessential_logs = skip_nonessential_logs,
             obscure_sample_names_from_csv = obscure_sample_names_from_csv,
+            compress = compress,
+            compress_quantum = compress_quantum,
             docker = docker,
             monitoring_script = monitoring_script,
             runtime_attributes = merge_runtime_attributes
