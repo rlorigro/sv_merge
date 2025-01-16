@@ -1799,7 +1799,7 @@ int main (int argc, char* argv[]){
 
     app.add_flag("--compress", optimizer_config.use_compression, "Use reversible compression methods to simplify the TransMap (problem input) before solving with LP solver");
 
-    app.add_flag("--compress_quantum", optimizer_config.compress_quantum, "Constant by which to quantize the weight comparisons. By default (quantum=0) edges may have a maximum of up to 1000 different values. E.g. quantum=2, possible values = 500");
+    app.add_option("--compress_quantum", optimizer_config.compress_quantum, "Constant by which to quantize the weight comparisons. By default (quantum=0) edges may have a maximum of up to 1000 different values. E.g. quantum=2, possible values = 500");
 
     app.add_flag("--prune_with_d_min", optimizer_config.prune_with_d_min, "Use d_min solution to remove all edges not used");
 
