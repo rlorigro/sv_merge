@@ -38,7 +38,7 @@ task merge {
         Boolean skip_solve = false
         Boolean samplewise = false
         Boolean compress = false
-        Int compress_quantum = 0
+        Float compress_quantum = 0
         Boolean rescale_weights = false
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
@@ -224,7 +224,7 @@ workflow hapestry_merge {
         Boolean skip_nonessential_logs = false
         Boolean obscure_sample_names_from_csv = false
         Boolean compress = false
-        Int compress_quantum = 0
+        Float compress_quantum = 0
 
         String docker
         File? monitoring_script
