@@ -43,6 +43,7 @@ task merge {
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
         Boolean obscure_sample_names_from_csv = false
+        Boolean no_sum_constraints = false
         Boolean upload_debug_data = false
 
         String docker = "fcunial/hapestry:merge"
@@ -113,6 +114,7 @@ task merge {
         ~{if prune_with_d_min then "--prune_with_d_min" else ""} \
         ~{if skip_nonessential_logs then "--skip_nonessential_logs" else ""} \
         ~{if obscure_sample_names_from_csv then "--obscure_sample_names_from_csv" else ""} \
+        ~{if no_sum_constraints then "--no_sum_constraints" else ""} \
         ~{if defined(gurobi_license) then "--use_gurobi" else ""}
 
         # Ensure write buffers are flushed to disk
@@ -173,6 +175,7 @@ task merge {
         prune_with_d_min: "Use initial solution of d_min to prune haps before starting final joint solution"
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         obscure_sample_names_from_csv: "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID."
+        no_sum_constraints: "Use individual constraints instead of a sum for 'any of' implications (strongly recommended NOT to use sums for SCIP)"
         tandems_bed: "BED file of tandem repeats"
         windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }
@@ -223,6 +226,7 @@ workflow hapestry_merge {
         Boolean prune_with_d_min = false
         Boolean skip_nonessential_logs = false
         Boolean obscure_sample_names_from_csv = false
+        Boolean no_sum_constraints = false
         Boolean compress = false
         Float compress_quantum = 0
 
@@ -252,6 +256,7 @@ workflow hapestry_merge {
         prune_with_d_min: "Use initial solution of d_min to prune unused haplotypes before starting final joint model"
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         obscure_sample_names_from_csv: "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID."
+        no_sum_constraints: "Use individual constraints instead of a sum for 'any of' implications (strongly recommended NOT to use sums for SCIP)"
         compress: "Use reversible compression of the transmap to simplify before passing to solver"
         compress_quantum: "Rate at which weights should be compressed. By default there are 1000 possible values. If quantum=2, then 500. etc."
         tandems_bed: "BED file of tandem repeats"
@@ -283,6 +288,7 @@ workflow hapestry_merge {
             prune_with_d_min = prune_with_d_min,
             skip_nonessential_logs = skip_nonessential_logs,
             obscure_sample_names_from_csv = obscure_sample_names_from_csv,
+            no_sum_constraints = no_sum_constraints,
             compress = compress,
             compress_quantum = compress_quantum,
             docker = docker,
