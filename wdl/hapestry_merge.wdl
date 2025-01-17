@@ -120,11 +120,17 @@ task merge {
         # Ensure write buffers are flushed to disk
         sync
 
+        find ~{output_dir}/run/ \( -name "log.csv" \) > list.txt
+        tar -cvzf ~{output_dir}/logs.tar.gz -T list.txt
+        rm -f list.txt
+
         if ~{upload_debug_data}; then
             # tarball only the csv files in the output subdirectories
+
             find ~{output_dir}/run/ \( -name "*.csv" -o -name "*.txt" \) > list.txt
             tar -cvzf ~{output_dir}/non_sequence_data.tar.gz -T list.txt
             rm -f list.txt
+
             find ~{output_dir}/run/ \( -name "*.fasta" -o -name "*.gfa" -o -name "*.gaf" -o -name "*.vcf" \) > list.txt
             tar -cvzf ~{output_dir}/sequence_data.tar.gz -T list.txt
             rm -f list.txt
@@ -191,6 +197,7 @@ task merge {
     }
 
     output {
+        File logs_tarball = output_dir + "/logs.tar.gz"
         File non_sequence_data_tarball = output_dir + "/non_sequence_data.tar.gz"
         File sequence_data_tarball = output_dir + "/sequence_data.tar.gz"
         File beds_tarball = output_dir + "/beds.tar.gz"
