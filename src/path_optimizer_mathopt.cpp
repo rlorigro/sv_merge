@@ -1598,7 +1598,7 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     transmap.sort_adjacency_lists();
     transmap.update_first_of_type();
     transmap.get_mandatory_haplotypes();
-    transmap.compress_haplotypes_global(0);
+    transmap.compress_haplotypes_global(config.compress_quantum);
     write_time_log(subdir, "compress_transmap_initial", t, true);
     t.reset();
 
@@ -1608,10 +1608,10 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     // For d_min step, n_weight is 0 and d_weight is 1 because n is not considered in the objective
     clone.sort_adjacency_lists();
     clone.update_first_of_type();
-    clone.compress_haplotypes_local(0,1,0);
-    clone.solve_easy_samples(0,1,0);
-    clone.compress_reads(0);
-    clone.compress_samples(0);
+    clone.compress_haplotypes_local(0,1,config.compress_quantum);
+    clone.solve_easy_samples(0,1,config.compress_quantum);
+    clone.compress_reads(config.compress_quantum);
+    clone.compress_samples(config.compress_quantum);
     write_time_log(subdir, "compress_transmap_d", t, true);
     t.reset();
 
@@ -1654,15 +1654,15 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     clone.update_first_of_type();
 
     if (clone.has_large_weight(c_n,c_d)) {
-        clone.compress_haplotypes_local(c_n,c_d,0);
+        clone.compress_haplotypes_local(c_n,c_d,config.compress_quantum);
 
         if (clone.has_large_weight(c_n,c_d)) {
-            clone.solve_easy_samples(c_n,c_d,0);
+            clone.solve_easy_samples(c_n,c_d,config.compress_quantum);
         }
     }
 
-    clone.compress_reads(0);
-    clone.compress_samples(0);
+    clone.compress_reads(config.compress_quantum);
+    clone.compress_samples(config.compress_quantum);
 
     write_time_log(subdir, "compress_transmap_d_plus_n", t, true);
 
