@@ -217,7 +217,7 @@ void VariantSupport::get_identity_distribution(bool is_spanning, bool is_reverse
             // q = 7, p(correct) = 0.9921875
             auto q = -log2(1-i);
             // Compute q and make the bottom bin open ended
-            q = max(0.0,q-2.0f);
+            q = max(0.0f,q-2.0f);
 
             // Bin the q value into one of the distribution indexes, with the top bin open ended
             index = min(int64_t(result.size()-1), int64_t(floor(q)));

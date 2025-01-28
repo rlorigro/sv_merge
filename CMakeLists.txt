@@ -535,11 +535,16 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
         GIT_TAG        v0.7.5
 )
+
 FetchContent_MakeAvailable(cpptrace)
+
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+    set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON)
+endif()
 
 include_directories(
         ${cpptrace_SOURCE_DIR}/include
-        ${libdwarf_SOURCE_DIR}
+#        ${libdwarf_SOURCE_DIR}
 #        ${libunwind_SOURCE_DIR}
 )
 
@@ -688,13 +693,13 @@ set(EXECUTABLES
 #        extract_reads_from_windows
         find_windows
         make_local_hapestry_test_set
-        solve_from_csv
-        solve_from_directory
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
     list(APPEND EXECUTABLES
         hapestry
+        solve_from_csv
+        solve_from_directory
     )
 endif()
 
