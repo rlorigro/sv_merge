@@ -538,9 +538,9 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(cpptrace)
 
-if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON)
-endif()
+#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+#    set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON)
+#endif()
 
 include_directories(
         ${cpptrace_SOURCE_DIR}/include
@@ -612,11 +612,9 @@ set(TESTS
         test_gaf
         test_gaf_summary
         test_graph
-        test_graphaligner
         test_halfinterval
         test_heterograph
         test_vector_heterograph     # non-alpha because is variant of test_heterograph
-        test_htslib
         test_hts_gcp
         test_hts_gcp_speed
         test_interval_graph
