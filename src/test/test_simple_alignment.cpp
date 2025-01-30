@@ -19,18 +19,24 @@ using std::cout;
 
 void test_simple_alignment() {
     // Define test sequences
-    string ref_seq = "agactacataggttcaagtctccactccagcatcactagctgattgctcaacatccagctactgagcctgtttcctaggagtacaatgaaaatataaggtgctttgtatagtgcctggtacacagcaagtgctccataagtgtttgctgctcttgggtttgGAGGACAATAATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAAttcatgggccgggcgcggtggctcacacctgcaatcccagcactttgggaggccgaggcgggcggatcacgaggtcaggagatagagaccatcctggctaacacggtgaaaccccgtctctactaaaaatacaaaaaattagcttggcgaggtggcgggcgcctgtagtcccagctacttgggaggctgaggcaggagaatggcgtgaaccccagggggcggagcctgcagtgagccgagatcacgccactgcactccagcctgggcgacagcgagactccgtctcaaaaaacaaacaaacaaacaaacaaacaaaaagccaattcatgctgggtgcagtggctcacacctataatcccagcactttgggaggctgaggtgggaggattgctttgagctcaggagagagcagcctgggcaacagggcaaaaacccatctctacaaaaaaaaaatacaaaaaattagccaggtatggtggcgtggtggctcacatctgtggttccagctactcaagaggctgaggcaggggaattacttgaacccaggaggtggaggttgccgtgagccgagattgcaccactgtacttcagcctgggtgacagagtgagaccctgtctcagaaaaaaaaaaaaaaaaaaaaaaaaaaaggccaattcAACAGCCATCTCCTGCAAGTTCTGTGATGCCAGGCcctcaccacaaccctgtgtggtaggtagcactgttcccatttgacagatgaggagactgaggctcagagaggtgacatggccaccttgaggccagaccgcCCCTTCCAGGCCAGGCTCACTAGGCTCCCCTGATGTGGAGCTGCAGGAAAGCACGTGAGGCCCAAG";
+    string ref_seq =   "agactacataggttcaagtctccactccagcatcactagctgattgctcaacatccagctactgagcctgtttcctaggagtacaatgaaaatataaggtgctttgtatagtgcctggtacacagcaagtgctccataagtgtttgctgctcttgggtttgGAGGACAATAATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAAttcatgggccgggcgcggtggctcacacctgcaatcccagcactttgggaggccgaggcgggcggatcacgaggtcaggagatagagaccatcctggctaacacggtgaaaccccgtctctactaaaaatacaaaaaattagcttggcgaggtggcgggcgcctgtagtcccagctacttgggaggctgaggcaggagaatggcgtgaaccccagggggcggagcctgcagtgagccgagatcacgccactgcactccagcctgggcgacagcgagactccgtctcaaaaaacaaacaaacaaacaaacaaacaaaaagccaattcatgctgggtgcagtggctcacacctataatcccagcactttgggaggctgaggtgggaggattgctttgagctcaggagagagcagcctgggcaacagggcaaaaacccatctctacaaaaaaaaaatacaaaaaattagccaggtatggtggcgtggtggctcacatctgtggttccagctactcaagaggctgaggcaggggaattacttgaacccaggaggtggaggttgccgtgagccgagattgcaccactgtacttcagcctgggtgacagagtgagaccctgtctcagaaaaaaaaaaaaaaaaaaaaaaaaaaaggccaattcAACAGCCATCTCCTGCAAGTTCTGTGATGCCAGGCcctcaccacaaccctgtgtggtaggtagcactgttcccatttgacagatgaggagactgaggctcagagaggtgacatggccaccttgaggccagaccgcCCCTTCCAGGCCAGGCTCACTAGGCTCCCCTGATGTGGAGCTGCAGGAAAGCACGTGAGGCCCAAG";
     string query_seq = "AGACTACATAGGTTCAAGTCTCCACTCCAGCATCACTAGCTGATTGCTCAACATCCAGCTACTGAGCCTGTTTCCTAGGAGTACAATGAAAATATAAGGTGCTTTGTATAGTGCCTGGTACACAGCAAGTGCTCCATAAGTGTTTGCTGCTCTTGGGTTTGGAGGACAATAATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCCTGACCCAGTGTAGACAAAGCTGAAGAGGGTGTGTCTCCTCCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAATTCATGGGCCGGGCGCGGTGGCTCACACCTGCAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATAGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCTTGGCGAGGTGGCGGGCGCCTGTAGTCCCAGCTACTTGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCCAGGGGCGGAGCCTGCAGTGAGCCGAGATCACGCCACTGCACTCCAGCCTGGGCGACAGCGAGACTCCGTCTCAAAAAACAAACAAACAAACAAACAAACAAAAAGCCAATTCATGCTGGGTGCAGTGGCTCACACCTATAATCCCAGCACTTTGGGAGGCTGAGGTGGGAGGATTGCTTTGAGCTCAGGAGAGAGCAGCCTGGGCAACAGGGCAAAACCCATCTCTACAAAAAAAAAATACAAAAAATTAGCCAGGTATGGTGGCGTGGTGGCTCACATCTGTGGTTCCAGCTACTCAAGAGGCTGAGGCAGGGGAATTACTTGAACCCAGGAGGTGGAGGTTGCCGTGAGCCGAGATTGCACCACTGTACTTCAGCCTGGGTGACAGAGTGAGACCCTGTCTCAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAGGCCAATTCAACAGCCATCTCCTGCAAGTTCTGTGATGCCAGGCCCTCACCACAACCCTGTGTGGTAGGTAGCACTGTTCCCATTTGACAGATGAGGAGACTGAGGCTCAGAGAGGTGACATGGCCACCTTGAGGCCAGACCGCCCCTTCCAGGCCAGGCTCACTAGGCTCCCCTGATGTGGAGCTGCAGGAAAGCATGTGAGGCCCAAG";
 
-    // Use WFA2 to generate the CIGAR string
-//    WFAlignerGapAffine aligner(4,2,2,WFAligner::Alignment,WFAligner::MemoryHigh);
+    std::transform(ref_seq.begin(), ref_seq.end(), ref_seq.begin(), ::toupper);
+    std::transform(query_seq.begin(), query_seq.end(), query_seq.begin(), ::toupper);
 
-//    aligner.alignEnd2End(ref_seq, query_seq);
+    // Use WFA2 to generate the CIGAR string
+    WFAlignerGapAffine aligner(4,2,2,WFAligner::Alignment,WFAligner::MemoryHigh);
+
+    aligner.alignEnd2End(ref_seq, query_seq);
 
     // Extract indel edit distance from cigar
-//    string cigar = aligner.getCIGAR(false);
+    string cigar = aligner.getCIGAR(false);
 
-    string cigar = "1X235M42I125M1D857M";
+    cerr << cigar << '\n';
+
+//    cigar = "236M42I343M1D212M1D216M1I210M";
+//    cerr << cigar << '\n';
 
     // Construct SimpleAlignment
     SimpleAlignment alignment(ref_seq, query_seq, cigar);
@@ -75,8 +81,8 @@ void test_simple_alignment() {
                         ref_seq,
                         query_seq,
                         a,
-                        x,
-                        b
+                        b,
+                        x
                 );
 
                 a_all += a;
@@ -92,6 +98,23 @@ void test_simple_alignment() {
     cerr << a_all << '\n';
     cerr << x_all << '\n';
     cerr << b_all << '\n';
+
+    string a_all_expected = "AATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTC------------------------------------------TGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAATTCATGGGCCGGGCGCGGTGGCTCACACCTGCAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATAGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCTTGGCGAGGTGGCGGGCGCCTGTAGTCCCAGCTACTTGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCCAGGGGGCGGAGCCTGCAGTGAGCCGAGATCACGCCACTGCACTCCAGCCTGGGCGACAGCGAGACTCCGTCTCAAAAAACAAACAAACAAACAAACAAACAAAAAGCCAATTCATGCTGGGTGCAGTGGCTCACACCTATAATCCCAGCACTTTGGGAGGCTGAGGTGGGAGGATTGCTTTGAGCTCAGGAGAGAGCAGCCTGGGCAACAGGGCAAAAACCCATCTCTACAAAAAAAAAATACAAAAAATTAGCCAGGTATGGTGGCGTGGTGGCTCACATCTGTGGTTCCAGCTACTCAAGAGGCTGAGGCAGGGGAATTACTTGAACCCAGGAGGTGGAGGTTGCCGTGAGCCGAGATTGCACCACTGTACTTCAGCCTGGGTGACAGAGTGAGACCCTGTCTCAGAAAAAAAAAAAAAAAAAAAAAAAAAAA-GGCCAATTCAACAGCCATCTCCTGCAAGTTCTGTGATGCC";
+    string x_all_expected = "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||                                          ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| ||||||||||||||||||||||||||||||||||||||||";
+    string b_all_expected = "AATGGCAAACTTGCTCCCTAGCACTCATGTCCAGTGTAGACAAACCTGAAGAGGGTGTGTCTCCTCCTGACCCAGTGTAGACAAAGCTGAAGAGGGTGTGTCTCCTCCTGACCCTCTCAAAGTACACAGGTGAAAAGCAGGAGTGAGAATGTTTGGGTTCTGAGCTCACACATGGACCAAGCTTCCCTAGGCTGGCTTGGGGCTATGTCTGACTTCTGTTCTTAAAAAGCCAATTCATGGGCCGGGCGCGGTGGCTCACACCTGCAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATAGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCTTGGCGAGGTGGCGGGCGCCTGTAGTCCCAGCTACTTGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCCAGGGG-CGGAGCCTGCAGTGAGCCGAGATCACGCCACTGCACTCCAGCCTGGGCGACAGCGAGACTCCGTCTCAAAAAACAAACAAACAAACAAACAAACAAAAAGCCAATTCATGCTGGGTGCAGTGGCTCACACCTATAATCCCAGCACTTTGGGAGGCTGAGGTGGGAGGATTGCTTTGAGCTCAGGAGAGAGCAGCCTGGGCAACAGGGCAAAA-CCCATCTCTACAAAAAAAAAATACAAAAAATTAGCCAGGTATGGTGGCGTGGTGGCTCACATCTGTGGTTCCAGCTACTCAAGAGGCTGAGGCAGGGGAATTACTTGAACCCAGGAGGTGGAGGTTGCCGTGAGCCGAGATTGCACCACTGTACTTCAGCCTGGGTGACAGAGTGAGACCCTGTCTCAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAGGCCAATTCAACAGCCATCTCCTGCAAGTTCTGTGATGCC";
+
+
+    if (a_all != a_all_expected) {
+        throw runtime_error("ERROR: a_all != a_all_expected");
+    }
+
+    if (x_all != x_all_expected) {
+        throw runtime_error("ERROR: x_all != x_all_expected");
+    }
+
+    if (b_all != b_all_expected) {
+        throw runtime_error("ERROR: b_all != b_all_expected");
+    }
 
     cout << "PASS: SimpleAlignment test" << std::endl;
 }

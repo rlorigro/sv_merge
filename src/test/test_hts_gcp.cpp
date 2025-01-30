@@ -8,6 +8,7 @@
 
 using std::filesystem::path;
 using std::runtime_error;
+using std::exception;
 using std::to_string;
 using std::string;
 using std::cerr;
@@ -16,7 +17,7 @@ using std::cout;
 #include "Authenticator.hpp"
 #include "misc.hpp"
 
-using sv_merge::GoogleAuthenticator;
+using sv_merge::Authenticator;
 using sv_merge::get_current_time;
 using sv_merge::run_command;
 
@@ -125,15 +126,60 @@ void read_bam(path bam_path){
 
 
 void fetch_bam_region(){
-    path bam_path_requester_pays = "gs://fc-4310e737-a388-4a10-8c9e-babe06aaf0cf/working/HPRC_PLUS/HG002/assemblies/year1_f1_assembly_v2_genbank/alignment/assembly-to-reference/HG002.maternal.CHM13Y_EBV.bam";
-    path bam_path_local = "/home/ryan/data/test_hapslap/results/assorted_prc150_min_n_plus_d_x2_cov1/chr20_18689217-18689256/paths/all_paths_vs_ref.bam";
-    path bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
+    path script_path = __FILE__;
+    path project_directory = script_path.parent_path().parent_path().parent_path();
 
-    GoogleAuthenticator auth;
+    path bam_path_local = project_directory / "data" / "test_alignment_softclip_only_sorted.bam";
+
+    // Unused
+    path bam_path_requester_pays = "gs://fc-4310e737-a388-4a10-8c9e-babe06aaf0cf/working/HPRC_PLUS/HG002/assemblies/year1_f1_assembly_v2_genbank/alignment/assembly-to-reference/HG002.maternal.CHM13Y_EBV.bam";
+
+    // Deprecated and expires in 2025 (thanks google!)
+    path gcs_bam_path = "gs://genomics-public-data/platinum-genomes/bam/NA12889_S1.bam";
+
+    // Who knows how long this will last
+    path https_bam_path = "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/HG002/assemblies/polishing/HG002/v1.1/mapping/hifi_dcv1.1/hg002v1.1_hifi_dcv1.1.pri.bam";
+
+    Authenticator auth(true);
     auth.update();
 
     hts_set_log_level(HTS_LOG_TRACE);
-    read_bam(bam_path);
+
+    bool success = true;
+
+    cerr << "TESTING LOCAL BAM" << '\n';
+    try {
+        read_bam(bam_path_local);
+    }
+    catch (exception& e){
+        cerr << e.what() << '\n';
+        success = false;
+    }
+
+    cerr << "TESTING GCS REMOTE BAM" << '\n';
+    try {
+        read_bam(gcs_bam_path);
+    }
+    catch (exception& e){
+        cerr << e.what() << '\n';
+        success = false;
+    }
+
+    cerr << "TESTING HTTPS REMOTE BAM" << '\n';
+    try {
+        read_bam(https_bam_path);
+    }
+    catch (exception& e){
+        cerr << e.what() << '\n';
+        success = false;
+    }
+
+    if (success){
+        cerr << "PASS" << '\n';
+    }
+    else{
+        throw runtime_error("FAIL");
+    }
 }
 
 

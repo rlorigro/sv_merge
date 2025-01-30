@@ -6,6 +6,7 @@ using std::this_thread::sleep_for;
 using std::runtime_error;
 using std::cerr;
 
+#ifdef __linux__
 
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "TransitiveMap.hpp"
@@ -14,7 +15,6 @@ using std::cerr;
 using sv_merge::get_peak_memory_usage;
 using sv_merge::TransMap;
 using sv_merge::HeteroNode;
-
 
 void test_full_mapping(size_t n_samples){
     TransMap transmap;
@@ -122,3 +122,12 @@ int main(){
 
     n_samples *= 10;
 }
+
+#else
+
+int main(){
+    cerr << "This exe is only supported on Linux" << '\n';
+    return 0;
+}
+
+#endif

@@ -12,6 +12,7 @@ using std::ofstream;
 using sv_merge::run_command;
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
+using sv_merge::get_uuid;
 
 
 ofstream outstream;
@@ -259,7 +260,16 @@ void test_joint_snp_vcf_hprc(const path& joint_vcf, const vector<string>& CHROMO
 
 
 int main(int argc, char* argv[]) {
-    const path ROOT_DIR = path(argv[1]);  // Assumed to contain every raw input file used for testing
+    path ROOT_DIR = "/tmp/" + get_uuid();
+
+    if (not exists(ROOT_DIR)){
+        create_directories(ROOT_DIR);
+        cerr << ROOT_DIR << '\n';
+    }
+    else{
+        throw runtime_error("Directory already exists: " + ROOT_DIR.string());
+    }
+
     const char* BCFTOOLS_PLUGINS_DIR = argv[2];  // Needed by bcftools +fill-tags
     const string N_THREADS = string(argv[3]);
 

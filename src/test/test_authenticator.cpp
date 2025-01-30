@@ -14,7 +14,7 @@ using std::atomic;
 using std::exception;
 
 
-void thread_fn(int64_t thread_id, mutex& m, Timer& t, GoogleAuthenticator& authenticator){
+void thread_fn(int64_t thread_id, mutex& m, Timer& t, Authenticator& authenticator){
     string region_string = "chr1:10000000-10005000";
     path bam_path = "gs:/fc-b1dcc7b0-68be-46c4-b67e-5119c8c5de53/submissions/231ea80e-bef3-4e96-90a4-07efc80eb523/minimap2/20583855-420b-4027-97a0-b521fa94934e/call-alignAndSortBAM/HG00673.bam";
 
@@ -45,7 +45,7 @@ int main(){
     // Will throw error if fails, otherwise returns token
     run_command(command, token);
 
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
 
     Timer t;
     mutex m;

@@ -1,10 +1,12 @@
 #include "VcfReader.hpp"
 #include "VariantGraph.hpp"
 #include "misc.hpp"
+#include "cpptrace/from_current.hpp"
 
 using sv_merge::interval_t;
 using sv_merge::run_command;
 using sv_merge::VcfReader;
+using sv_merge::get_uuid;
 using sv_merge::VariantGraph;
 using bdsg::step_handle_t;
 using bdsg::HashGraph;
@@ -1109,305 +1111,570 @@ void test_for_each_vcf_record(VariantGraph& graph, const path& test_vcf) {
 
 
 int main(int argc, char* argv[]) {
-    const path ROOT_DIR = path(argv[1]);
+    path ROOT_DIR = "/tmp/" + get_uuid();
 
-    const path INPUT_VCF = ROOT_DIR/"input.vcf";
-    const path TRUTH_VCF = ROOT_DIR/"truth.vcf";
-    const path TRUTH_GFA = ROOT_DIR/"truth.gfa";
-    const path TRUTH_GFA_2 = ROOT_DIR/"truth2.gfa";
-    const path TEST_VCF = ROOT_DIR/"test.vcf";
-    const path TEST_VCF_2 = ROOT_DIR/"test2.vcf";
-    const path UNSUPPORTED_VCF = ROOT_DIR/"unsupported.vcf";
-    const path TEST_GFA = ROOT_DIR/"test.gfa";
-    const int32_t FLANK_LENGTH = 10;
-    const int32_t INTERIOR_FLANK_LENGTH = 10;
-    const size_t SIGNATURE_N_STEPS = 10;
-    const size_t N_REUSE_TESTS = 10;
-
-    ofstream input_vcf(INPUT_VCF.string());
-    print_truth_vcf_header(input_vcf);
-    print_truth_vcf(0,true/*Arbitrary*/,input_vcf);
-    input_vcf.close();
-    ofstream truth_gfa(TRUTH_GFA.string());
-    print_truth_gfa(false,false,false,false,false,false,truth_gfa);
-    truth_gfa.close();
-
-    const unordered_map<string,string> chromosomes = get_chromosomes();
-    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
-    string command;
-
-    vector<VcfRecord> records;
-    VcfReader reader(INPUT_VCF);
-    reader.for_record_in_vcf([&](VcfRecord& record) {
-        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
-             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
-           ) return;
-        records.push_back(record);
-    });
-    const vector<string> caller_ids = get_caller_ids();
-    auto rd = std::random_device {};
-    VariantGraph graph(chromosomes,tandem_track);
-    vector<VcfRecord> no_records;
-
-    cerr << "Testing constructors with no VCF records...\n";
-    if (graph.would_graph_be_nontrivial(no_records)) throw runtime_error("would_graph_be_nontrivial() failed on emtpy VCF records");
-    graph.build(no_records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);  // Testing that build() does not crash with no VCF records
-    graph.build("chr2",60,186,20);  // Testing trivial graph
-    graph.to_gfa(TEST_GFA);
-    ofstream truth_gfa_trivial(TRUTH_GFA_2.string());
-    print_truth_gfa_trivial(truth_gfa_trivial);
-    truth_gfa_trivial.close();
-    command.clear(); command.append("grep ^S "+TRUTH_GFA_2.string()+" | cut -f 1,3 | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("grep ^S "+TEST_GFA.string()+" | cut -f 1,3 | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("grep ^L "+TRUTH_GFA_2.string()+" | wc -l > tmp1.txt"); run_command(command);
-    command.clear(); command.append("grep ^L "+TEST_GFA.string()+" | wc -l > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-
-    for (size_t i=0; i<N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
-        cerr << "----- REUSE TEST " << std::to_string((i+1)) << " ------\n";
-        auto rng = std::default_random_engine { rd() };
-        vector<VcfRecord> records_prime = records;
-        std::shuffle(std::begin(records_prime),std::end(records_prime),rng);
-        if (!graph.would_graph_be_nontrivial(records_prime)) throw runtime_error("would_graph_be_nontrivial() failed on non-emtpy VCF records");
-cerr << "VITTU> 1\n";
-        graph.build(records_prime,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
-cerr << "VITTU> 2\n";
-
-        cerr << "Testing print_supported_vcf_records() (all records)...\n";
-        ofstream truth_vcf(TRUTH_VCF.string());
-        print_truth_vcf_header(truth_vcf);
-        print_truth_vcf(1,true/*Arbitrary*/,truth_vcf);
-        truth_vcf.close();
-        ofstream test_vcf(TEST_VCF.string());
-        ofstream unsupported_vcf(UNSUPPORTED_VCF.string());
-        print_truth_vcf_header(test_vcf);
-        print_truth_vcf_header(unsupported_vcf);
-        graph.print_supported_vcf_records(test_vcf,unsupported_vcf,true,caller_ids);
-        test_vcf.close(); unsupported_vcf.close();
-        command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | sort > tmp1.txt"); run_command(command);
-        command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-        command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-        command.clear(); command.append("COUNT=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); echo ${COUNT} > tmp1.txt; echo 0 > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-
-        cerr << "Testing to_gfa(): node sequences...\n";
-        graph.to_gfa(TEST_GFA);
-        command.clear(); command.append("grep ^S "+TRUTH_GFA.string()+" | cut -f 1,3 | sort > tmp1.txt"); run_command(command);
-        command.clear(); command.append("grep ^S "+TEST_GFA.string()+" | cut -f 1,3 | sort > tmp2.txt"); run_command(command);
-        command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-
-        cerr << "Testing to_gfa(): n. edges...\n";
-        command.clear(); command.append("grep ^L "+TRUTH_GFA.string()+" | wc -l > tmp1.txt"); run_command(command);
-        command.clear(); command.append("grep ^L "+TEST_GFA.string()+" | wc -l > tmp2.txt"); run_command(command);
-        command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-
-        cerr << "Testing to_gfa(): local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
-        graph.print_graph_signature(SIGNATURE_N_STEPS,"tmp1.txt");
-        graph.load_gfa(TRUTH_GFA);
-        graph.print_graph_signature(SIGNATURE_N_STEPS,"tmp2.txt");
-        command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+    if (not exists(ROOT_DIR)){
+        create_directories(ROOT_DIR);
+        cerr << ROOT_DIR << '\n';
+    }
+    else{
+        throw runtime_error("Directory already exists: " + ROOT_DIR.string());
     }
 
-    cerr << "Testing print_supported_vcf_records() (paths)...\n";
-    ofstream truth_vcf(TRUTH_VCF.string());
-    print_truth_vcf_header(truth_vcf);
-    print_truth_vcf(2,false/*Arbitrary*/,truth_vcf);
-    truth_vcf.close();
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
+CPPTRACE_TRY
+        {
+            const path INPUT_VCF = ROOT_DIR / "input.vcf";
+            const path TRUTH_VCF = ROOT_DIR / "truth.vcf";
+            const path TRUTH_GFA = ROOT_DIR / "truth.gfa";
+            const path TRUTH_GFA_2 = ROOT_DIR / "truth2.gfa";
+            const path TEST_VCF = ROOT_DIR / "test.vcf";
+            const path TEST_VCF_2 = ROOT_DIR / "test2.vcf";
+            const path UNSUPPORTED_VCF = ROOT_DIR / "unsupported.vcf";
+            const path TEST_GFA = ROOT_DIR / "test.gfa";
+            const int32_t FLANK_LENGTH = 10;
+            const int32_t INTERIOR_FLANK_LENGTH = 10;
+            const size_t SIGNATURE_N_STEPS = 10;
+            const size_t N_REUSE_TESTS = 10;
 
-    cerr << "DEL...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(true,false,false,false,false,false,truth_gfa);
-    truth_gfa.close();
-    vector<string> node_labels = graph.load_gfa(TRUTH_GFA.string());
-    vector<pair<edge_t,size_t>> edge_record_map = get_edge_record_map(graph.graph,node_labels);
-    graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
-    ofstream test_vcf(TEST_VCF.string()); ofstream unsupported_vcf(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=DEL' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=DEL' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+            ofstream input_vcf(INPUT_VCF.string());
+            print_truth_vcf_header(input_vcf);
+            print_truth_vcf(0, true/*Arbitrary*/, input_vcf);
+            input_vcf.close();
+            ofstream truth_gfa(TRUTH_GFA.string());
+            print_truth_gfa(false, false, false, false, false, false, truth_gfa);
+            truth_gfa.close();
 
-    cerr << "INV...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(false,true,false,false,false,false,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INV' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INV' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+            const unordered_map<string, string> chromosomes = get_chromosomes();
+            const unordered_map<string, vector<interval_t>> tandem_track = get_tandem_track();
+            string command;
 
-    cerr << "INS...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(false,false,true,false,false,false,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INS' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep 'SVTYPE=INS' | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+            vector<VcfRecord> records;
+            VcfReader reader(INPUT_VCF);
+            reader.for_record_in_vcf([&](VcfRecord &record) {
+                if ((record.sv_type == VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+                    ((record.sv_type == VcfReader::TYPE_DELETION || record.sv_type == VcfReader::TYPE_INVERSION ||
+                      record.sv_type == VcfReader::TYPE_DUPLICATION || record.sv_type == VcfReader::TYPE_REPLACEMENT) &&
+                     record.sv_length == INT32_MAX)
+                        )
+                    return;
+                records.push_back(record);
+            });
+            const vector<string> caller_ids = get_caller_ids();
+            auto rd = std::random_device{};
+            VariantGraph graph(chromosomes, tandem_track);
+            vector<VcfRecord> no_records;
 
-    cerr << "REP...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(false,false,false,true,false,false,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep rep | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep rep | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+            cerr << "Testing constructors with no VCF records...\n";
+            if (graph.would_graph_be_nontrivial(no_records))
+                throw runtime_error("would_graph_be_nontrivial() failed on emtpy VCF records");
+            graph.build(no_records, FLANK_LENGTH, INTERIOR_FLANK_LENGTH, INT32_MAX, INT32_MAX, false,
+                        caller_ids);  // Testing that build() does not crash with no VCF records
+            graph.build("chr2", 60, 186, 20);  // Testing trivial graph
+            graph.to_gfa(TEST_GFA);
+            ofstream truth_gfa_trivial(TRUTH_GFA_2.string());
+            print_truth_gfa_trivial(truth_gfa_trivial);
+            truth_gfa_trivial.close();
+            command.clear();
+            command.append("grep ^S " + TRUTH_GFA_2.string() + " | cut -f 1,3 | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("grep ^S " + TEST_GFA.string() + " | cut -f 1,3 | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("grep ^L " + TRUTH_GFA_2.string() + " | wc -l > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("grep ^L " + TEST_GFA.string() + " | wc -l > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
 
-    cerr << "DUP...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(false,false,false,false,true,false,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+            for (size_t i = 0; i < N_REUSE_TESTS; i++) {  // The same VariantGraph class can be reused multiple times
+                cerr << "----- REUSE TEST " << std::to_string((i + 1)) << " ------\n";
+                auto rng = std::default_random_engine{rd()};
+                vector<VcfRecord> records_prime = records;
+                std::shuffle(std::begin(records_prime), std::end(records_prime), rng);
+                if (!graph.would_graph_be_nontrivial(records_prime))
+                    throw runtime_error("would_graph_be_nontrivial() failed on non-emtpy VCF records");
+                cerr << "VITTU> 1\n";
+                graph.build(records_prime, FLANK_LENGTH, INTERIOR_FLANK_LENGTH, INT32_MAX, INT32_MAX, false,
+                            caller_ids);
+                cerr << "VITTU> 2\n";
 
-    cerr << "BND...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(false,false,false,false,false,true,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+                cerr << "Testing print_supported_vcf_records() (all records)...\n";
+                ofstream truth_vcf(TRUTH_VCF.string());
+                print_truth_vcf_header(truth_vcf);
+                print_truth_vcf(1, true/*Arbitrary*/, truth_vcf);
+                truth_vcf.close();
+                ofstream test_vcf(TEST_VCF.string());
+                ofstream unsupported_vcf(UNSUPPORTED_VCF.string());
+                print_truth_vcf_header(test_vcf);
+                print_truth_vcf_header(unsupported_vcf);
+                graph.print_supported_vcf_records(test_vcf, unsupported_vcf, true, caller_ids);
+                test_vcf.close();
+                unsupported_vcf.close();
+                command.clear();
+                command.append("bcftools view --no-header " + TRUTH_VCF.string() + " | sort > tmp1.txt");
+                run_command(command);
+                command.clear();
+                command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+                run_command(command);
+                command.clear();
+                command.append("diff --brief tmp1.txt tmp2.txt");
+                run_command(command);
+                command.clear();
+                command.append("COUNT=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                               " | wc -l ); echo ${COUNT} > tmp1.txt; echo 0 > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+                run_command(command);
 
-    cerr << "All types...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(true,true,true,true,true,true,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string()); unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf,unsupported_vcf,false,caller_ids);
-    test_vcf.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    command.clear(); command.append("COUNT1=$( bcftools view --no-header "+UNSUPPORTED_VCF.string()+" | wc -l ); COUNT2=$( bcftools view --no-header "+TEST_VCF.string()+" | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo "+std::to_string(get_n_vcf_records())+" > tmp2.txt; diff --brief tmp1.txt tmp2.txt"); run_command(command);
-    test_for_each_vcf_record(graph,TEST_VCF.string());
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+                cerr << "Testing to_gfa(): node sequences...\n";
+                graph.to_gfa(TEST_GFA);
+                command.clear();
+                command.append("grep ^S " + TRUTH_GFA.string() + " | cut -f 1,3 | sort > tmp1.txt");
+                run_command(command);
+                command.clear();
+                command.append("grep ^S " + TEST_GFA.string() + " | cut -f 1,3 | sort > tmp2.txt");
+                run_command(command);
+                command.clear();
+                command.append("diff --brief tmp1.txt tmp2.txt");
+                run_command(command);
 
-    cerr << "Testing paths_to_vcf_records()...\n";
-    test_vcf.clear(); test_vcf.open(TEST_VCF.string());
-    print_truth_vcf_header(test_vcf);
-    graph.node_to_chromosome_clear(); node_to_chromosome_insert(graph,node_labels);
-    graph.paths_to_vcf_records(test_vcf);
-    test_vcf.close();
-    truth_vcf.clear(); truth_vcf.open(TRUTH_VCF.string());
-    print_truth_vcf_header(truth_vcf);
-    print_truth_vcf_paths(truth_vcf);
-    truth_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TRUTH_VCF.string()+" | cut -f 1,2,4,5 | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | cut -f 1,2,4,5 | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+                cerr << "Testing to_gfa(): n. edges...\n";
+                command.clear();
+                command.append("grep ^L " + TRUTH_GFA.string() + " | wc -l > tmp1.txt");
+                run_command(command);
+                command.clear();
+                command.append("grep ^L " + TEST_GFA.string() + " | wc -l > tmp2.txt");
+                run_command(command);
+                command.clear();
+                command.append("diff --brief tmp1.txt tmp2.txt");
+                run_command(command);
 
-    cerr << "Loading back the output of paths_to_vcf_records()...\n";
-    records.clear();
-    VcfReader reader2(TEST_VCF);
-    reader2.for_record_in_vcf([&](VcfRecord& record) {
-        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
-             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
-           ) return;
-        records.push_back(record);
-    });
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
-    ofstream test_vcf2(TEST_VCF_2.string());
-    unsupported_vcf.clear(); unsupported_vcf.open(UNSUPPORTED_VCF.string());
-    print_truth_vcf_header(test_vcf2); print_truth_vcf_header(unsupported_vcf);
-    graph.print_supported_vcf_records(test_vcf2,unsupported_vcf,true,caller_ids);
-    test_vcf2.close(); unsupported_vcf.close();
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF.string()+" | sort > tmp1.txt"); run_command(command);
-    command.clear(); command.append("bcftools view --no-header "+TEST_VCF_2.string()+" | sort > tmp2.txt"); run_command(command);
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+                cerr << "Testing to_gfa(): local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
+                graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp1.txt");
+                graph.load_gfa(TRUTH_GFA);
+                graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp2.txt");
+                command.clear();
+                command.append("diff --brief tmp1.txt tmp2.txt");
+                run_command(command);
+            }
 
-    cerr << "Testing is_reference_node() and is_reference_edge()...\n";
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(true,true,true,true,true,true,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    edge_record_map=get_edge_record_map(graph.graph,node_labels);
-    graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
-    graph.node_to_chromosome_clear(); node_to_chromosome_insert(graph,node_labels);
-    test_is_reference(graph,node_labels);
+            cerr << "Testing print_supported_vcf_records() (paths)...\n";
+            ofstream truth_vcf(TRUTH_VCF.string());
+            print_truth_vcf_header(truth_vcf);
+            print_truth_vcf(2, false/*Arbitrary*/, truth_vcf);
+            truth_vcf.close();
+            graph.build(records, FLANK_LENGTH, INTERIOR_FLANK_LENGTH, INT32_MAX, INT32_MAX, false, caller_ids);
 
-    cerr << "Testing vcf_records_with_edges()...\n";
-    truth_vcf.clear(); truth_vcf.open(TRUTH_VCF.string());
-    print_truth_vcf_header(truth_vcf);
-    print_truth_vcf(0,false/*Arbitrary*/,truth_vcf);
-    truth_vcf.close();
-    records.clear();
-    VcfReader reader3(TRUTH_VCF);
-    reader3.for_record_in_vcf([&](VcfRecord& record) {
-        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
-             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
-           ) return;
-        records.push_back(record);
-    });
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,caller_ids);
-    truth_gfa.clear(); truth_gfa.open(TRUTH_GFA.string());
-    print_truth_gfa(true,true,true,true,true,true,truth_gfa);
-    truth_gfa.close();
-    node_labels=graph.load_gfa(TRUTH_GFA.string());
-    edge_record_map=get_edge_record_map(graph.graph,node_labels);
-    graph.load_edge_record_map(edge_record_map,get_n_vcf_records());
-    test_vcf_records_with_edges(graph,node_labels);
+            cerr << "DEL...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(true, false, false, false, false, false, truth_gfa);
+            truth_gfa.close();
+            vector<string> node_labels = graph.load_gfa(TRUTH_GFA.string());
+            vector<pair<edge_t, size_t>> edge_record_map = get_edge_record_map(graph.graph, node_labels);
+            graph.load_edge_record_map(edge_record_map, get_n_vcf_records());
+            ofstream test_vcf(TEST_VCF.string());
+            ofstream unsupported_vcf(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=DEL' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=DEL' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
 
-    cerr << "Removing temporary files...\n";
-    command.clear(); command.append("rm -f input*.vcf truth*.vcf test*.vcf unsupported*.vcf truth*.gfa test*.gfa tmp*.txt"); run_command(command);
+            cerr << "INV...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(false, true, false, false, false, false, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=INV' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=INV' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "INS...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(false, false, true, false, false, false, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=INS' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append(
+                    "bcftools view --no-header " + TRUTH_VCF.string() + " | grep 'SVTYPE=INS' | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort | uniq > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "REP...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(false, false, false, true, false, false, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() + " | grep rep | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() + " | grep rep | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort | uniq > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "DUP...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(false, false, false, false, true, false, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | grep -E 'SVTYPE=DUP|bnd19|bnd20' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "BND...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(false, false, false, false, false, true, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | grep -E 'SVTYPE=BND|dup1' | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "All types...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(true, true, true, true, true, true, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf, unsupported_vcf, false, caller_ids);
+            test_vcf.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("COUNT1=$( bcftools view --no-header " + UNSUPPORTED_VCF.string() +
+                           " | wc -l ); COUNT2=$( bcftools view --no-header " + TEST_VCF.string() +
+                           " | wc -l ); echo $(( ${COUNT1} + ${COUNT2} )) > tmp1.txt; echo " +
+                           std::to_string(get_n_vcf_records()) + " > tmp2.txt; diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+            test_for_each_vcf_record(graph, TEST_VCF.string());
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() +
+                           " | sort | cut -f 1,2,3,4,5,6,7,9,10 > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() +
+                           " | sort | uniq | cut -f 1,2,3,4,5,6,7,9,10 > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "Testing paths_to_vcf_records()...\n";
+            test_vcf.clear();
+            test_vcf.open(TEST_VCF.string());
+            print_truth_vcf_header(test_vcf);
+            graph.node_to_chromosome_clear();
+            node_to_chromosome_insert(graph, node_labels);
+            graph.paths_to_vcf_records(test_vcf);
+            test_vcf.close();
+            truth_vcf.clear();
+            truth_vcf.open(TRUTH_VCF.string());
+            print_truth_vcf_header(truth_vcf);
+            print_truth_vcf_paths(truth_vcf);
+            truth_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TRUTH_VCF.string() + " | cut -f 1,2,4,5 | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | cut -f 1,2,4,5 | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "Loading back the output of paths_to_vcf_records()...\n";
+            records.clear();
+            VcfReader reader2(TEST_VCF);
+            reader2.for_record_in_vcf([&](VcfRecord &record) {
+                if ((record.sv_type == VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+                    ((record.sv_type == VcfReader::TYPE_DELETION || record.sv_type == VcfReader::TYPE_INVERSION ||
+                      record.sv_type == VcfReader::TYPE_DUPLICATION || record.sv_type == VcfReader::TYPE_REPLACEMENT) &&
+                     record.sv_length == INT32_MAX)
+                        )
+                    return;
+                records.push_back(record);
+            });
+            graph.build(records, FLANK_LENGTH, INTERIOR_FLANK_LENGTH, INT32_MAX, INT32_MAX, false, caller_ids);
+            ofstream test_vcf2(TEST_VCF_2.string());
+            unsupported_vcf.clear();
+            unsupported_vcf.open(UNSUPPORTED_VCF.string());
+            print_truth_vcf_header(test_vcf2);
+            print_truth_vcf_header(unsupported_vcf);
+            graph.print_supported_vcf_records(test_vcf2, unsupported_vcf, true, caller_ids);
+            test_vcf2.close();
+            unsupported_vcf.close();
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF.string() + " | sort > tmp1.txt");
+            run_command(command);
+            command.clear();
+            command.append("bcftools view --no-header " + TEST_VCF_2.string() + " | sort > tmp2.txt");
+            run_command(command);
+            command.clear();
+            command.append("diff --brief tmp1.txt tmp2.txt");
+            run_command(command);
+
+            cerr << "Testing is_reference_node() and is_reference_edge()...\n";
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(true, true, true, true, true, true, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            edge_record_map = get_edge_record_map(graph.graph, node_labels);
+            graph.load_edge_record_map(edge_record_map, get_n_vcf_records());
+            graph.node_to_chromosome_clear();
+            node_to_chromosome_insert(graph, node_labels);
+            test_is_reference(graph, node_labels);
+
+            cerr << "Testing vcf_records_with_edges()...\n";
+            truth_vcf.clear();
+            truth_vcf.open(TRUTH_VCF.string());
+            print_truth_vcf_header(truth_vcf);
+            print_truth_vcf(0, false/*Arbitrary*/, truth_vcf);
+            truth_vcf.close();
+            records.clear();
+            VcfReader reader3(TRUTH_VCF);
+            reader3.for_record_in_vcf([&](VcfRecord &record) {
+                if ((record.sv_type == VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+                    ((record.sv_type == VcfReader::TYPE_DELETION || record.sv_type == VcfReader::TYPE_INVERSION ||
+                      record.sv_type == VcfReader::TYPE_DUPLICATION || record.sv_type == VcfReader::TYPE_REPLACEMENT) &&
+                     record.sv_length == INT32_MAX)
+                        )
+                    return;
+                records.push_back(record);
+            });
+            graph.build(records, FLANK_LENGTH, INTERIOR_FLANK_LENGTH, INT32_MAX, INT32_MAX, false, caller_ids);
+            truth_gfa.clear();
+            truth_gfa.open(TRUTH_GFA.string());
+            print_truth_gfa(true, true, true, true, true, true, truth_gfa);
+            truth_gfa.close();
+            node_labels = graph.load_gfa(TRUTH_GFA.string());
+            edge_record_map = get_edge_record_map(graph.graph, node_labels);
+            graph.load_edge_record_map(edge_record_map, get_n_vcf_records());
+            test_vcf_records_with_edges(graph, node_labels);
+
+            cerr << "Removing temporary files...\n";
+            command.clear();
+            command.append("rm -f input*.vcf truth*.vcf test*.vcf unsupported*.vcf truth*.gfa test*.gfa tmp*.txt");
+            run_command(command);
+
+    } CPPTRACE_CATCH(const std::exception& e) {
+        std::cerr<<"Exception: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print_with_snippets();
+    }
 }

@@ -455,9 +455,9 @@ int main(){
 
     cerr << "PASS exact tests" << '\n';
 
-    cerr << "now testing output (to be manually inspected) ..." << '\n';
-
-    test_windowed_cigar_interval_iterator(data_directory);
+//    cerr << "now testing output (to be manually inspected) ..." << '\n';
+//
+//    test_windowed_cigar_interval_iterator(data_directory);
 
     return 0;
 }

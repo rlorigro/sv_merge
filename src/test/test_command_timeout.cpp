@@ -11,6 +11,9 @@ using namespace sv_merge;
 
 
 int main() {
+
+    // This test can't work on APPLE because timeout doesn't exist
+#ifndef __APPLE__
     string command = "sleep 2 && echo done";
 
     bool success;
@@ -38,6 +41,6 @@ int main() {
         cerr << "timed out" << '\n';
     }
 
-
+#endif
     return 0;
 }

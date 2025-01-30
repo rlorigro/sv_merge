@@ -1,3 +1,4 @@
+#include "cpptrace/from_current.hpp"
 #include "Authenticator.hpp"
 #include <filesystem>
 #include "Alignment.hpp"
@@ -41,31 +42,41 @@ void test_bam_sequence_extraction(path data_directory){
 
     ofstream file(output_path);
 
+    // BAM file is iterated (region 0:5000) using our libraries
     for_read_in_bam_region(bam_path, region_string, [&](Sequence& s){
+        cerr << "---" << '\n';
+        cerr << s.name << ',' << s.sequence.size() << '\n';
         file << '>' << s.name << '\n';
         file << s.sequence << '\n';
     });
+
+    file.close();
 
     path region_output_bam_path = data_directory / "region.sam";
 
     string command;
     string result;
 
+    // BAM file is viewed (0:5000) with samtools
+    // Now part of data directory on github repo to avoid samtools dependency for testing
     command = "samtools view -h " + bam_path.string() + " " + region_string;
-    run_command(command, region_output_bam_path);
+//    run_command(command, region_output_bam_path);
 
-    path region_output_fasta_path = data_directory / "region.fasta";
+    path samtools_output_fasta_path = data_directory / "region.fasta";
 
-    command = "samtools fasta -0 " + region_output_fasta_path.string() + " " + region_output_bam_path.string();
-    run_command(command);
+    // BAM file is converted to FASTA with samtools
+    // Now part of data directory on github repo to avoid samtools dependency for testing
+    command = "samtools fasta -0 " + samtools_output_fasta_path.string() + " " + region_output_bam_path.string();
+//    run_command(command);
 
     map<string,string> expected_sequences;
-    for_sequence_in_fasta_file(region_output_fasta_path, [&](const Sequence& s){
+    for_sequence_in_fasta_file(samtools_output_fasta_path, [&](const Sequence& s){
         expected_sequences[s.name] = s.sequence;
     });
 
     map<string,string> result_sequences;
     for_sequence_in_fasta_file(output_path, [&](const Sequence& s){
+        cerr << "result: " << output_path << ',' << s.name << ',' << s.sequence.size() << '\n';
         result_sequences[s.name] = s.sequence;
     });
 
@@ -81,7 +92,9 @@ void test_bam_sequence_extraction(path data_directory){
             cerr << "PASS: " << name << '\n';
         }
         else{
-            throw runtime_error("FAIL: expected sequence not equivalent to result sequence");
+            cerr << "expected: " << sequence.size() << '\n';
+            cerr << "resulted: " << result2->second.size() << '\n';
+            throw runtime_error("FAIL: expected sequence not equivalent to result sequence: "  + name);
         }
     }
 
@@ -100,8 +113,8 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
-    path output_path = data_directory / "test_alignment_hardclipped_sorted.fasta";
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+    path output_path = data_directory / "test_alignment_softclip_only_sorted.fasta";
 
     ofstream file(output_path);
     if (not file.good() or not file.is_open()){
@@ -131,7 +144,7 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
 
     sort(subregions.begin(), subregions.end(), left_comparator);
 
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
     sample_region_coord_map_t sample_to_region_coords;
 
     cerr << "computing coordinates..." << '\n';
@@ -264,7 +277,7 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
+    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
 
     Timer t;
 
@@ -657,35 +670,42 @@ void test_windowed_cigar_interval_iterator(path data_directory){
 
 
 int main(){
-    path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
-    path data_directory = project_directory / "data";
+    CPPTRACE_TRY {
+        path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
+        path data_directory = project_directory / "data";
 
-    cerr << data_directory << '\n';
+        cerr << data_directory << '\n';
 
-    cerr << "TESTING: bam_sequence_extraction\n\n";
-    test_bam_sequence_extraction(data_directory);
+        cerr << "TESTING: bam_sequence_extraction\n\n";
+        test_bam_sequence_extraction(data_directory);
 
-    cerr << "TESTING: test_bam_subsequence_extraction\n\n";
-    test_bam_subsequence_extraction(data_directory);
+        cerr << "TESTING: test_bam_subsequence_extraction\n\n";
+        test_bam_subsequence_extraction(data_directory);
 
-    cerr << "TESTING: test_bam_prefetched_subsequence_extraction\n\n";
-    test_bam_prefetched_subsequence_extraction(data_directory);
+        cerr << "TESTING: test_bam_prefetched_subsequence_extraction\n\n";
+        test_bam_prefetched_subsequence_extraction(data_directory);
 
-    cerr << "TESTING: test_clipped_bam_subsequence_extraction\n\n";
-    test_clipped_bam_subsequence_extraction(data_directory);
+        cerr << "TESTING: test_clipped_bam_subsequence_extraction\n\n";
+        test_clipped_bam_subsequence_extraction(data_directory);
 
-    cerr << "TESTING: cigar iterator\n\n";
-    test_cigar_iterator(data_directory);
+        cerr << "TESTING: cigar iterator\n\n";
+        test_cigar_iterator(data_directory);
 
-    cerr << "TESTING: cigar interval iterator\n\n";
-    test_cigar_interval_iterator(data_directory);
+        cerr << "TESTING: cigar interval iterator\n\n";
+        test_cigar_interval_iterator(data_directory);
 
-    cerr << "TESTING: windowed cigar interval iterator\n\n";
-    test_windowed_cigar_interval_iterator(data_directory);
+        cerr << "TESTING: windowed cigar interval iterator\n\n";
+        test_windowed_cigar_interval_iterator(data_directory);
 
-    cerr << "TESTING: windowed cigar interval iterator\n\n";
-    test_for_alignment_in_bam_subregions(data_directory);
+        cerr << "TESTING: windowed cigar interval iterator\n\n";
+        test_for_alignment_in_bam_subregions(data_directory);
 
+    }
+    CPPTRACE_CATCH(const std::exception& e) {
+        std::cerr<<"Exception: "<<e.what()<<std::endl;
+        cpptrace::from_current_exception().print_with_snippets();
+        throw runtime_error("FAIL: exception caught");
+    }
 
     return 0;
 }
