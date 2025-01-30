@@ -122,7 +122,22 @@ int64_t get_remaining_seconds(const string& token){
 }
 
 
-void GoogleAuthenticator::update() {
+Authenticator::Authenticator() {};
+
+
+Authenticator::Authenticator(bool is_gcs):
+    is_gcs(is_gcs)
+{}
+
+
+void Authenticator::update() {
+    if (is_gcs){
+        update_gcs_token();
+    }
+}
+
+
+void Authenticator::update_gcs_token() {
     std::lock_guard<std::mutex> lock(m);
 
     // Don't bother querying the info server if we aren't withing 60 seconds of the expiration
@@ -182,7 +197,7 @@ void GoogleAuthenticator::update() {
 }
 
 
-void GoogleAuthenticator::try_with_authentication(int64_t n_retries, const function<void()>& f){
+void Authenticator::try_with_authentication(int64_t n_retries, const function<void()>& f){
     update();
     int64_t n = 0;
     bool success = false;
@@ -208,7 +223,7 @@ void GoogleAuthenticator::try_with_authentication(int64_t n_retries, const funct
     }
 
     if (not success){
-        throw runtime_error("ERROR: GoogleAuthenticator::try_with_authentication failed after " + to_string(n_retries) + " retries");
+        throw runtime_error("ERROR: Authenticator::try_with_authentication failed after " + to_string(n_retries) + " retries");
     }
 }
 

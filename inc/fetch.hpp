@@ -94,7 +94,7 @@ void fetch_reads_from_clipped_bam(
 
 
 void extract_subregion_coords_from_sample(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -105,7 +105,7 @@ void extract_subregion_coords_from_sample(
 
 
 void extract_flanked_subregion_coords_from_sample(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -116,7 +116,7 @@ void extract_flanked_subregion_coords_from_sample(
 
 
 void extract_subsequences_from_sample_thread_fn(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,

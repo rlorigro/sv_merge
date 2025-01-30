@@ -38,7 +38,7 @@ void for_sequence_in_fasta_file(path fasta_path, const function<void(const Seque
 
 
     while (file.get(c)){
-//        cerr << c << " - " << s.name << ' ' << s.sequence << '\n';
+//        cerr << c << " - " << s.name << ' ' << s.sequence.size() << '\n';
 
         if (c == '\r'){
             throw runtime_error("ERROR: carriage return not supported: " + fasta_path.string());

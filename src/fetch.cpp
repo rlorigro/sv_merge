@@ -85,7 +85,7 @@ void update_coord(
  * @param bam_path
  */
 void extract_subregions_from_sample_contig(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const span<const Region>& subregions,
@@ -329,7 +329,7 @@ void extract_subregions_from_sample_contig(
  * @param bam_path
  */
 void extract_subregions_from_sample(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -365,7 +365,7 @@ void extract_subregions_from_sample(
 
     for (const auto& regions: contig_regions){
         extract_subregions_from_sample_contig(
-            authenticator,                    // GoogleAuthenticator& authenticator,
+            authenticator,                    // Authenticator& authenticator,
             sample_to_region_reads,           // sample_region_read_map_t& sample_to_region_reads,
             sample_name,                         // const string& sample_name,
             regions,                   // const span<const Region>& subregions,
@@ -392,7 +392,7 @@ void extract_subregions_from_sample(
  * @param bam_path
  */
 void extract_subregion_coords_from_sample(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -525,7 +525,7 @@ void extract_subregion_coords_from_sample(
  * @param bam_path
  */
 void extract_flanked_subregion_coords_from_sample_contig(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const span<const Region>& subregions,
@@ -709,7 +709,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
  * @param bam_path
  */
 void extract_flanked_subregion_coords_from_sample(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
@@ -758,7 +758,7 @@ void extract_flanked_subregion_coords_from_sample(
 
 
 void extract_subsequences_from_sample_thread_fn(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
@@ -779,7 +779,7 @@ void extract_subsequences_from_sample_thread_fn(
         Timer t;
 
         extract_subregions_from_sample(
-                authenticator,                      // GoogleAuthenticator& authenticator,
+                authenticator,                      // Authenticator& authenticator,
                 sample_to_region_reads,             // sample_region_read_map_t& sample_to_region_reads,
                 sample_name,                           // const string& sample_name,
                 regions,                     // const vector<Region>& subregions,
@@ -800,7 +800,7 @@ void extract_subsequences_from_sample_thread_fn(
 
 
 void extract_subregion_coords_from_sample_thread_fn(
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
@@ -838,7 +838,7 @@ void extract_subregion_coords_from_sample_thread_fn(
 void get_reads_for_each_bam_subregion(
         Timer& t,
         vector<Region>& regions,
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         path bam_csv,
         int64_t n_threads,
@@ -857,6 +857,10 @@ void get_reads_for_each_bam_subregion(
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         sample_only_transmap.add_sample(sample_name);
         sample_bams.emplace_back(sample_name, bam_path);
+
+        if (bam_path.string().starts_with("gs://")){
+            authenticator.is_gcs = true;
+        }
 
         // Initialize every combo of sample,region with an empty vector
         for (const auto& region: regions){
@@ -879,7 +883,7 @@ void get_reads_for_each_bam_subregion(
         try {
             cerr << "launching: " << n << '\n';
             threads.emplace_back(extract_subsequences_from_sample_thread_fn,
-                    std::ref(authenticator),                                     // GoogleAuthenticator& authenticator,
+                    std::ref(authenticator),                                     // Authenticator& authenticator,
                     std::ref(sample_to_region_reads),                            // sample_region_read_map_t& sample_to_region_reads,
                     std::cref(sample_bams),                                      // const vector <pair <string,path> >& sample_bams,
                     std::cref(regions),                                          // const vector<Region>& regions,
@@ -907,7 +911,7 @@ void get_reads_for_each_bam_subregion(
 void get_read_coords_for_each_bam_subregion(
         Timer& t,
         vector<Region>& regions,
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         path bam_csv,
         int64_t n_threads,
@@ -925,6 +929,10 @@ void get_read_coords_for_each_bam_subregion(
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         sample_only_transmap.add_sample(sample_name);
         sample_bams.emplace_back(sample_name, bam_path);
+
+        if (bam_path.string().starts_with("gs://")){
+            authenticator.is_gcs = true;
+        }
 
         // Initialize every combo of sample,region with an empty vector
         for (const auto& region: regions){
@@ -980,7 +988,7 @@ void fetch_reads(
         bool get_qualities,
         int32_t max_clip_fetch
 ){
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
     TransMap template_transmap;
 
     // Intermediate object to store results of multithreaded sample read fetching
@@ -1053,7 +1061,7 @@ void fetch_reads(
 void fetch_query_seqs_for_each_sample_thread_fn(
         const vector <pair <string,path> >& sample_bams,
         unordered_map<string, unordered_map<string,BinarySequence<uint64_t> > >& sample_queries,
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         atomic<size_t>& job_index
 ){
 
@@ -1098,7 +1106,7 @@ void fetch_query_seqs_for_each_sample_thread_fn(
 void fetch_query_seqs_for_each_sample(
         path bam_csv,
         int64_t n_threads,
-        GoogleAuthenticator& authenticator,
+        Authenticator& authenticator,
         unordered_map<string, unordered_map<string,BinarySequence<uint64_t> > >& sample_queries
 ){
     vector <pair <string,path> > sample_bams;
@@ -1106,6 +1114,10 @@ void fetch_query_seqs_for_each_sample(
     // Load BAM paths as a map with sample->bam
     for_each_sample_bam_path(bam_csv, [&](const string& sample_name, const path& bam_path){
         sample_bams.emplace_back(sample_name, bam_path);
+
+        if (bam_path.string().starts_with("gs://")){
+            authenticator.is_gcs = true;
+        }
     });
 
     // Thread-related variables
@@ -1154,7 +1166,7 @@ void fetch_reads_from_clipped_bam(
         bool force_forward,
         int32_t max_clip_fetch
 ){
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
     TransMap template_transmap;
 
     // Intermediate object to store results of multithreaded sample read fetching

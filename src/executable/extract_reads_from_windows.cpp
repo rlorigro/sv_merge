@@ -73,7 +73,7 @@ void extract(
 
     cerr << t << "Fetching reads for all windows" << '\n';
 
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
 
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_flanked_coord_map_t sample_to_region_coords;

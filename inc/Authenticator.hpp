@@ -31,7 +31,11 @@ using sv_merge::get_current_time;
 namespace sv_merge{
 
 
-class GoogleAuthenticator{
+class Authenticator{
+public:
+    bool is_gcs = false;
+
+private:
     mutex m;
     string token = "NULL";
 
@@ -40,7 +44,10 @@ class GoogleAuthenticator{
 
 public:
     /// Methods
+    Authenticator();
+    Authenticator(bool is_gcs);
     void update();
+    void update_gcs_token();
     void try_with_authentication(int64_t n_retries, const function<void()>& f);
 };
 
