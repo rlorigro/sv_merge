@@ -91,7 +91,12 @@ task chunk_vcf {
         # This block and the subsequent wait command MUST be inside the subshell ( ) to prevent monitor script
         # from running eternally
         (
+        # Get the number of threads available
         n_threads=$(nproc --all)
+
+        # Divide by 2 and avoid going below 1
+        # Sometimes memory can explode when the VCF is very large
+        n_threads=$(( (n_threads + 1) / 2 ))
 
         echo "Available threads: $n_threads"
 
