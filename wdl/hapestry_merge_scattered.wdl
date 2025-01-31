@@ -26,6 +26,7 @@ task chunk_vcf {
         Int flank_length = 200
         Int min_sv_length = 20
         Int n_chunks = 32
+        Int n_threads = 0
         File tandems_bed
         File? windows_override_bed
         File? reference_fa
@@ -91,12 +92,17 @@ task chunk_vcf {
         # This block and the subsequent wait command MUST be inside the subshell ( ) to prevent monitor script
         # from running eternally
         (
-        # Get the number of threads available
-        n_threads=$(nproc --all)
+        n_threads=~{n_threads}
 
-        # Divide by 2 and avoid going below 1
-        # Sometimes memory can explode when the VCF is very large
-        n_threads=$(( (n_threads + 1) / 2 ))
+        if [ $n_threads -eq 0 ]; then
+
+            # Get the number of threads available
+            n_threads=$(nproc --all)
+
+            # Divide by 2 and avoid going below 1
+            # Sometimes memory can explode when the VCF is very large
+            n_threads=$(( (n_threads + 1) / 2 ))
+        fi
 
         echo "Available threads: $n_threads"
 
