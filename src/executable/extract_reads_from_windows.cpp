@@ -134,6 +134,8 @@ void extract(
     }
     cerr << t << "Writing reads to fastq" << '\n';
 
+    string sequence;
+
     for (const auto& sample_reads: sample_to_region_reads){
         for (const auto& [region, reads]: sample_reads.second){
             path fastq_path = output_dir / (region.to_string('_') + ".fastq");
@@ -145,8 +147,9 @@ void extract(
             }
 
             for (const auto& read: reads){
+                read.sequence.to_string(sequence);
                 fastq_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
-                fastq_file << read.sequence << '\n';
+                fastq_file << sequence << '\n';
                 fastq_file << "+" << '\n';
                 for (const auto& q: read.qualities){
                     if (q+33 < 33 or q+33 > 126){
