@@ -45,7 +45,7 @@ private:
 public:
     /// Methods
     Authenticator();
-    Authenticator(bool is_gcs);
+    explicit Authenticator(bool is_gcs);
     void update();
     void update_gcs_token();
     void try_with_authentication(int64_t n_retries, const function<void()>& f);
