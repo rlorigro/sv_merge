@@ -29,7 +29,7 @@ message(STATUS "CMAKE_SYSTEM: ${CMAKE_SYSTEM}")
 
 # Compiler options.
 set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl/bin/openssl")
-set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
+#set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -133,6 +133,8 @@ add_library(sv_merge STATIC "src/executable/a.cpp")
 ##############################################
 
 function(add_wfa2)
+    message(STATUS "BUILDING WFA2")
+
     # Need to explicitly enable ExternalProject functionality
     include(ExternalProject)
 
@@ -143,7 +145,7 @@ function(add_wfa2)
             TIMEOUT 5
             CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DOPENMP=FALSE -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
             INSTALL_COMMAND make install
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
+#            DOWNLOAD_EXTRACT_TIMESTAMP ON
     )
 
 
@@ -169,6 +171,7 @@ endfunction()
 ##############################################
 
 function(add_curl)
+    message(STATUS "BUILDING curl")
 
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
         message(STATUS "Fetching curl")
@@ -185,7 +188,7 @@ function(add_curl)
         FetchContent_Declare(
                 project_curl
                 URL      https://github.com/curl/curl/releases/download/curl-8_4_0/curl-8.4.0.tar.gz
-                DOWNLOAD_EXTRACT_TIMESTAMP ON
+#                DOWNLOAD_EXTRACT_TIMESTAMP ON
         )
 
         FetchContent_MakeAvailable(project_curl)
@@ -235,6 +238,8 @@ endfunction()
 ##############################################
 
 function(add_htslib)
+    message(STATUS "BUILDING htslib")
+
     message(STATUS "Fetching htslib")
 
     find_library(BZ2LIB bz2)
@@ -249,7 +254,7 @@ function(add_htslib)
     FetchContent_Declare(
             project_htslib
             URL      https://github.com/samtools/htslib/releases/download/1.18/htslib-1.18.tar.bz2
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
+#            DOWNLOAD_EXTRACT_TIMESTAMP ON
     )
 
     FetchContent_MakeAvailable(project_htslib)
@@ -396,11 +401,16 @@ endfunction()
 ##############################################
 
 function(add_ortools)
+    message(STATUS "BUILDING ORTOOLS")
     include(FetchContent)
+
     FetchContent_Declare(
             ortools
             URL https://github.com/google/or-tools/archive/refs/tags/v9.10.tar.gz
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
+#            GIT_REPOSITORY https://github.com/google/or-tools.git
+#            GIT_TAG v9.10
+#            GIT_PROGRESS ON
+#            DOWNLOAD_EXTRACT_TIMESTAMP ON
     )
 
     set(BUILD_DEPS ON)
@@ -434,6 +444,8 @@ endfunction()
 ##############################################
 
 function(add_bdsg)
+    message(STATUS "BUILDING bdsg")
+
     include(ExternalProject)
 
     message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
@@ -452,7 +464,7 @@ function(add_bdsg)
                 BUILD_IN_SOURCE True
                 INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
                 INSTALL_COMMAND make install
-                DOWNLOAD_EXTRACT_TIMESTAMP ON
+#                DOWNLOAD_EXTRACT_TIMESTAMP ON
         )
     else()
         # Download or update library as an external project
@@ -463,7 +475,7 @@ function(add_bdsg)
                 BUILD_IN_SOURCE True
                 INSTALL_DIR ${CMAKE_SOURCE_DIR}/external/bdsg/
                 INSTALL_COMMAND make install
-                DOWNLOAD_EXTRACT_TIMESTAMP ON
+#                DOWNLOAD_EXTRACT_TIMESTAMP ON
         )
     endif()
 
@@ -523,6 +535,8 @@ endfunction()
 ##############################################
 
 function(add_cpptrace)
+    message(STATUS "BUILDING cpptrace")
+
     include(ExternalProject)
 
     message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
@@ -536,7 +550,7 @@ function(add_cpptrace)
             cpptrace
             GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
             GIT_TAG        v0.7.5
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
+#            DOWNLOAD_EXTRACT_TIMESTAMP ON
     )
 
     FetchContent_MakeAvailable(cpptrace)
@@ -562,25 +576,24 @@ endfunction()
 ##############################################
 
 function(add_mimalloc)
-    if(USE_MIMALLOC)
-        include(FetchContent)
+    message(STATUS "BUILDING cpptrace")
 
-        FetchContent_Declare(
-            mimalloc
-            GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
-            GIT_TAG 8c532c32c3c96e5ba1f2283e032f69ead8add00f
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
+    include(FetchContent)
 
-        )
+    FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
+        GIT_TAG 8c532c32c3c96e5ba1f2283e032f69ead8add00f
+#        DOWNLOAD_EXTRACT_TIMESTAMP ON
+    )
 
-        FetchContent_MakeAvailable(mimalloc)
+    FetchContent_MakeAvailable(mimalloc)
 
-        add_dependencies(sv_merge mimalloc)
+    add_dependencies(sv_merge mimalloc)
 
-        include_directories(
-            ${mimalloc_SOURCE_DIR}/include
-        )
-    endif()
+    include_directories(
+        ${mimalloc_SOURCE_DIR}/include
+    )
 endfunction()
 
 # ------- Misc -------
@@ -608,8 +621,6 @@ endif()
 
 find_package( ZLIB REQUIRED )
 
-message(STATUS "EXECUTABLES (BEFORE): ${EXECUTABLES}")
-
 if (NOT no_ortools OR NOT DEFINED no_ortools)
     add_ortools()
 
@@ -635,12 +646,16 @@ if (NOT no_ortools OR NOT DEFINED no_ortools)
 
 endif()
 
-add_bdsg()
-add_cpptrace()
-add_mimalloc()
+if(USE_MIMALLOC)
+    add_mimalloc()
+endif ()
+
+add_wfa2()
 add_curl()
 add_htslib()
-add_wfa2()
+add_bdsg()
+add_mimalloc()
+add_cpptrace()
 
 
 # -------- TESTS --------

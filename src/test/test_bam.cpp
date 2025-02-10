@@ -60,14 +60,14 @@ void test_bam_sequence_extraction(path data_directory){
     // BAM file is viewed (0:5000) with samtools
     // Now part of data directory on github repo to avoid samtools dependency for testing
     command = "samtools view -h " + bam_path.string() + " " + region_string;
-//    run_command(command, region_output_bam_path);
+    run_command(command, region_output_bam_path);
 
     path samtools_output_fasta_path = data_directory / "region.fasta";
 
     // BAM file is converted to FASTA with samtools
     // Now part of data directory on github repo to avoid samtools dependency for testing
     command = "samtools fasta -0 " + samtools_output_fasta_path.string() + " " + region_output_bam_path.string();
-//    run_command(command);
+    run_command(command);
 
     map<string,string> expected_sequences;
     for_sequence_in_fasta_file(samtools_output_fasta_path, [&](const Sequence& s){
@@ -113,8 +113,8 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
-    path output_path = data_directory / "test_alignment_softclip_only_sorted.fasta";
+    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
+    path output_path = data_directory / "test_alignment_hardclipped_sorted.fasta";
 
     ofstream file(output_path);
     if (not file.good() or not file.is_open()){
@@ -277,7 +277,7 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
     cerr << r.name << ' ' << r.start << ' ' << r.stop << '\n';
 
-    path bam_path = data_directory / "test_alignment_softclip_only_sorted.bam";
+    path bam_path = data_directory / "test_alignment_hardclipped_sorted.bam";
 
     Timer t;
 

@@ -196,7 +196,8 @@ private:
 
     /**
      * Accumulate data from a GAF that can summarize the alignment in terms of the query sequences and the graph. In this
-     * variant of the compute() fn, we exclude flanking regions from the accumulation of cigar operations on the query
+     * variant of the compute() fn, we exclude flanking regions from the accumulation of cigar operations on the query,
+     * but still retain up to flank_buffer bp of the flank.
      * @param gaf_path GAF to be parsed
      */
     void compute_with_flanks(const path& gaf_path);
