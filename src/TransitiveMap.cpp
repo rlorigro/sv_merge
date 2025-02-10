@@ -54,6 +54,11 @@ int64_t TransMap::get_id(const string& name) const{
 }
 
 
+bool TransMap::get_is_compressed() const{
+    return is_compressed;
+}
+
+
 size_t TransMap::get_read_count() const{
     auto id = graph.name_to_id(read_node_name);
     return graph.get_edge_count(id);
@@ -289,6 +294,10 @@ void TransMap::get_sample_of_read(const string& read_name, string& result) const
     graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
         // Check for cases that should be impossible
         if (not result.empty()){
+            if (is_compressed){
+                cerr << "WARNING: cannot expect 1:1 mapping from read->sample after using compression, even after decompression. Exiting..." << '\n';
+            }
+
             throw runtime_error("ERROR: multiple samples found for read: " + read_name);
         }
 
@@ -308,6 +317,10 @@ string TransMap::get_sample_of_read(const string& read_name) const{
     graph.for_each_neighbor_of_type(read_name, 'S', [&](const HeteroNode& neighbor, int64_t id){
         // Check for cases that should be impossible
         if (not result.empty()){
+            if (is_compressed){
+                cerr << "WARNING: cannot expect 1:1 mapping from read->sample after using compression, even after decompression. Exiting..." << '\n';
+            }
+
             throw runtime_error("ERROR: multiple samples found for read: " + read_name);
         }
 
@@ -333,6 +346,10 @@ void TransMap::get_sample_of_read(int64_t read_id, string& result) const{
     graph.for_each_neighbor_of_type(read_id, 'S', [&](int64_t id){
         // Check for cases that should be impossible
         if (not result.empty()){
+            if (is_compressed){
+                cerr << "WARNING: cannot expect 1:1 mapping from read->sample after using compression, even after decompression. Exiting..." << '\n';
+            }
+
             throw runtime_error("ERROR: multiple samples found for id: " + to_string(read_id));
         }
 
@@ -356,6 +373,10 @@ int64_t TransMap::get_sample_of_read(int64_t read_id) const{
     graph.for_each_neighbor_of_type(read_id, 'S', [&](int64_t id){
         // Check for cases that should be impossible
         if (result != -1){
+            if (is_compressed){
+                cerr << "WARNING: cannot expect 1:1 mapping from read->sample after using compression, even after decompression. Exiting..." << '\n';
+            }
+
             throw runtime_error("ERROR: multiple samples found for id: " + to_string(read_id));
         }
 
@@ -915,6 +936,7 @@ TransMap TransMap::partition_get_test_transmap() {
 
 
 void TransMap::compress_reads(float weight_quantum, bool verbose) {
+    is_compressed = true;
     size_t length;
     int64_t i, j, k;
     int64_t read_id, n_clusters, n_reads;
@@ -1012,6 +1034,7 @@ void TransMap::compress_reads(float weight_quantum, bool verbose) {
  * Implemented as a quadratic scan over all the reads in the cohort. Might be too slow for large cohorts.
  */
 void TransMap::compress_samples(float weight_quantum) {
+    is_compressed = true;
     bool contained, trivial;
     size_t length;
     int64_t i, j, k;
@@ -1193,6 +1216,7 @@ void TransMap::compress_samples(float weight_quantum) {
 
 
 void TransMap::compress_samples_update_weights(int64_t from_first, int64_t from_last, int64_t to_first, int64_t to_last, vector<vector<float>>& weights, vector<bool>& used) {
+    is_compressed = true;
     int64_t i, j, k;
     int64_t cluster_id;
 
@@ -1258,6 +1282,7 @@ int64_t TransMap::get_mandatory_haplotypes() {
 
 
 void TransMap::compress_haplotypes_global(float weight_quantum) {
+    is_compressed = true;
     const int64_t n_samples = get_sample_count();
     int64_t n_haps = get_path_count();
 
@@ -1364,6 +1389,7 @@ bool TransMap::has_large_weight(float n_weight, float d_weight) {
 
 
 void TransMap::compress_haplotypes_local(float n_weight, float d_weight, float weight_quantum) {
+    is_compressed = true;
     const float DELTA = n_weight/d_weight;
     const int64_t N_SAMPLES = get_sample_count();
     // cerr << "compress_haplotypes_local> DELTA=" << to_string(DELTA) << '\n';

@@ -45,7 +45,7 @@ class TransMap {
     unordered_map<string,tuple<int64_t,int64_t,int64_t,int64_t>> sample_to_sample;  // from_sample_name -> from_sample_first, from_sample_last, to_sample_first, to_sample_last
     unordered_set<int64_t> solved_samples;
     vector<string> partitioned_samples;
-
+    bool is_compressed = false;
 
 public:
     static const string sample_node_name;
@@ -86,6 +86,7 @@ public:
 
     /// Accessing
     bool empty() const;
+    bool get_is_compressed() const;
 
     size_t get_edge_count() const;
     size_t get_read_count() const;
@@ -128,6 +129,7 @@ public:
     void for_each_read_of_path(int64_t path_id, const function<void(int64_t id)>& f) const;
     void for_each_variant_of_path(int64_t path_id, const function<void(int64_t id)>& f) const;
 
+    // TODO: refactor and handle read->sample get_ functions for when Transmap was compressed
     string get_sample_of_read(const string& read_name) const;
     void get_sample_of_read(const string& read_name, string& result) const;
     void get_sample_of_read(int64_t read_id, string& result) const;

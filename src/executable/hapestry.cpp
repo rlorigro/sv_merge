@@ -1234,8 +1234,13 @@ void merge_thread_fn(
         }
 
         if (HAPESTRY_DEBUG){
-            write_sample_path_divergence(variant_graph, transmap, subdir);
-            align_read_path_edges_of_transmap(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
+            if (transmap.get_is_compressed()) {
+                cerr << "WARNING: cannot iterate read->sample mappings for (de)compressed transmap, skipping debug output..." << '\n';
+            }
+            else {
+                write_sample_path_divergence(variant_graph, transmap, subdir);
+                align_read_path_edges_of_transmap(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
+            }
         }
 
         // Attempt to manually deallocate transmap for this region
