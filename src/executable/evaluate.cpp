@@ -339,6 +339,9 @@ void compute_graph_evaluation_thread_fn(
 
         // Do the bulk of the Gaf parsing work here
         GafSummary gaf_summary(variant_graph, transmap, true);
+
+        // Allow only this many bases to be parsed within the flanking region to accumulate cigar ops that are
+        // "squished" out of the window
         gaf_summary.flank_buffer = 40;
         gaf_summary.compute(gaf_path);
 

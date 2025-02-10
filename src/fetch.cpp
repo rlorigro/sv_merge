@@ -47,25 +47,26 @@ void update_coord(
         auto [start,stop] = cigar.get_forward_query_interval();
 
         if (cigar.is_reverse){
-            if (stop > coord.query_stop){
+            if (stop >= coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_start = cigar.ref_start;
             }
-            if (start < coord.query_start){
+            if (start <= coord.query_start){
                 coord.query_start = start;
                 coord.ref_stop = cigar.ref_stop;
             }
         }
         else{
-            if (start < coord.query_start){
+            if (start <= coord.query_start){
                 coord.query_start = start;
                 coord.ref_start = cigar.ref_start;
             }
-            if (stop > coord.query_stop){
+            if (stop >= coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_stop = cigar.ref_stop;
             }
         }
+        // cerr << "NEW: ref=[" << cigar.ref_start << ',' << cigar.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]" << '\n';
     }
 }
 
@@ -638,7 +639,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                             return;
                         }
 
-//                        cerr << cigar_code_to_char[intersection.code] << ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                        // cerr << cigar_code_to_char[intersection.code] << ' ' << intersection.length <<  ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
@@ -688,7 +689,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                 }
 
                 if (pass) {
-                    pair<CigarInterval,CigarInterval> c = {inner_coord, outer_coord};
+                    pair c = {inner_coord, outer_coord};
                     sample_to_region_coords.at(sample_name).at(region).emplace_back(name, c);
                 }
             }
@@ -972,7 +973,6 @@ void get_read_coords_for_each_bam_subregion(
     for (auto& n: threads){
         n.join();
     }
-
 }
 
 
@@ -1286,9 +1286,6 @@ void fetch_reads_from_clipped_bam(
                     continue;
                 }
 
-                inner_coord.query_start -= outer_coord.query_start;
-                inner_coord.query_stop -= outer_coord.query_start;
-
                 if (outer_coord.is_reverse and force_forward) {
                     s.reverse_complement();
 
@@ -1302,6 +1299,12 @@ void fetch_reads_from_clipped_bam(
                 if (append_sample_to_read) {
                     name += + "_" + sample_name;
                 }
+
+                // Here and beyond "inner_coord" becomes a new object that simply indicates where the flanks are in the
+                // substring coords. i.e. adjusted for the query start
+                // See GafSummary::compute_with_flanks for details
+                inner_coord.query_start -= outer_coord.query_start;
+                inner_coord.query_stop -= outer_coord.query_start;
 
                 // Finally update the transmap
                 transmap.add_read_with_move(name, s);
