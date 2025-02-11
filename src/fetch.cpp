@@ -46,27 +46,34 @@ void update_coord(
     if (pass){
         auto [start,stop] = cigar.get_forward_query_interval();
 
+        // When iterating a reverse alignment, the query "start" decreases
         if (cigar.is_reverse){
-            if (stop >= coord.query_stop){
+            // We only want to capture the first "stop" because it is the widest ref interval
+            if (stop > coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_start = cigar.ref_start;
             }
+            // We want to continue to capture the "start" coord until the cigars go out of the scope (of the ref window)
+            // Accounting for DEL operations that do not advance the query, hence the >=
             if (start <= coord.query_start){
                 coord.query_start = start;
                 coord.ref_stop = cigar.ref_stop;
             }
         }
         else{
-            if (start <= coord.query_start){
+            // We only want to capture the first "start" because it is the widest ref interval
+            if (start < coord.query_start){
                 coord.query_start = start;
                 coord.ref_start = cigar.ref_start;
             }
+            // We want to continue to capture the "stop" coord until the cigars go out of the scope (of the ref window)
+            // Accounting for DEL operations that do not advance the query, hence the >=
             if (stop >= coord.query_stop){
                 coord.query_stop = stop;
                 coord.ref_stop = cigar.ref_stop;
             }
         }
-        // cerr << "NEW: ref=[" << cigar.ref_start << ',' << cigar.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]" << '\n';
+        // cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]" << '\n';
     }
 }
 
