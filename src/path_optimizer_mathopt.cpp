@@ -1332,8 +1332,6 @@ TerminationReason prune_paths_with_d_min(
 /**
  * Perform joint optimization on edit distance + total haps used
  * @param transmap Filled in Transmap which may or may not be compressed
- * @param model Model resulting from calling construct_*_model
- * @param vars Vars corresponding to construct_*_model
  * @param n_threads number of threads to use
  * @param output_dir where to write/append logs
  * @param config configuration for optimization, such as use_ploidy, use_sum_constraints, etc

@@ -323,11 +323,11 @@ bool point_is_contained(int32_t p, const Region& r, bool or_equal){
 // https://stackoverflow.com/a/58467162
 //
 // WARNING: This function is not thread-safe!
+//
 //       ^
 //      / \
-//     /   \
-//    /  !  \
-//   /_______\
+//     / ! \
+//    /_____\
 //
 //
 string get_uuid() {

@@ -46,7 +46,7 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
         }
 
         if (c == '\r' and not carriage_return_found){
-            cerr << ("WARNING: carriage return not supported: " + bed_path.string());
+            cerr << ("WARNING: carriage return not supported: " + bed_path.string()) << '\n';
             carriage_return_found = true;
             continue;
         }
