@@ -166,7 +166,7 @@ SteinerTree::SteinerTree(TransMap& transmap):
     for (auto& element: solutions1) {  // Order of solutions not important
         i++;
         solutions.emplace_back(element.first,element.first);
-        solution_samples.emplace_back(); solution_sample_weights.emplace_back();
+        solution_samples.emplace_back(); solution_sample_weights.emplace_back();  // <----- WRONG: SAMPLES SHOULD BE SORTED BY INCREASING COST, FOR THE STEINER TREE HEURISTIC.
         for (auto& element_prime: element.second) {
             solution_samples.at(i).emplace_back(element_prime.first);
             solution_sample_weights.at(i).emplace_back(element_prime.second);
@@ -176,7 +176,7 @@ SteinerTree::SteinerTree(TransMap& transmap):
     for (auto& element: solutions2) {  // Order of solutions not important
         i++;
         solutions.emplace_back(std::get<0>(element.first),std::get<1>(element.first));
-        solution_samples.emplace_back(); solution_sample_weights.emplace_back();
+        solution_samples.emplace_back(); solution_sample_weights.emplace_back();  // <----- WRONG: SAMPLES SHOULD BE SORTED BY INCREASING COST, FOR THE STEINER TREE HEURISTIC.
         for (auto& element_prime: element.second) {
             solution_samples.at(i).emplace_back(element_prime.first);
             solution_sample_weights.at(i).emplace_back(element_prime.second);
@@ -217,6 +217,17 @@ void SteinerTree::get_sample_solutions_histogram(vector<int64_t> out) {
     build_sample_solutions();
     for (int64_t i=0; i<n_samples; i++) {
         length=sample_solutions.at(i).size();
+        out[length>=OUT_LENGTH?OUT_LENGTH-1:length]++;
+    }
+}
+
+
+void SteinerTree::get_solution_samples_histogram(vector<int64_t> out) {
+    const size_t OUT_LENGTH = out.size();
+    size_t length;
+
+    for (int64_t i=0; i<n_solutions; i++) {
+        length=solution_samples.at(i).size();
         out[length>=OUT_LENGTH?OUT_LENGTH-1:length]++;
     }
 }
@@ -311,7 +322,7 @@ void SteinerTree::parse_approximation(TransMap& transmap, path output_dir) {
 
 // -------------------------------------------- GREEDY DENSE SOLUTION --------------------------------------------------
 
-double SteinerTree::get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, float hap_cost, float edge_cost_multiplier) {
+double SteinerTree::get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, double hap_cost, double edge_cost_multiplier) {
     const size_t length = solution_sample_weights.at(solution_id).size();
     const int64_t hap1 = solutions.at(solution_id).first;
     const int64_t hap2 = solutions.at(solution_id).second;
@@ -335,7 +346,7 @@ double SteinerTree::get_density(int64_t solution_id, unordered_set<int64_t>& cov
 }
 
 
-double SteinerTree::get_density_init(int64_t solution_id, float hap_cost, float edge_cost_multiplier) {
+double SteinerTree::get_density_init(int64_t solution_id, double hap_cost, double edge_cost_multiplier) {
     double denominator = solutions.at(solution_id).first==solutions.at(solution_id).second?hap_cost:(2.0*hap_cost);
     double d = 0.0;
     for (auto& weight: solution_sample_weights.at(solution_id)) d+=weight;
@@ -344,7 +355,7 @@ double SteinerTree::get_density_init(int64_t solution_id, float hap_cost, float 
 }
 
 
-double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions) {
+double SteinerTree::greedy_dense_solution(double hap_cost, double edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions) {
     int64_t i;
     vector<double> density;
     unordered_set<int64_t> covered_samples, solutions_to_update;
@@ -393,7 +404,7 @@ double SteinerTree::greedy_dense_solution(float hap_cost, float edge_cost_multip
 }
 
 
-void SteinerTree::greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t, double>, vector<pair<int64_t, double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier) {
+void SteinerTree::greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t, double>, vector<pair<int64_t, double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, double hap_cost, double edge_cost_multiplier) {
     int64_t i;
     int64_t solution_id;
     pair<int64_t,double> current_solution;
@@ -412,7 +423,7 @@ void SteinerTree::greedy_dense_solution_impl(vector<double>& density, priority_q
 }
 
 
-void SteinerTree::greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier) {
+void SteinerTree::greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, double hap_cost, double edge_cost_multiplier) {
     bool new1, new2;
     size_t length;
     int64_t i;
@@ -479,7 +490,7 @@ void SteinerTree::greedy_dense_solution_step(int64_t solution_id, vector<double>
 
 // ------------------------------------------------- SHORTEST PATHS ----------------------------------------------------
 
-double SteinerTree::approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions) {
+double SteinerTree::approximate_shortest_paths(bool minimize, double hap_cost, double edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions) {
     size_t length;
     int64_t i;
     int64_t sample_id, solution_id, solution_min, solution_max;

@@ -94,6 +94,12 @@ class SteinerTree {
     void get_sample_solutions_histogram(vector<int64_t> out);
 
     /**
+     * Adds to `out[i]` the number of solutions that can be assigned to `i` samples.
+     * THe procedure assumes that object variable `solution_samples` has already been built.
+     */
+    void get_solution_samples_histogram(vector<int64_t> out);
+
+    /**
      * Builds object variable `hap_solutions`, assuming that `solutions` has already been built.
      *
      * Remark: the procedure does nothing if the variables are already non-empty.
@@ -122,12 +128,12 @@ public:
     /**
      * @param covered_samples temporary space;
      */
-    double get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, float hap_cost, float edge_cost_multiplier);
+    double get_density(int64_t solution_id, unordered_set<int64_t>& covered_samples, double hap_cost, double edge_cost_multiplier);
 
     /**
      * A simpler version of `get_density()` to be used when no solution has been selected yet.
      */
-    double get_density_init(int64_t solution_id, float hap_cost, float edge_cost_multiplier);
+    double get_density_init(int64_t solution_id, double hap_cost, double edge_cost_multiplier);
 
     /**
      * Priority of the max-queue used by `greedy_dense_solution()`.
@@ -154,7 +160,7 @@ public:
      * @param n_samples_with_solutions adds to position `i` the number of samples with `i` possible solutions;
      * @return the objective value of the approximation.
      */
-    double greedy_dense_solution(float hap_cost, float edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions);
+    double greedy_dense_solution(double hap_cost, double edge_cost_multiplier, int64_t mode, vector<int64_t>& n_samples_with_solutions);
 
     /**
      * A sequence of greedy steps driven by solution density.
@@ -165,7 +171,7 @@ public:
      * @param covered_samples_new temporary space;
      * @param solutions_to_update temporary space.
      */
-    void greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, float hap_cost, float edge_cost_multiplier);
+    void greedy_dense_solution_impl(vector<double>& density, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare>& queue, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, double hap_cost, double edge_cost_multiplier);
 
     /**
      * The main step of `greedy_dense_solution_impl()`: `solution_id` is added to the current solution and some
@@ -178,7 +184,7 @@ public:
      * @param update_queue FALSE=updates only `density`; TRUE=updates also `queue`;
      * @param queue the priority queue used in every iteration.
      */
-    void greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, float hap_cost, float edge_cost_multiplier);
+    void greedy_dense_solution_step(int64_t solution_id, vector<double>& density, unordered_set<int64_t>& covered_samples, unordered_set<int64_t>& covered_samples_new, unordered_set<int64_t>& solutions_to_update, bool update_queue, priority_queue<pair<int64_t,double>, vector<pair<int64_t,double>>, Compare> queue, double hap_cost, double edge_cost_multiplier);
 
 
 
@@ -196,7 +202,7 @@ public:
      * @param n_samples_with_solutions adds to position `i` the number of samples with `i` possible solutions;
      * @return the objective value of the approximation.
      */
-    double approximate_shortest_paths(bool minimize, float hap_cost, float edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions);
+    double approximate_shortest_paths(bool minimize, double hap_cost, double edge_cost_multiplier, bool build_solution, vector<int64_t>& n_samples_with_solutions);
 
 };
 
