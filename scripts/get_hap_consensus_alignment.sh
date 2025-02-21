@@ -4,7 +4,7 @@ set -euxo
 
 # Define variables for the input VCF, reference fasta, output directory, and sample name
 VCF_INPUT=$1
-REFERENCE_FASTA=$
+REFERENCE_FASTA=$2
 OUTPUT_DIR=$3
 REGION=$4
 SAMPLE_NAME=$5
