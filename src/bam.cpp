@@ -192,15 +192,6 @@ void HtsAlignment::get_query_sequence(string& result){
 }
 
 
-void HtsAlignment::get_query_sequence(BinarySequence<uint64_t>& result){
-    if (not is_decompressed){
-        decompress_bam_sequence(hts_alignment, query_sequence);
-        is_decompressed = true;
-    }
-    result = query_sequence;
-}
-
-
 void HtsAlignment::get_qualities(vector<uint8_t>& result){
     uint8_t* q = bam_get_qual(hts_alignment);
 
@@ -424,6 +415,14 @@ void decompress_bam_sequence(const bam1_t* alignment, BinarySequence<uint64_t>& 
     int32_t stop = length;
 
     decompress_bam_sequence(alignment, sequence, start, stop);
+}
+
+
+void HtsAlignment::get_query_sequence(BinarySequence<uint64_t>& result){
+    if (not is_decompressed){
+        decompress_bam_sequence(hts_alignment, result);
+        is_decompressed = true;
+    }
 }
 
 

@@ -42,8 +42,8 @@ public:
     /// Methods ///
     BinarySequence();
     BinarySequence(const BinarySequence& s);
-    template <class T2> BinarySequence(const T2& s);
-    BinarySequence<T> substr(size_t start, size_t n) const;
+    template <class T2> explicit BinarySequence(const T2& s);
+    [[nodiscard]] BinarySequence<T> substr(size_t start, size_t n) const;
     void encode(const string& s);
     void push_back(char c);
     void shift(char c);
@@ -52,14 +52,14 @@ public:
 
     // For short sequences it may be important to reserve so that default exponential allocator does not overallocate
     void reserve(size_t bp_length);
-    bool empty() const;
+    [[nodiscard]] bool empty() const;
     void to_string(string& s) const;
-    size_t get_byte_length() const;
-    size_t size() const;
+    [[nodiscard]] size_t get_byte_length() const;
+    [[nodiscard]] size_t size() const;
 
     void print_as_bits() const;
 
-    T get_random_base() const;
+    [[nodiscard]] T get_random_base() const;
 };
 
 
