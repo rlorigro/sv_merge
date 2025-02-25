@@ -609,6 +609,7 @@ set(TESTS
         test_command_timeout
         test_cpptrace
         test_fasta
+        test_fetch
         test_gaf
         test_gaf_summary
         test_graph

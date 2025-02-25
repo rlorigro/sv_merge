@@ -63,7 +63,7 @@ void fetch_reads(
 /**
  *
  * @param t for printing fetch time per BAM
- * @param regions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
+ * @param regions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig. Regions are expected to be NON OVERLAPPING!
  * @param bam_csv
  * @param n_threads
  * @param max_length skip excessively long reads, greater than this threshold (useful for supplementaries, fragmented alignments)

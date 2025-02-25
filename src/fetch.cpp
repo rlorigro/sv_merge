@@ -73,7 +73,73 @@ void update_coord(
                 coord.ref_stop = cigar.ref_stop;
             }
         }
-        // cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]" << '\n';
+        if (HAPESTRY_DEBUG) cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]" << '\n';
+    }
+}
+
+
+// Inner coord spanning requirement is problematic for:
+//  - 0-length inner windows
+//  - INS/DEL that occur exactly on the boundaries
+void update_inner_coord(
+        const CigarInterval& cigar,
+        CigarInterval& coord,
+        int32_t ref_start,
+        int32_t ref_stop
+        ){
+
+    // If the alignment is within the ref region, record the query position
+    auto [start,stop] = cigar.get_forward_query_interval();
+
+    // Instead of expecting to iterate some intersected cigars INSIDE the inner flanks, we
+    // simply ask if the ref distance from the target is less than previously observed.
+
+    // // We could be OUTSIDE the inner flank, in the LEFT flank:
+    // // meaning that the current ciger iterator STOP is approaching the inner START
+    // auto stop_to_start_dist = abs(cigar.ref_stop - ref_start);
+    //
+    // // We could be OUTSIDE the inner flank, in the RIGHT flank:
+    // // meaning that the current ciger iterator START is leaving the inner STOP
+    // auto start_to_stop_dist = abs(cigar.ref_start - ref_stop);
+
+    // OR we could be inside the inner flank
+    auto prev_start_dist = abs(coord.ref_start - ref_start);
+    auto prev_stop_dist = abs(coord.ref_stop - ref_stop);
+
+    auto start_dist = abs(cigar.ref_start - ref_start);
+    auto stop_dist = abs(cigar.ref_stop - ref_stop);
+
+    // When iterating a reverse alignment, the query "start" decreases
+    if (cigar.is_reverse){
+        // We only want to capture the first "stop" because it is the widest ref interval
+        if (stop_dist < prev_stop_dist){
+            coord.query_start = start;
+            coord.ref_stop = cigar.ref_stop;
+        }
+
+        // We want to continue to capture the "start" coord until the cigars go out of the scope (of the ref window)
+        // Accounting for DEL operations that do not advance the query, hence the >=
+        if (start_dist <= prev_start_dist){
+            coord.query_stop = stop;
+            coord.ref_start = cigar.ref_start;
+        }
+    }
+    else{
+        // We only want to capture the first "start" because it is the widest ref interval
+        if (start_dist < prev_start_dist){
+            coord.query_start = start;
+            coord.ref_start = cigar.ref_start;
+        }
+        // We want to continue to capture the "stop" coord until the cigars go out of the scope (of the ref window)
+        // Accounting for DEL operations that do not advance the query, hence the >=
+        if (stop_dist <= prev_stop_dist){
+            coord.query_stop = stop;
+            coord.ref_stop = cigar.ref_stop;
+        }
+    }
+    if (HAPESTRY_DEBUG) {
+        cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
+        cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
     }
 }
 
@@ -588,10 +654,13 @@ void extract_flanked_subregion_coords_from_sample_contig(
                 string name;
                 alignment.get_query_name(name);
 
+                if (HAPESTRY_DEBUG) cerr << '\n' << name << '\n';
+
                 // The region of interest is defined in reference coordinate space
                 // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
+                    // Flank length is used to find the inner bounds by shrinking the window (instead of vice versa)
                     auto inner_left = r.start + flank_length;
                     auto inner_right = r.stop - flank_length;
 
@@ -646,17 +715,16 @@ void extract_flanked_subregion_coords_from_sample_contig(
                             return;
                         }
 
-                        // cerr << cigar_code_to_char[intersection.code] << ' ' << intersection.length <<  ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << '\n';
+                        if (HAPESTRY_DEBUG) cerr << cigar_code_to_char[intersection.code] << ' ' << intersection.length <<  ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << " 'interval'=" << interval.first << ',' << interval.second << '\n';
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
                             auto& [inner_coord, outer_coord] = query_coords_per_region.at(region).at(name);
 
                             if (get_flank_query_coords){
-                                update_coord(
+                                update_inner_coord(
                                         intersection,
                                         inner_coord,
-                                        false,
                                         region.start + flank_length,
                                         region.stop - flank_length
                                 );
@@ -680,6 +748,16 @@ void extract_flanked_subregion_coords_from_sample_contig(
             for (const auto& [name, coords]: query_coords){
                 auto& [inner_coord, outer_coord] = coords;
                 bool pass = false;
+
+                if (HAPESTRY_DEBUG) {
+                    cerr << region.to_string() << '\n';
+                    cerr << name << '\n';
+                    cerr << "inner_coord.ref_start: " << (inner_coord.ref_start == region.start + flank_length) << " [" << inner_coord.ref_start << " should be " << region.start + flank_length << "]" << '\n';
+                    cerr << "inner_coord.ref_stop:  " << (inner_coord.ref_stop == region.stop - flank_length) << " [" << inner_coord.ref_stop << " should be " << region.stop - flank_length << "]" << '\n';
+                    cerr << "outer_coord.ref_start: " << (outer_coord.ref_start == region.start) << " [" << outer_coord.ref_start << " should be " << region.start << "]" << '\n';
+                    cerr << "outer_coord.ref_stop:  " << (outer_coord.ref_stop == region.stop) << " [" << outer_coord.ref_stop << " should be " << region.stop << "]" << '\n';
+                    cerr << '\n';
+                }
 
                 // Require all four bounds are touched by alignment
                 if (require_spanning) {
@@ -1130,7 +1208,6 @@ void fetch_query_seqs_for_each_sample(
     // Thread-related variables
     atomic<size_t> job_index = 0;
     vector<thread> threads;
-    mutex authenticator_mutex;
 
     threads.reserve(n_threads);
 
@@ -1290,6 +1367,7 @@ void fetch_reads_from_clipped_bam(
                 // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
                 // spanning, etc.
                 if (s.empty()) {
+                    cerr << "WARNING: skipping empty sequence: " << name << '\n';
                     continue;
                 }
 

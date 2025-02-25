@@ -27,9 +27,9 @@ using std::pair;
 #include <filesystem>
 using std::filesystem::path;
 
-
 namespace sv_merge{
 
+inline bool HAPESTRY_DEBUG = false;
 
 class HapestryConfig {
 public:

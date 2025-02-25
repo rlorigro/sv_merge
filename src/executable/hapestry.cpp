@@ -57,8 +57,6 @@ using std::ref;
 
 using namespace sv_merge;
 
-bool HAPESTRY_DEBUG = false;
-
 #include "bindings/cpp/WFAligner.hpp"
 using namespace wfa;
 
