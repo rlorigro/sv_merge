@@ -217,55 +217,61 @@ def main(input_directory, output_directory, hap_identity, hap_coverage, edges_co
         edges_covered_per_tool = dict()
         nodes_covered_per_tool = dict()
 
-        # use os to iterate over the files in the directory
-        for tool_name in os.listdir(os.path.join(input_directory, dir_name)):
-            if not os.path.isdir(os.path.join(input_directory, dir_name, tool_name)):
-                continue
+        try:
+            # use os to iterate over the files in the directory
+            for tool_name in os.listdir(os.path.join(input_directory, dir_name)):
+                if not os.path.isdir(os.path.join(input_directory, dir_name, tool_name)):
+                    continue
 
-            # for each tool, extract the stats
-            nodes_csv = os.path.join(input_directory, dir_name, tool_name, "nodes.csv")
-            edges_csv = os.path.join(input_directory, dir_name, tool_name, "edges.csv")
-            haps_csv = os.path.join(input_directory, dir_name, tool_name, "haps.csv")
+                # for each tool, extract the stats
+                nodes_csv = os.path.join(input_directory, dir_name, tool_name, "nodes.csv")
+                edges_csv = os.path.join(input_directory, dir_name, tool_name, "edges.csv")
+                haps_csv = os.path.join(input_directory, dir_name, tool_name, "haps.csv")
 
-            if hap_identity is not None or hap_coverage is not None:
-                avg_hap_coverage, avg_hap_identity = parse_haps_csv(haps_csv)
-                if hap_identity is not None:
-                    hap_identity_per_tool[tool_name] = avg_hap_identity
-                if hap_coverage is not None:
-                    hap_coverage_per_tool[tool_name] = avg_hap_coverage
+                if hap_identity is not None or hap_coverage is not None:
+                    avg_hap_coverage, avg_hap_identity = parse_haps_csv(haps_csv)
+                    if hap_identity is not None:
+                        hap_identity_per_tool[tool_name] = avg_hap_identity
+                    if hap_coverage is not None:
+                        hap_coverage_per_tool[tool_name] = avg_hap_coverage
+
+                if edges_covered is not None:
+                    avg_edges_covered = parse_edges_csv(edges_csv)
+                    edges_covered_per_tool[tool_name] = avg_edges_covered
+
+                if nodes_covered is not None:
+                    avg_nodes_coverage = parse_nodes_csv(nodes_csv)
+                    nodes_covered_per_tool[tool_name] = avg_nodes_coverage
+
+            # use the comparator functions to see if this dir passes the criteria
+            if hap_identity is not None:
+                passing,a,b =  compare(hap_identity, hap_identity_per_tool)
+
+                if passing:
+                    hap_identity_results[dir_name] = (a,b)
+
+            if hap_coverage is not None:
+                passing,a,b =  compare(hap_coverage, hap_coverage_per_tool)
+
+                if passing:
+                    hap_coverage_results[dir_name] = (a,b)
 
             if edges_covered is not None:
-                avg_edges_covered = parse_edges_csv(edges_csv)
-                edges_covered_per_tool[tool_name] = avg_edges_covered
+                passing,a,b =  compare(edges_covered, edges_covered_per_tool)
+
+                if passing:
+                    edges_covered_results[dir_name] = (a,b)
 
             if nodes_covered is not None:
-                avg_nodes_coverage = parse_nodes_csv(nodes_csv)
-                nodes_covered_per_tool[tool_name] = avg_nodes_coverage
+                passing,a,b =  compare(nodes_covered, nodes_covered_per_tool)
 
-        # use the comparator functions to see if this dir passes the criteria
-        if hap_identity is not None:
-            passing,a,b =  compare(hap_identity, hap_identity_per_tool)
+                if passing:
+                    nodes_covered_results[dir_name] = (a,b)
+        except Exception as e:
+            print(e)
+            print("ERROR: parsing failed for dir: " + dir_name)
+            exit()
 
-            if passing:
-                hap_identity_results[dir_name] = (a,b)
-
-        if hap_coverage is not None:
-            passing,a,b =  compare(hap_coverage, hap_coverage_per_tool)
-
-            if passing:
-                hap_coverage_results[dir_name] = (a,b)
-
-        if edges_covered is not None:
-            passing,a,b =  compare(edges_covered, edges_covered_per_tool)
-
-            if passing:
-                edges_covered_results[dir_name] = (a,b)
-
-        if nodes_covered is not None:
-            passing,a,b =  compare(nodes_covered, nodes_covered_per_tool)
-
-            if passing:
-                nodes_covered_results[dir_name] = (a,b)
 
         # write the results to the bed file
         if len(hap_identity_results) > 0:
