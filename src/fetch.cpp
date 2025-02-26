@@ -78,6 +78,99 @@ void update_coord(
 }
 
 
+/**
+ * Get the widest query coords that fit into a ref window
+ * @param coord coord that tracks the ref,query start/stop, where start < stop in both
+ * @param ref_pos ref pos that is paired with a given query pos
+ * @param query_pos query pos that is paired with a given ref pos
+ * @param ref_start the goal pos to be met
+ * @param ref_stop the goal pos to be met
+ * @param is_reverse is the alignment reverse
+ */
+void update_inner_coord(
+        CigarInterval& coord,
+        int32_t ref_pos,
+        int32_t query_pos,
+        int32_t ref_start,
+        int32_t ref_stop,
+        bool is_reverse
+        ) {
+    auto start_dist = abs(ref_pos - ref_start);
+    auto stop_dist = abs(ref_pos - ref_stop);
+
+    auto prev_start_dist = abs(coord.ref_start - ref_start);
+    auto prev_stop_dist = abs(coord.ref_stop - ref_stop);
+
+    // When iterating a reverse alignment, the query "start" decreases
+    if (is_reverse){
+        // We only want to capture the first "stop" because it is the widest ref interval
+        if (stop_dist <= prev_stop_dist){
+            if (stop_dist == prev_stop_dist) {
+                coord.query_start = min(coord.query_start,query_pos);
+            }
+            else {
+                coord.query_start = query_pos;
+            }
+
+            coord.ref_stop = ref_pos;
+            if (HAPESTRY_DEBUG) {
+                cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
+                cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
+            }
+        }
+
+        // We want to continue to capture the "start" coord until the cigars go out of the scope (of the ref window)
+        // Accounting for DEL operations that do not advance the query, hence the >=
+        if (start_dist <= prev_start_dist){
+            if (start_dist == prev_start_dist) {
+                coord.query_stop = max(coord.query_stop,query_pos);
+            }
+            else {
+                coord.query_stop = query_pos;
+            }
+            coord.ref_start = ref_pos;
+            if (HAPESTRY_DEBUG) {
+                cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
+                cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
+            }
+        }
+    }
+    else{
+        // We only want to capture the first "start" because it is the widest ref interval
+        if (start_dist <= prev_start_dist){
+            if (start_dist == prev_start_dist) {
+                coord.query_start = min(coord.query_start,query_pos);
+            }
+            else {
+                coord.query_start = query_pos;
+            }
+
+            coord.ref_start = ref_pos;
+            if (HAPESTRY_DEBUG) {
+                cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
+                cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
+            }
+        }
+        // We want to continue to capture the "stop" coord until the cigars go out of the scope (of the ref window)
+        // Accounting for DEL operations that do not advance the query, hence the >=
+        if (stop_dist <= prev_stop_dist){
+            if (stop_dist == prev_stop_dist) {
+                coord.query_stop = max(coord.query_stop,query_pos);
+            }
+            else {
+                coord.query_stop = query_pos;
+            }
+
+            coord.ref_stop = ref_pos;
+            if (HAPESTRY_DEBUG) {
+                cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
+                cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
+            }
+        }
+    }
+}
+
+
 // Inner coord spanning requirement is problematic for:
 //  - 0-length inner windows
 //  - INS/DEL that occur exactly on the boundaries
@@ -88,59 +181,31 @@ void update_inner_coord(
         int32_t ref_stop
         ){
 
-    // If the alignment is within the ref region, record the query position
-    auto [start,stop] = cigar.get_forward_query_interval();
+    // Break the "coord" into points. We don't really care which one was "start" or "stop", all we care about is the
+    // mapping from ref<->query
 
-    // Instead of expecting to iterate some intersected cigars INSIDE the inner flanks, we
-    // simply ask if the ref distance from the target is less than previously observed.
+    // The cigar iterator handles the pairing for us. Reverse alignments always have a query_start that is < query_stop
+    // but the start<->start mapping is consistent.
 
-    // // We could be OUTSIDE the inner flank, in the LEFT flank:
-    // // meaning that the current ciger iterator STOP is approaching the inner START
-    // auto stop_to_start_dist = abs(cigar.ref_stop - ref_start);
-    //
-    // // We could be OUTSIDE the inner flank, in the RIGHT flank:
-    // // meaning that the current ciger iterator START is leaving the inner STOP
-    // auto start_to_stop_dist = abs(cigar.ref_start - ref_stop);
+    // For the purpose of the coord that we store for later, we treat query start/stop so that start is always < stop
+    update_inner_coord(
+        coord,
+        cigar.ref_start,
+        cigar.query_start,
+        ref_start,
+        ref_stop,
+        cigar.is_reverse
+    );
 
-    // OR we could be inside the inner flank
-    auto prev_start_dist = abs(coord.ref_start - ref_start);
-    auto prev_stop_dist = abs(coord.ref_stop - ref_stop);
+    update_inner_coord(
+        coord,
+        cigar.ref_stop,
+        cigar.query_stop,
+        ref_start,
+        ref_stop,
+        cigar.is_reverse
+    );
 
-    auto start_dist = abs(cigar.ref_start - ref_start);
-    auto stop_dist = abs(cigar.ref_stop - ref_stop);
-
-    // When iterating a reverse alignment, the query "start" decreases
-    if (cigar.is_reverse){
-        // We only want to capture the first "stop" because it is the widest ref interval
-        if (stop_dist < prev_stop_dist){
-            coord.query_start = start;
-            coord.ref_stop = cigar.ref_stop;
-        }
-
-        // We want to continue to capture the "start" coord until the cigars go out of the scope (of the ref window)
-        // Accounting for DEL operations that do not advance the query, hence the >=
-        if (start_dist <= prev_start_dist){
-            coord.query_stop = stop;
-            coord.ref_start = cigar.ref_start;
-        }
-    }
-    else{
-        // We only want to capture the first "start" because it is the widest ref interval
-        if (start_dist < prev_start_dist){
-            coord.query_start = start;
-            coord.ref_start = cigar.ref_start;
-        }
-        // We want to continue to capture the "stop" coord until the cigars go out of the scope (of the ref window)
-        // Accounting for DEL operations that do not advance the query, hence the >=
-        if (stop_dist <= prev_stop_dist){
-            coord.query_stop = stop;
-            coord.ref_stop = cigar.ref_stop;
-        }
-    }
-    if (HAPESTRY_DEBUG) {
-        cerr << "NEW: ref=[" << coord.ref_start << ',' << coord.ref_stop << "] query=[" << coord.query_start << ',' << coord.query_stop << "]  inner! " << '\n';
-        cerr << "start_dist=" << start_dist << " prev_start_dist=" << prev_start_dist << " stop_dist=" << stop_dist << " prev_stop_dist=" << prev_stop_dist << '\n';
-    }
 }
 
 
@@ -716,6 +781,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                         }
 
                         if (HAPESTRY_DEBUG) cerr << cigar_code_to_char[intersection.code] << ' ' << intersection.length <<  ' ' << alignment.is_reverse() << " r: " << intersection.ref_start << ',' << intersection.ref_stop << ' ' << "q: " << intersection.query_start << ',' << intersection.query_stop << " 'interval'=" << interval.first << ',' << interval.second << '\n';
+
 
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
@@ -1367,9 +1433,15 @@ void fetch_reads_from_clipped_bam(
                 // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
                 // spanning, etc.
                 if (s.empty()) {
-                    cerr << "WARNING: skipping empty sequence: " << name << '\n';
+                    cerr << "WARNING: skipping empty sequence: " << name << " with start=" << i << " length=" << l << " at " << region.to_string() << '\n';
                     continue;
                 }
+
+                // Here and beyond "inner_coord" becomes a new object that simply indicates where the flanks are in the
+                // substring coords. i.e. adjusted for the query start
+                // See GafSummary::compute_with_flanks for details
+                inner_coord.query_start -= outer_coord.query_start;
+                inner_coord.query_stop -= outer_coord.query_start;
 
                 if (outer_coord.is_reverse and force_forward) {
                     s.reverse_complement();
@@ -1384,12 +1456,6 @@ void fetch_reads_from_clipped_bam(
                 if (append_sample_to_read) {
                     name += + "_" + sample_name;
                 }
-
-                // Here and beyond "inner_coord" becomes a new object that simply indicates where the flanks are in the
-                // substring coords. i.e. adjusted for the query start
-                // See GafSummary::compute_with_flanks for details
-                inner_coord.query_start -= outer_coord.query_start;
-                inner_coord.query_stop -= outer_coord.query_start;
 
                 // Finally update the transmap
                 transmap.add_read_with_move(name, s);

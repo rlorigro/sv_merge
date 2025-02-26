@@ -605,7 +605,7 @@ void evaluate(
             true,
             true,
             force_unique_reads,
-            false,
+            true,
             flank_length
     );
 
@@ -774,6 +774,10 @@ int main (int argc, char* argv[]){
     app.parse(argc, argv);
 
     auto vcfs = app.get_option("--vcfs")->as<std::vector<path> >();
+
+    if (debug) {
+        HAPESTRY_DEBUG = true;
+    }
 
     evaluate(
         vcfs,
