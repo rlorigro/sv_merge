@@ -51,7 +51,7 @@ public:
      * @param n_windows an estimate on the number of windows that will be processed; used just to allocate space;
      * @param log_* keeps track of every window that satisfies at least one of these low-support thresholds.
      */
-    explicit Counts(const vector<string>& tools, const string& truth_tool, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t min_sv_length, size_t n_windows = 1e6):
+    explicit Counts(const vector<string>& tools, const string& truth_tool, double coverage_threshold, size_t max_hap_length, double log_nodes_fully_covered_leq, double log_edges_covered_leq, double log_vcf_records_supported_leq, double log_alignment_identity_leq, double log_hap_coverage_leq, size_t min_sv_length, size_t n_haplotypes_expected, size_t n_windows = 1e6):
         TOOLS(tools),
         TRUTH_TOOL(truth_tool),
         N_TOOLS(tools.size()),
@@ -62,7 +62,8 @@ public:
         log_vcf_records_supported_leq(log_vcf_records_supported_leq),
         log_alignment_identity_leq(log_alignment_identity_leq),
         log_hap_coverage_leq(log_hap_coverage_leq),
-        min_sv_length(min_sv_length)
+        min_sv_length(min_sv_length),
+        N_HAPLOTYPES_EXPECTED(n_haplotypes_expected)
     {
         size_t i;
 
@@ -535,6 +536,27 @@ public:
 
 
     /**
+     * Stores a list of windows with too few haplotypes for each tool.
+     *
+     * @param directories all input directories examined.
+     */
+    void log_few_haps_windows(const path& output_dir, const vector<Region>& directories) {
+        const char TSV_SEPARATOR = '\t';
+        int64_t i;
+        int64_t window_id;
+
+        for (auto& [tool_id, windows]: few_haps_windows) {
+            ofstream out(output_dir/TOOLS.at(tool_id)/FEW_HAPS_WINDOWS_FILE);
+            for (i=0; i<windows.size(); i+=2) {
+                window_id=windows.at(i);
+                out << directories.at(window_id).name+TSV_SEPARATOR+to_string(directories.at(window_id).start)+TSV_SEPARATOR+to_string(directories.at(window_id).stop) << TSV_SEPARATOR << windows.at(i+1) << '\n';
+            }
+            out.close();
+        }
+    }
+
+
+    /**
      * @return TRUE iff every tool completed evaluation in `directory`, according to the execution log file.
      */
     static bool was_execution_successful(const path& directory) {
@@ -588,6 +610,7 @@ private:
     inline static const string SUPPORTED_VCF_FILE = "supported.vcf";
     inline static const string UNSUPPORTED_VCF_FILE = "unsupported.vcf";
     inline static const string LOGGED_WINDOWS_FILE = "anomalous_windows.bed";
+    inline static const string FEW_HAPS_WINDOWS_FILE = "few_haps_windows.bed";
     inline static const string EXECUTION_FILE = "log.csv";
     inline static const string ALIGNMENTS_FILE = "alignments.gaf";
     static const char GAF_FWD_CHAR = '>';
@@ -605,6 +628,7 @@ private:
     const size_t max_hap_length;
     const double log_nodes_fully_covered_leq, log_edges_covered_leq, log_vcf_records_supported_leq, log_alignment_identity_leq, log_hap_coverage_leq;
     const size_t min_sv_length;
+    const size_t N_HAPLOTYPES_EXPECTED;
 
     size_t n_windows;
 
@@ -661,13 +685,14 @@ private:
     /**
      * Output log: row=toolID, column=window.
      */
-    unordered_map<size_t,vector<size_t>> logged_windows;
+    unordered_map<size_t,vector<size_t>> logged_windows, few_haps_windows;
 
     /**
      * Reused temporary space: stores the current line of a CSV file.
      */
     bool is_ref, is_flank;
-    size_t length, n_alignments_in_window, n_edges, n_nonref_edges, n_edges_covered, n_nonref_edges_covered;
+    size_t n_alignments_in_window, n_edges, n_nonref_edges, n_edges_covered, n_nonref_edges_covered;
+    int64_t length;
     double coverage, identity;
     string name, names, cluster_id, color;
     string tmp_buffer_1, tmp_buffer_2;
@@ -811,7 +836,7 @@ private:
     void on_field_end_haplotypes(size_t field, const string& buffer) {
         switch (field) {
             case 1: name=buffer; break;
-            case 2: length=stoi(buffer); break;
+            case 2: length=stol(buffer); break;
             case 3: is_ref=stoi(buffer)==1; break;
             case 4: is_flank=stoi(buffer)==1; break;
             case 5: coverage=buffer.starts_with("nan")||buffer.ends_with("nan")?0.0:stod(buffer); break;
@@ -822,6 +847,7 @@ private:
 
     void on_line_end_haplotypes(const path& input_file) {
         if (length>max_hap_length) throw runtime_error("ERROR: haplotype anomalously long:"+to_string(length)+"bps, file "+input_file.string());
+        if (length<0) throw runtime_error("ERROR: haplotype with negative length:"+to_string(length)+"bps, file "+input_file.string());
         n_haps++;
         hap_counts.at(0)+=coverage;
         hap_counts.at(1)+=identity;
@@ -856,6 +882,13 @@ private:
         if (n_haps>0 && (hap_counts.at(0)<=log_hap_coverage_leq*n_haps || hap_counts.at(1)<=log_alignment_identity_leq*n_haps)) {
             if (logged_windows.contains(tool_id)) logged_windows.at(tool_id).push_back(n_haplotypes.at(tool_id).size()-1);
             else logged_windows[tool_id]={n_haplotypes.at(tool_id).size()-1};
+        }
+        if (n_haps<N_HAPLOTYPES_EXPECTED) {
+            if (few_haps_windows.contains(tool_id)) {
+                few_haps_windows.at(tool_id).push_back(n_haplotypes.at(tool_id).size()-1);
+                few_haps_windows.at(tool_id).push_back(n_haps);
+            }
+            else { few_haps_windows[tool_id]={n_haplotypes.at(tool_id).size()-1,n_haps}; }
         }
     }
 
@@ -1105,6 +1138,7 @@ int main (int argc, char* argv[]) {
     double LOG_ALIGNMENT_IDENTITY_LEQ = 0.8;
     double LOG_HAP_COVERAGE_LEQ = 0.97;
     size_t MIN_SV_LENGTH = 50;
+    size_t N_HAPLOTYPES_EXPECTED = 47*2;  // From HPRC Y1
     string TRUTH_TOOL = "";
     app.add_option("--input_dir",INPUT_DIR,"Input directory, with one subdirectory per window.")->required();
     app.add_option("--output_dir",OUTPUT_DIR,"Output directory. Must not already exist.")->required();
@@ -1120,6 +1154,7 @@ int main (int argc, char* argv[]) {
     app.add_option("--log_hap_coverage",LOG_HAP_COVERAGE_LEQ,"Stores in a file the coordinates of every input directory whose avg. haplotype coverage is at most this.")->capture_default_str();
     app.add_option("--truth_id",TRUTH_TOOL,"Assumes that this directory contains the true calls. Used only for computing a haplotype-based recall-like measure.")->capture_default_str();
     app.add_option("--min_sv_length",MIN_SV_LENGTH,"Smallest length for a variant to be considered an SV (default="+to_string(MIN_SV_LENGTH)+").")->capture_default_str();
+    app.add_option("--n_haplotypes_expected",N_HAPLOTYPES_EXPECTED,"Expected number of haplotypes (default="+to_string(N_HAPLOTYPES_EXPECTED)+").")->capture_default_str();
 
     app.parse(argc,argv);
     if (exists(OUTPUT_DIR)) throw runtime_error("ERROR: the output directory already exists: "+OUTPUT_DIR.string());
@@ -1131,7 +1166,7 @@ int main (int argc, char* argv[]) {
         b = std::filesystem::weakly_canonical(b);
     }
 
-    Counts counts(TOOLS,TRUTH_TOOL,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ,MIN_SV_LENGTH);
+    Counts counts(TOOLS,TRUTH_TOOL,ALIGNMENT_COVERAGE_THRESHOLD,MAX_HAP_LENGTH,LOG_NODES_FULLY_COVERED_LEQ,LOG_EDGES_COVERED_LEQ,LOG_VCF_RECORDS_SUPPORTED_LEQ,LOG_ALIGNMENT_IDENTITY_LEQ,LOG_HAP_COVERAGE_LEQ,MIN_SV_LENGTH,N_HAPLOTYPES_EXPECTED);
 
     // Sorting all directories by coordinate
     auto region_comparator = [](const Region& a, const Region& b) {
@@ -1179,6 +1214,7 @@ int main (int argc, char* argv[]) {
     for (i=0; i<n_directories; i++) windows_to_print.emplace_back(i);
     counts.print_measures(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,windows_to_print);
     counts.log_anomalous_windows(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,directories);
+    counts.log_few_haps_windows(OUTPUT_DIR/SUBDIR_ALL_WINDOWS,directories);
     for (auto& bed_file: BED_FILES) {
         intervals.clear();
         for_region_in_bed_file(bed_file,[&](const Region &r) { intervals.emplace_back(r); });
