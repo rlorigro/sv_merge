@@ -188,7 +188,7 @@ task EvaluateChromosome {
         --interval_max_length ~{interval_max_length} \
         --flank_length ~{flank_length} \
         --graphaligner_timeout ~{graphaligner_timeout} \
-        --debug ~{if force_unique_reads then "--force_unique_reads" else ""} \
+        ~{if force_unique_reads then "--force_unique_reads" else ""} \
         --min_sv_length ~{min_sv_length} \
         ${FORCE_WINDOWS_FLAG}
 
