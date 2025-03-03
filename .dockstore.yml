@@ -1,0 +1,90 @@
+version: 1.2
+workflows:
+- name: GraphEvaluation
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/GraphEvaluation.wdl
+  testParameterFiles:
+- name: hapestry_validate
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_validate.wdl
+  testParameterFiles:
+- name: hapestry_annotate
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_annotate.wdl
+  testParameterFiles:
+- name: hapestry_annotate_scattered
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_annotate_scattered.wdl
+  testParameterFiles:
+- name: hapestry_merge
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge.wdl
+  testParameterFiles:
+- name: hapestry_merge_scattered
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge_scattered.wdl
+  testParameterFiles:
+- name: multi_annotate
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/multi_annotate.wdl
+  testParameterFiles:
+- name: bcftools_collapse
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/bcftools_collapse.wdl
+  testParameterFiles:
+- name: samtools_merge
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/samtools_merge.wdl
+  testParameterFiles:
+- name: fill_vcf_ref_alleles_from_fasta
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/fill_vcf_ref_alleles_from_fasta.wdl
+  testParameterFiles:
+- name: clean_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/clean_vcf.wdl
+  testParameterFiles:
+- name: VcfdistEvaluation
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/VcfdistEvaluation.wdl
+  testParameterFiles:
+- name: hapestry_merge_valgrind
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge_valgrind.wdl
+  testParameterFiles:
+- name: hapestry_merge_heaptrack
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_merge_heaptrack.wdl
+  testParameterFiles:
+- name: hapestry_filter
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/hapestry_filter.wdl
+  testParameterFiles:
+- name: BcftoolsMergeNoDuplicatesSingleCaller
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/BcftoolsMergeNoDuplicatesSingleCaller.wdl
+  testParameterFiles:
+- name: subset_n_samples_from_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/subset_n_samples_from_vcf.wdl
+- name: subset_csv_samples_using_vcf
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/subset_csv_samples_using_vcf.wdl

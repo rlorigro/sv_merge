@@ -1,8 +1,15 @@
+#include "HalfInterval.hpp"
 #include "gaf.hpp"
 
+#include <unordered_map>
+#include <functional>
 #include <iostream>
 
+using std::unordered_map;
+using std::function;
 using std::cerr;
+using std::max;
+using std::min;
 
 
 namespace sv_merge {
@@ -45,8 +52,6 @@ void GafAlignment::add_tag(const string& token){
     auto tag_type = token.substr(0,i);
     auto tag_value = token.substr(i+1,token.size() - (i+1));
 
-    cerr << tag_type << ',' << tag_value << '\n';
-
     if (tag_type == "tp:A"){
         if (tag_value == "P"){
             primary = true;
@@ -74,22 +79,27 @@ void GafAlignment::set_path(const vector<pair<string,bool> >& p){
 }
 
 
-void GafAlignment::set_path(const string& p){
+void GafAlignment::parse_string_as_path(const string& p, vector<pair<string,bool> >& result){
     if (p[0] != '>' and p[0] != '<'){
         throw runtime_error("ERROR: path does not start with > or <, GAF stable path format not supported");
     }
 
-    path.clear();
+    result.clear();
 
     for (auto c: p){
         if (c == '>' or c == '<'){
-            path.emplace_back();
-            path.back().second = parse_path_reversal_token(c);
+            result.emplace_back();
+            result.back().second = parse_path_reversal_token(c);
         }
         else{
-            path.back().first += c;
+            result.back().first += c;
         }
     }
+}
+
+
+void GafAlignment::set_path(const string& p){
+    parse_string_as_path(p, path);
 
     // Hopefully this never happen but is technically possible according to the GAF spec
     if (reversal){
@@ -225,6 +235,23 @@ const pair<string,bool>& GafAlignment::get_path_step(int32_t index) const{
 }
 
 
+void GafAlignment::for_step_in_path(const function<void(const string& step_name, bool is_reverse)>& f) const{
+    for (const auto& [name, r]: path){
+        f(name, r);
+    }
+}
+
+
+const vector<pair<string,bool> >& GafAlignment::get_path() const{
+    return path;
+}
+
+
+const pair<string,bool>& GafAlignment::get_step_of_path(size_t index) const{
+    return path.at(index);
+}
+
+
 bool GafAlignment::is_reverse() const{
     return reversal;
 }
@@ -232,6 +259,11 @@ bool GafAlignment::is_reverse() const{
 
 bool GafAlignment::is_primary() const{
     return primary;
+}
+
+
+bool GafAlignment::is_supplementary() const{
+    throw runtime_error("ERROR: is_supplementary not implemented for GafAlignment");
 }
 
 
@@ -250,7 +282,7 @@ int32_t GafAlignment::get_map_quality() const{
 }
 
 
-bool GafAlignment::parse_path_reversal_token(char c) const{
+bool GafAlignment::parse_path_reversal_token(char c){
     bool r;
 
     if (c == '>'){
@@ -267,7 +299,7 @@ bool GafAlignment::parse_path_reversal_token(char c) const{
 }
 
 
-void GafAlignment::for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f){
+void GafAlignment::for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f){
     CigarInterval c;
 
     // Initialize the cigar interval
@@ -316,6 +348,21 @@ void GafAlignment::get_query_sequence(string& result){
 
 void GafAlignment::get_query_sequence(string& result, int32_t start, int32_t stop){
     throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment");
+}
+
+
+void GafAlignment::get_query_sequence(BinarySequence<uint64_t>& result){
+    throw runtime_error("ERROR: get_query_sequence not implemented for GAF alignment with BinarySequence");
+}
+
+
+void GafAlignment::get_qualities(vector<uint8_t>& result){
+    throw runtime_error("ERROR: get_qualities not implemented for GAF alignment");
+}
+
+
+void GafAlignment::get_tag_as_string(const string& name, string& result, bool allow_missing) const {
+    throw runtime_error("ERROR: get_tag_as_string not implemented for GAF alignment");
 }
 
 
@@ -388,6 +435,10 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
     string token;
 
     while (file.get(c)){
+        if (c == '\r'){
+            throw runtime_error("ERROR: carriage return not supported: " + gaf_path.string());
+        }
+
         if (c == delimiter){
             switch (n_delimiters){
                 case 0:
@@ -470,5 +521,516 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(Alignment& a
     });
 }
 
+
+AlignmentSummary::AlignmentSummary(int32_t start, int32_t stop):
+        start(start),
+        stop(stop),
+        n_match(0),
+        n_mismatch(0),
+        n_insert(0),
+        n_delete(0)
+{}
+
+
+AlignmentSummary::AlignmentSummary():
+        start(numeric_limits<int32_t>::max()),
+        stop(numeric_limits<int32_t>::min()),
+        n_match(0),
+        n_mismatch(0),
+        n_insert(0),
+        n_delete(0)
+{}
+
+
+float AlignmentSummary::compute_identity() const{
+    return (n_match) / (n_match + n_mismatch + n_insert + n_delete);
+}
+
+
+void AlignmentSummary::update(const sv_merge::CigarInterval& c, bool is_ref) {
+    switch (c.code){
+        case 7:
+            n_match += float(c.length);    // =
+            break;
+        case 8:
+            n_mismatch += float(c.length); // X
+            break;
+        case 1:
+            n_insert += float(abs(c.query_stop - c.query_start));   // I
+            break;
+        case 2:
+            n_delete += float(c.length);   // D
+            break;
+        default:
+            break;
+    }
+
+    if (is_ref){
+        auto [a,b] = c.get_forward_ref_interval();
+        if (a < start){
+            start = a;
+        }
+        if (b > stop){
+            stop = b;
+        }
+    }
+    else{
+        auto [a,b] = c.get_forward_query_interval();
+        if (a < start){
+            start = a;
+        }
+        if (b > stop){
+            stop = b;
+        }
+    }
+}
+
+
+GafSummary::GafSummary(const TransMap& transmap):
+    transmap(transmap),
+    apply_flanks(false)
+{}
+
+
+GafSummary::GafSummary(const VariantGraph& variant_graph, const TransMap& transmap, bool apply_flanks):
+        transmap(transmap),
+        apply_flanks(apply_flanks)
+{
+    variant_graph.graph.for_each_handle([&](const handle_t& h){
+        auto l = variant_graph.graph.get_length(h);
+        auto name = std::to_string(variant_graph.graph.get_id(h));
+        node_lengths[name] = int32_t(l);
+    });
+}
+
+
+void GafSummary::update_node(const string& node_name, const CigarInterval& c, bool insert){
+    auto& result = ref_summaries[node_name];
+    if (insert){
+        result.emplace_back();
+    }
+    result.back().update(c, true);
+}
+
+
+void GafSummary::update_query(const string& query_name, const CigarInterval& c, bool insert){
+    auto& result = query_summaries[query_name];
+    if (insert){
+        result.emplace_back();
+    }
+    result.back().update(c, false);
+}
+
+
+void compute_identity_and_coverage(const vector<AlignmentSummary>& alignments, int32_t length, pair<float,float>& result){
+    AlignmentSummary total;
+    int32_t bases_not_covered = 0;
+
+    for (size_t i=0; i<alignments.size(); i++){
+        const auto& a = alignments[i];
+
+        total.n_match += a.n_match;
+        total.n_mismatch += a.n_mismatch;
+        total.n_insert += a.n_insert;
+        total.n_delete += a.n_delete;
+
+        if (i == 0){
+            // Accumulate distance from start of sequence
+            bases_not_covered += a.start;
+//            cerr << "distance from start of sequence: " << a.start << '\n';
+        }
+        else {
+            // Accumulate distance from previous alignment end
+            auto distance = a.start - alignments[i-1].stop;
+
+            if (distance < 0){
+                throw runtime_error("ERROR: overlaps not resolved prior to computation of alignment identity/coverage");
+            }
+
+            bases_not_covered += distance;
+
+//            cerr << "distance from previous alignment end: " << distance << '\n';
+        }
+
+        if (i == alignments.size() - 1){
+            // Accumulate distance from end of sequence
+            bases_not_covered += length - a.stop;
+//            cerr << "distance from end of sequence: " << length - a.stop << '\n';
+        }
+
+//        cerr << i << ' ' << a.start << ',' << a.stop << ' ' << bases_not_covered << '\n';
+//        cerr << '\n';
+    }
+
+    result.first = total.compute_identity();
+    result.second = float(length - bases_not_covered) / float(length);
+}
+
+
+void GafSummary::for_each_ref_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    pair<float,float> identity_and_coverage;
+
+    for (const auto& [name, length]: node_lengths){
+        auto result = ref_summaries.find(name);
+
+        if (result == ref_summaries.end()){
+            f(name, length, 0, 0);
+            continue;
+        }
+
+        const auto& alignments = result->second;
+
+        compute_identity_and_coverage(alignments, length, identity_and_coverage);
+
+        f(name, length, identity_and_coverage.first, identity_and_coverage.second);
+    }
+}
+
+
+void GafSummary::for_each_query_summary(const function<void(const string& name, int32_t length, float identity, float coverage)>& f) const{
+    pair<float,float> identity_and_coverage;
+
+    int32_t length;
+    transmap.for_each_read([&](const string& name, int64_t id){
+        if (apply_flanks){
+            coord_t c = transmap.get_flank_coord(id);
+            length = c.second - c.first + flank_buffer*2;
+        }
+        else {
+            length = int32_t(transmap.get_sequence_size(id));
+        }
+
+        auto result = query_summaries.find(name);
+
+        if (result == query_summaries.end()){
+            f(name, length, 0, 0);
+            return;
+        }
+
+        const auto& alignments = result->second;
+
+        compute_identity_and_coverage(alignments, length, identity_and_coverage);
+
+        f(name, length, identity_and_coverage.first, identity_and_coverage.second);
+    });
+}
+
+
+/**
+ * Sweep algorithm to split intervals into intersections
+ * @param alignments
+ * @param is_ref
+ */
+void GafSummary::resolve_overlaps(vector<AlignmentSummary>& alignments) {
+    if (alignments.size() <= 1){
+        return;
+    }
+
+    vector <HalfInterval> half_intervals;
+    vector <int32_t> positions;
+    vector <unordered_set<size_t> > ids;
+    vector <AlignmentSummary> result;
+
+    for (size_t i=0; i<alignments.size(); i++){
+        const auto& a = alignments[i];
+        half_intervals.emplace_back(i,a.start,true);
+        half_intervals.emplace_back(i,a.stop,false);
+    }
+
+    // How to sort labeled intervals with structure ((a,b), label) by start (a)
+    auto left_comparator = [](const HalfInterval& a, const HalfInterval& b){
+        if (a.position == b.position){
+            return a.is_start > b.is_start;
+        }
+        else {
+            return a.position < b.position;
+        }
+    };
+
+    sort(half_intervals.begin(), half_intervals.end(), left_comparator);
+
+    const auto& x = half_intervals[0];
+    positions.emplace_back(x.position);
+    ids.push_back({x.id});
+
+    // With at least 2 intervals, should be guaranteed 4 half intervals in the vector
+    for (size_t i=1; i<half_intervals.size(); i++){
+        const auto& h = half_intervals[i];
+
+//        cerr << "-- " << h.position << ',' << (h.is_start ? '[' : ')') << ',' << h.id << '\n';
+
+        // Every time an element is added or removed, update the vector of intersected_intervals:
+        //  1. Extend the previous interval
+        //  2. Remove/add an element from the set (check if the start/stop is not identical to prev)
+        if (h.is_start){
+            // Only terminate the previous interval if this one does not have the same position
+            if (h.position > positions.back()) {
+                // Add new breakpoint
+                positions.emplace_back(h.position);
+                ids.emplace_back(ids.back());
+            }
+            // ADD item to last set
+            ids.back().emplace(h.id);
+        }
+        else{
+            // Only terminate the previous interval if this one does not have the same position
+            if (h.position > positions.back()) {
+                // Add new breakpoint
+                positions.emplace_back(h.position);
+                ids.emplace_back(ids.back());
+            }
+            // REMOVE item from last set
+            ids.back().erase(h.id);
+        }
+    }
+
+    // Finally construct new alignments that are the average of the overlapping alignments
+    for (size_t i=0; i<ids.size() - 1; i++){
+        if (ids[i].empty()){
+            continue;
+        }
+
+        result.emplace_back();
+        result.back().start = positions[i];
+        result.back().stop = positions[i+1];
+
+        auto l = float(result.back().stop - result.back().start);
+
+        for (auto id: ids[i]){
+            auto l_other = float(alignments[id].stop - alignments[id].start);
+
+            result.back().n_match += alignments[id].n_match * (l / l_other);
+            result.back().n_mismatch += alignments[id].n_mismatch * (l / l_other);
+            result.back().n_insert += alignments[id].n_insert * (l / l_other);
+            result.back().n_delete += alignments[id].n_delete * (l / l_other);
+        }
+
+        auto n = float(ids[i].size());
+        result.back().n_match /= n;
+        result.back().n_mismatch /= n;
+        result.back().n_insert /= n;
+        result.back().n_delete /= n;
+    }
+
+    alignments = std::move(result);
+}
+
+
+void GafSummary::resolve_all_overlaps() {
+    for (auto& [name, alignments]: ref_summaries){
+        resolve_overlaps(alignments);
+    }
+    for (auto& [name, alignments]: query_summaries){
+        resolve_overlaps(alignments);
+    }
+}
+
+
+void normalize_gaf_cigar(const interval_t& interval, CigarInterval& result, int32_t node_length, bool node_reversal){
+    // REVERSAL:
+    // path  alignment  result
+    // -----------------------
+    // 0     0          0
+    // 0     1          1
+    // 1     0          1
+    // 1     1          0
+    result.is_reverse = (node_reversal xor result.is_reverse);
+
+    auto [a,b] = result.get_forward_ref_interval();
+
+    // Compute distance from edge of interval (start of node in path)
+    int32_t start = a - interval.first;
+    int32_t stop = b - interval.first;
+
+    if (not result.is_reverse){
+        result.ref_start = start;
+        result.ref_stop = stop;
+    }
+    else{
+        result.ref_start = node_length - start;
+        result.ref_stop = node_length - stop;
+    }
+}
+
+
+void GafSummary::compute(const path& gaf_path){
+    if (apply_flanks){
+        compute_with_flanks(gaf_path);
+    }
+    else{
+        compute_without_flanks(gaf_path);
+    }
+}
+
+
+void GafSummary::compute_without_flanks(const path& gaf_path){
+    // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
+    // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
+    // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
+    bool unclip_coords = false;
+
+    for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
+        // Skip nonsensical alignments
+        if (alignment.get_map_quality() == 0){
+            return;
+        }
+
+        string name;
+        alignment.get_query_name(name);
+
+        // First establish the set of intervals that defines the steps in the path (node lengths)
+        // And maintain a map that will point from an interval_t to a step in the path (size_t)
+        vector<interval_t> ref_intervals;
+        unordered_map<interval_t,size_t> interval_to_path_index;
+
+        int32_t x = 0;
+        size_t i = 0;
+
+        alignment.for_step_in_path([&](const string& step_name, bool is_reverse){
+            auto l = int32_t(node_lengths.at(step_name));
+
+            ref_intervals.emplace_back(x, x+l);
+            interval_to_path_index.emplace(ref_intervals.back(), i);
+
+            x += l;
+            i++;
+        });
+
+        query_paths[name].emplace_back(alignment.get_path());
+
+        // The query intervals for each alignment is not used because we do not use flanks
+        vector<interval_t> query_intervals = {};
+
+        // The iterator has a cache where they can store previously computed info for the path
+        // (to avoid using unordered_map.at() for every cigar)
+        string prev_node_name;
+        size_t prev_path_index = -1;
+        int32_t node_length = -1;
+        string node_name;
+        bool node_reversal;
+
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals,
+            // REF (node) coordinate iterator:
+            [&](const CigarInterval& i, const interval_t& interval){
+                // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
+                auto i_norm = i;
+
+                auto path_index = interval_to_path_index.at(interval);
+
+                // Don't recompute path/node stats unless we have advanced to a new node in the path
+                if (path_index != prev_path_index) {
+                    std::tie(node_name, node_reversal) = alignment.get_step_of_path(path_index);
+                    node_length = int32_t(node_lengths.at(node_name));
+                }
+
+                normalize_gaf_cigar(interval, i_norm, node_length, node_reversal);
+
+                // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
+                bool new_ref_alignment = node_name != prev_node_name;
+                bool new_query_alignment = prev_node_name.empty();
+
+                // Update the last alignment block in the GafSummary for ref and query
+                update_node(node_name, i_norm, new_ref_alignment);
+                update_query(name, i_norm, new_query_alignment);
+
+                prev_node_name = node_name;
+                prev_path_index = path_index;
+            },
+            // QUERY coordinate iterator: DO NOTHING HERE
+            {});
+    });
+    resolve_all_overlaps();
+}
+
+
+void GafSummary::compute_with_flanks(const path& gaf_path){
+    // GAF alignments (in practice) always progress in the F orientation of the query. Reverse alignments are possible,
+    // but redundant because the "reference" is actually a path, which is divided into individually reversible nodes.
+    // Both minigraph and GraphAligner code do not allow for R alignments, and instead they use the path orientation.
+    bool unclip_coords = false;
+
+    for_alignment_in_gaf(gaf_path, [&](GafAlignment& alignment){
+        // Skip nonsensical alignments
+        if (alignment.get_map_quality() == 0){
+            return;
+        }
+
+        string name;
+        alignment.get_query_name(name);
+
+        // First establish the set of intervals that defines the steps in the path (node lengths)
+        // And maintain a map that will point from an interval_t to a step in the path (size_t)
+        vector<interval_t> ref_intervals;
+        unordered_map<interval_t,size_t> interval_to_path_index;
+
+        int32_t x = 0;
+        size_t i = 0;
+
+        alignment.for_step_in_path([&](const string& step_name, bool is_reverse){
+            auto l = int32_t(node_lengths.at(step_name));
+
+            ref_intervals.emplace_back(x, x+l);
+            interval_to_path_index.emplace(ref_intervals.back(), i);
+
+            x += l;
+            i++;
+        });
+
+        query_paths[name].emplace_back(alignment.get_path());
+
+        // The query intervals for each alignment is just the inner flank bounds +- the flank buffer.
+        // The flank buffer is unfortunately needed when non-match cigar ops get squished into the flanks,
+        // causing them to be missed by the evaluation
+        interval_t query_interval = transmap.get_flank_coord(name);
+        query_interval.first = max(0,int32_t(query_interval.first-flank_buffer));
+        query_interval.second = min(int32_t(transmap.get_sequence_size(name)),int32_t(query_interval.second+flank_buffer));
+
+        vector<interval_t> query_intervals_i = {query_interval};
+
+        // The ref and query iterators both have a cache where they can store previously computed info for the path
+        // (to avoid using unordered_map.at() for every cigar)
+        string prev_node_name;
+        size_t prev_path_index = -1;
+        int32_t node_length = -1;
+        string node_name;
+        bool node_reversal;
+        bool new_query_alignment = true;
+
+        for_cigar_interval_in_alignment(unclip_coords, alignment, ref_intervals, query_intervals_i,
+        // REF (node) coordinate iterator:
+        [&](const CigarInterval& i, const interval_t& interval){
+            // Need a copy of the cigar interval that we can normalize for stupid GAF double redundant reversal flag
+            auto i_norm = i;
+
+            auto path_index = interval_to_path_index.at(interval);
+
+            // Don't recompute path/node stats unless we have advanced to a new node in the path
+            if (path_index != prev_path_index) {
+                std::tie(node_name, node_reversal) = alignment.get_step_of_path(path_index);
+                node_length = int32_t(node_lengths.at(node_name));
+            }
+
+            normalize_gaf_cigar(interval, i_norm, node_length, node_reversal);
+
+            // If this is a new alignment for this ref/query, inform the GafSummary to initialize a new block
+            bool new_ref_alignment = node_name != prev_node_name;
+
+            // Update the last alignment block in the GafSummary for REF ONLY
+            update_node(node_name, i_norm, new_ref_alignment);
+
+            prev_node_name = node_name;
+        },
+        // QUERY coordinate iterator:
+        [&](const CigarInterval& i, const interval_t& interval){
+            // Update the alignment block in the GafSummary for QUERY
+            // We don't care about "normalizing" the interval here because we aren't operating in ref/node space.
+            // Every cigar within the query interval gets added to the summary.
+            update_query(name, i, new_query_alignment);
+            new_query_alignment = false;
+        });
+    });
+
+    resolve_all_overlaps();
+}
 
 }

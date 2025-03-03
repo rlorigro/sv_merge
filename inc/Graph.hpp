@@ -36,16 +36,6 @@ public:
 };
 
 
-Node::Node(const string& name):
-    name(name)
-{}
-
-
-Node::Node(string& name):
-    name(name)
-{}
-
-
 template<class T> class Graph {
     unordered_map<int64_t, unordered_map <int64_t, float> > edges;
     unordered_map<int64_t, T > nodes;

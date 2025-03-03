@@ -7,15 +7,30 @@
 cmake_minimum_required(VERSION 3.22)
 project(sv_merge VERSION 0.0.0)
 
+message(STATUS "Use the following flags for special configuration options E.g.: cmake .. -D[flag]=1 -D[flag2]=1
+    FLAG            RESULT
+    ------------    ----------------------------------------------------------------------------------------
+    no_ortools      skip all portions of the project that involve ortools (including the main hapestry exe)
+    no_mimalloc     skip building/linking mimalloc
+    debug           invoke less optimization and more transparency for debugging (including ASan)
+    no_san          skip AddressSanitizer and other sanitizers (only relevant when using debug=1)
+    dev             skip fetching external projects (must NOT be invoked on first compilation)
+    "
+)
+
 message(STATUS "CMAKE_CXX_COMPILER_ID: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMAKE_CXX_COMPILER_VERSION: ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "CMAKE_SYSTEM: ${CMAKE_SYSTEM}")
 
 # Compiler options.
 set(OPENSSL_ROOT_DIR "/usr/local/opt/openssl/bin/openssl")
-set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
+#set(DOWNLOAD_EXTRACT_TIMESTAMP 1)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if (NOT no_mimalloc OR NOT DEFINED no_mimalloc)
+    set(USE_MIMALLOC ON)
+endif()
 
 # Commented until Ubuntu24/CMake3.24 becomes mainstream
 #cmake_policy(SET CMP0135 NEW)
@@ -33,10 +48,11 @@ endif()
 if (debug)
     message(STATUS "---- Building with debug options ----")
 
-    if (NOT no_asan OR NOT DEFINED no_asan)
+    if (NOT no_san OR NOT DEFINED no_san)
         # Memory debug
-        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address")
-        set(ASAN_OPTIONS=check_initialization_order=1)
+        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=thread -fPIE -pie")
+#        set(CMAKE_CXX_FLAGS "-fexceptions -fsanitize=address -fsanitize=undefined")
+#        set(ASAN_OPTIONS=check_initialization_order=1)
         set(ASAN_OPTIONS=detect_leaks=1)
     else()
         set(CMAKE_CXX_FLAGS "-fexceptions")
@@ -48,7 +64,7 @@ else()
     message(STATUS "---- Building with optimization ----")
 
     # Standard compilation
-    add_definitions(-O3 -Wall)              # Much optimization
+    add_definitions(-g -O3 -Wall)              # Much optimization, but retain debug symbols
 endif()
 
 
@@ -64,6 +80,12 @@ include_directories(
         "inc"
 )
 
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    include_directories(
+            "inc_optimize"
+    )
+endif()
+
 # Define our shared library sources. NOT test/executables.
 set(SOURCES
         src/Alignment.cpp
@@ -74,20 +96,32 @@ set(SOURCES
         src/fetch.cpp
         src/gaf.cpp
         src/Graph.cpp
+        src/HalfInterval.cpp
         src/HeteroGraph.cpp
         src/IntervalGraph.cpp
         src/misc.cpp
-        src/pair_hash.cpp
-        src/path_optimizer.cpp
-        src/read_centroid_optimizer.cpp
-        src/read_cluster_optimizer.cpp
+        src/MurmurHash2.cpp
+        src/MurmurHash3.cpp
+#        src/pair_hash.cpp
         src/Region.cpp
         src/Sequence.cpp
+        src/SimpleAlignment.cpp
         src/TransitiveMap.cpp
         src/Timer.cpp
         src/VcfReader.cpp
+        src/VariantGraph.cpp
         src/windows.cpp
         )
+
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND SOURCES
+            src/path_optimizer.cpp
+            src/path_optimizer_mathopt.cpp
+            src/read_centroid_optimizer.cpp
+            src/read_cluster_optimizer.cpp
+    )
+endif()
 
 
 project(sv_merge)
@@ -114,12 +148,13 @@ include(ExternalProject)
 
 ExternalProject_Add(project_wfa
         GIT_REPOSITORY https://github.com/rlorigro/WFA2-lib.git
-        GIT_TAG 4d0b9238857554b958ffa20048b155d29be92e04
-#        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.4.tar.gz
+        GIT_TAG 1cf38eaf530181bcc48219c58fa1bbdf5089575e
+#        URL https://github.com/smarco/WFA2-lib/archive/refs/tags/v2.3.5.tar.gz
         TIMEOUT 5
-        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
+        CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/wfa2 -DCMAKE_BUILD_TYPE=Release -DOPENMP=FALSE -DCMAKE_INSTALL_RPATH=${CMAKE_SOURCE_DIR}/external/wfa2/lib/
         INSTALL_COMMAND make install
 )
+
 
 add_library(wfa2 SHARED IMPORTED)
 set_property(TARGET wfa2
@@ -365,32 +400,36 @@ add_dependencies(sv_merge htslib)
 # ------------------------------------------ #
 ##############################################
 
-include(FetchContent)
-FetchContent_Declare(
-        ortools
-        URL https://github.com/google/or-tools/archive/refs/tags/v9.7.tar.gz
-)
+if (NOT no_ortools OR NOT DEFINED no_ortools)
 
-set(BUILD_DEPS ON)
-set(BUILD_DOC OFF)
-set(BUILD_SAMPLES OFF)
-set(BUILD_EXAMPLES OFF)
-set(USE_COINOR OFF)
-FetchContent_MakeAvailable(ortools)
+    include(FetchContent)
+    FetchContent_Declare(
+            ortools
+            URL https://github.com/google/or-tools/archive/refs/tags/v9.10.tar.gz
+    )
 
-include_directories(
-        ${ortools_SOURCE_DIR}
-        ${ortools_BINARY_DIR}
-        ${absl_SOURCE_DIR}
-        ${protobuf_SOURCE_DIR}/src
-)
+    set(BUILD_DEPS ON)
+    set(BUILD_DOC OFF)
+    set(BUILD_SAMPLES OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(USE_COINOR OFF)
+    set(USE_HIGHS OFF)
+    FetchContent_MakeAvailable(ortools)
 
-message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
-message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
-message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
-message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
+    include_directories(
+            ${ortools_SOURCE_DIR}
+            ${ortools_BINARY_DIR}
+            ${absl_SOURCE_DIR}
+            ${protobuf_SOURCE_DIR}/src
+    )
 
-add_dependencies(sv_merge ortools)
+    message(STATUS "ortools_SOURCE_DIR: " ${ortools_SOURCE_DIR})
+    message(STATUS "ortools_BINARY_DIR: " ${ortools_BINARY_DIR})
+    message(STATUS "absl_SOURCE_DIR: " ${absl_SOURCE_DIR})
+    message(STATUS "protobuf_SOURCE_DIR: /src: " ${protobuf_SOURCE_DIR}/src)
+
+    add_dependencies(sv_merge ortools)
+endif()
 
 ##############################################
 # ------------------------------------------ #
@@ -475,7 +514,75 @@ include_directories(external/bdsg/include/
 
 message(STATUS "INSTALL_DIR: ${INSTALL_DIR}")
 
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- cpptrace ---------------- #
+# ------------------------------------------ #
+##############################################
+
+include(ExternalProject)
+
+message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
+message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
+message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
+message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
+
+include(FetchContent)
+
+FetchContent_Declare(
+        cpptrace
+        GIT_REPOSITORY https://github.com/jeremy-rifkin/cpptrace.git
+        GIT_TAG        v0.7.5
+)
+
+FetchContent_MakeAvailable(cpptrace)
+
+#if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+#    set(CPPTRACE_GET_SYMBOLS_WITH_ADDR2LINE ON)
+#endif()
+
+include_directories(
+        ${cpptrace_SOURCE_DIR}/include
+#        ${libdwarf_SOURCE_DIR}
+#        ${libunwind_SOURCE_DIR}
+)
+
+message(STATUS "cpptrace location: ${cpptrace_SOURCE_DIR}")
+
+
+##############################################
+# ------------------------------------------ #
+# -------- LINKING EXTERNAL LIBRARY -------- #
+# ---------------- mimalloc ---------------- #
+# ------------------------------------------ #
+##############################################
+
+if(USE_MIMALLOC)
+    include(FetchContent)
+
+    FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY      https://github.com/microsoft/mimalloc.git
+        GIT_TAG 8c532c32c3c96e5ba1f2283e032f69ead8add00f
+    )
+
+    FetchContent_MakeAvailable(mimalloc)
+
+    add_dependencies(sv_merge mimalloc)
+
+    include_directories(
+        ${mimalloc_SOURCE_DIR}/include
+    )
+endif()
+
 # ------- Misc -------
+
+find_program(GRAPHALIGNER_FOUND "GraphAligner")
+
+if (NOT GRAPHALIGNER_FOUND)
+    message(WARNING "GraphAligner not found in PATH, please install GraphAligner before continuing")
+endif ()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -487,67 +594,89 @@ else()
     find_package(CURL REQUIRED)
 endif()
 
-
 #message(STATUS "CURL_LIBRARIES: ${CURL_LIBRARIES}")
 
 
 # -------- TESTS --------
 
 set(TESTS
+        test_authenticator
         test_bam
         test_bed
+        test_binary_sequence
+        test_binary_sequence_memory
+        test_bisection_method
+        test_command_timeout
+        test_cpptrace
         test_fasta
+        test_fetch
         test_gaf
+        test_gaf_summary
         test_graph
-        test_graphaligner
+        test_halfinterval
         test_heterograph
-        test_htslib
+        test_vector_heterograph     # non-alpha because is variant of test_heterograph
         test_hts_gcp
         test_hts_gcp_speed
         test_interval_graph
 #        test_minimap2
 #        test_minimap2_no_io
-        test_ortools
-        test_read_clustering
+        test_shared_memory
+        test_signal_handler
+        test_simple_alignment
+#        test_unordered_dense
         test_transmap
-        test_triangle_inequality
+        test_transmap_memory
         test_wfa2
         test_vcfreader
+        test_variantgraph
+        test_variantgraph_snp
+        test_variantgraph_acyclic
         )
+
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND TESTS
+            test_ortools
+            test_optimize
+            test_read_clustering
+            test_triangle_inequality
+    )
+endif()
+
 
 foreach(FILENAME_PREFIX ${TESTS})
     add_executable(${FILENAME_PREFIX} src/test/${FILENAME_PREFIX}.cpp)
 
+    target_link_libraries(${FILENAME_PREFIX}
+            sv_merge
+            Threads::Threads
+            cpptrace::cpptrace
+            htslib
+            bdsg
+            ${ZLIB_LIBRARIES}
+            ${OPENSSL_LIBRARIES}
+            bz2
+            lzma
+            #                minimap2
+            wfa2
+            divsufsort
+            libhandlegraph
+            libsdsl
+    )
+
+    if (USE_MIMALLOC)
+        target_link_libraries(${FILENAME_PREFIX} mimalloc)
+    endif()
+
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl2
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl2)
     else()
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl)
+    endif()
+
+    if (NOT no_ortools OR NOT DEFINED no_ortools)
+        target_link_libraries(${FILENAME_PREFIX} ortools::ortools)
     endif()
 
 endforeach()
@@ -557,42 +686,54 @@ endforeach()
 
 set(EXECUTABLES
         a
-        hapestry
+        analyze_evaluation
+        annotate
+        evaluate
+#        extract_reads_from_windows
         find_windows
+        make_local_hapestry_test_set
 )
+
+if (NOT no_ortools OR NOT DEFINED no_ortools)
+    list(APPEND EXECUTABLES
+        hapestry
+        solve_from_csv
+        solve_from_directory
+    )
+endif()
 
 foreach(FILENAME_PREFIX ${EXECUTABLES})
     add_executable(${FILENAME_PREFIX} src/executable/${FILENAME_PREFIX}.cpp)
+
+    target_link_libraries(${FILENAME_PREFIX}
+            sv_merge
+            Threads::Threads
+            cpptrace::cpptrace
+            htslib
+            bdsg
+            ${ZLIB_LIBRARIES}
+            ${OPENSSL_LIBRARIES}
+            bz2
+            lzma
+            #                minimap2
+            wfa2
+            divsufsort
+            libhandlegraph
+            libsdsl
+    )
+
+    if (USE_MIMALLOC)
+        target_link_libraries(${FILENAME_PREFIX} mimalloc)
+    endif()
+
     if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl2
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-                )
+        target_link_libraries(${FILENAME_PREFIX} curl2)
     else()
-        target_link_libraries(${FILENAME_PREFIX}
-                sv_merge
-                Threads::Threads
-                htslib
-                bdsg
-                ${ZLIB_LIBRARIES}
-                curl
-                ${OPENSSL_LIBRARIES}
-                bz2
-                lzma
-#                minimap2
-                ortools::ortools
-                wfa2
-        )
+        target_link_libraries(${FILENAME_PREFIX} curl)
+    endif()
+
+    if (NOT no_ortools OR NOT DEFINED no_ortools)
+        target_link_libraries(${FILENAME_PREFIX} ortools::ortools)
     endif()
 
 endforeach()
@@ -617,4 +758,3 @@ message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
 message(STATUS "CMAKE_SOURCE_DIR: ${CMAKE_SOURCE_DIR}")
 message(STATUS "CMAKE_CURRENT_BINARY_DIR: ${CMAKE_CURRENT_BINARY_DIR}")
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
-

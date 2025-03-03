@@ -1,13 +1,11 @@
 #pragma once
 
 #include <functional>
-
+#include <filesystem>
+using std::filesystem::path;
 using std::function;
 
-#include "Filesystem.hpp"
 #include "Sequence.hpp"
-
-using ghc::filesystem::path;
 
 namespace sv_merge {
 

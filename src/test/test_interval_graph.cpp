@@ -7,7 +7,7 @@ using std::cerr;
 
 
 #include "IntervalGraph.hpp"
-#include "pair_hash.hpp"
+#include "bdsg/include/bdsg/internal/hash_map.hpp"
 
 using sv_merge::IntervalNode;
 using sv_merge::IntervalGraph;

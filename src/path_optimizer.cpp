@@ -1,4 +1,7 @@
 #include "path_optimizer.hpp"
+#include <fstream>
+
+using std::ofstream;
 
 
 namespace sv_merge{
@@ -178,5 +181,126 @@ void optimize_d_plus_n(const TransMap& transmap, int64_t d_coeff, int64_t n_coef
     cerr << "Statistics" << '\n';
     cerr << CpSolverResponseStats(response) << '\n';
 }
+
+
+void parse_read_model_solution(const CpSolverResponse& response_n_d, const PathVariables& vars, TransMap& transmap, path output_dir){
+    // Open a file
+    path out_path = output_dir/"solution.csv";
+    ofstream file(out_path);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        return;
+    }
+
+    // Write header
+    file << "sample,read,path" << '\n';
+
+    // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
+    if (response_n_d.status() == CpSolverStatus::OPTIMAL) {
+        transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
+            transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
+                transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
+                    const BoolVar& var = vars.path_to_read.at({path_id, read_id});
+                    bool is_assigned = SolutionIntegerValue(response_n_d, var);
+                    if (is_assigned){
+                        file << sample_name << ',' << transmap.get_node(read_id).name << ',' << transmap.get_node(path_id).name << '\n';
+                    }
+                    else{
+                        // Delete all the edges that are not assigned (to simplify iteration later)
+                        transmap.remove_edge(read_id, path_id);
+                    }
+                });
+            });
+        });
+    }
+}
+
+
+void optimize_reads_with_d_and_n(TransMap& transmap, int64_t d_weight, int64_t n_weight, size_t n_threads, path output_dir){
+    CpModelBuilder model;
+    PathVariables vars;
+
+    construct_joint_n_d_model(transmap, model, vars);
+
+    // First find one extreme of the pareto set
+    model.Minimize(vars.cost_d);
+
+    const CpSolverResponse response_d = Solve(model.Build());
+
+    // Check if the first solution is feasible
+    if (response_d.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for d_min found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    int64_t n_max = SolutionIntegerValue(response_d, vars.cost_n);
+    int64_t d_min = SolutionIntegerValue(response_d, vars.cost_d);
+
+    // Then find the other extreme of the pareto set
+    model.Minimize(vars.cost_n);
+
+    const CpSolverResponse response_n = Solve(model.Build());
+
+    // Check if the second solution is feasible
+    if (response_n.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for n_min found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    int64_t n_min = SolutionIntegerValue(response_n, vars.cost_n);
+    int64_t d_max = SolutionIntegerValue(response_n, vars.cost_d);
+
+    auto n_range = n_max - n_min;
+    n_range *= n_range;
+    auto d_range = d_max - d_min;
+    d_range *= d_range;
+
+    auto d_norm = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    auto n_norm = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+
+    model.AddEquality(d_norm, (vars.cost_d-d_min));
+    model.AddEquality(n_norm, (vars.cost_n-n_min));
+
+    auto d_square = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    model.AddMultiplicationEquality(d_square,{d_norm,d_norm});
+
+    auto n_square = model.NewIntVar({0, d_max*d_max*n_range*2*d_weight*n_weight});
+    model.AddMultiplicationEquality(n_square,{n_norm,n_norm});
+
+    model.Minimize(n_square*d_range*n_weight + d_square*n_range*d_weight);
+
+    SatParameters parameters;
+//    parameters.set_log_search_progress(true);
+    parameters.set_num_workers(n_threads);
+    const CpSolverResponse response_n_d = SolveWithParameters(model.Build(), parameters);
+
+//    const CpSolverResponse response_n_d = Solve(model.Build());
+
+    // Write a log containing the solutioninfo and responsestats
+    path out_path = output_dir/"log_optimizer.txt";
+    ofstream file(out_path);
+
+    if (not file.is_open() or not file.good()){
+        throw runtime_error("ERROR: cannot write to file: " + out_path.string());
+        return;
+    }
+
+    file << "n_path_to_read_vars: " << vars.path_to_read.size() << '\n';
+    file << CpSolverResponseStats(response_n_d) << '\n';
+
+    // Check if the final solution is feasible
+    if (response_n_d.status() != CpSolverStatus::OPTIMAL){
+        cerr << "WARNING: no solution for joint optimization found: " << output_dir << '\n';
+        transmap = {};
+        return;
+    }
+
+    parse_read_model_solution(response_n_d, vars, transmap, output_dir);
+}
+
+
 
 }

@@ -35,6 +35,8 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
     int64_t n_delimiters = 0;
     char delimiter = '\t';
 
+    bool carriage_return_found = false;
+
     while (file.get(c)){
 //        cerr << ((c == delimiter) ? string(1,c) : "[tab]") << ' ' << region_name << ' ' << start_token << ' ' << stop_token << '\n';
 
@@ -42,7 +44,20 @@ void for_region_in_bed_file(path bed_path, const function<void(const Region& r)>
             n_delimiters++;
             continue;
         }
+
+        if (c == '\r' and not carriage_return_found){
+            cerr << ("WARNING: carriage return not supported: " + bed_path.string()) << '\n';
+            carriage_return_found = true;
+            continue;
+        }
+
         if (c == '\n'){
+            // Skip empty lines
+            if (region_name.empty() and start_token.empty() and stop_token.empty()){
+                cerr << "WARNING: skipping empty line found in bed file: " << bed_path.string() << '\n';
+                continue;
+            }
+
             int64_t start = stoll(start_token);
             int64_t stop = stoll(stop_token);
             f(Region(region_name, start, stop));

@@ -35,7 +35,7 @@ using namespace sv_merge;
 
 //
 void iterate_region(path bam_path, string region){
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
     authenticator.update();
 
     samFile* bam_file;
@@ -97,10 +97,9 @@ void iterate_region(path bam_path, string region){
 }
 
 
-
 //
 void iterate_regions(path bam_path, vector<char*>& regions){
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator;
     authenticator.update();
 
     samFile* bam_file;
@@ -168,7 +167,7 @@ void iterate_regions(path bam_path, vector<char*>& regions){
 
 //
 void iterate_regions_manually(path bam_path, vector<char*>& regions){
-    GoogleAuthenticator authenticator;
+    Authenticator authenticator(true);
     authenticator.update();
 
     samFile* bam_file;

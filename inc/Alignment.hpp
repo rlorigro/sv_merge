@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BinarySequence.hpp"
 #include "Sequence.hpp"
 
 #include <functional>
@@ -147,6 +148,7 @@ public:
     interval_t get_forward_query_interval() const;
     int32_t get_ref_length() const;
     int32_t get_query_length() const;
+    int32_t get_op_length() const;
     void set_ref_interval_forward();
     void set_query_interval_forward();
     void set_ref_interval_reverse();
@@ -170,7 +172,7 @@ public:
      * The purpose is to factor out the boilerplate code associated with unrolling cigars.
      * @param f - lambda function to operate on each cigar interval
      */
-    virtual void for_each_cigar_interval(const function<void(const CigarInterval& cigar)>& f) = 0;
+    virtual void for_each_cigar_interval(bool unclip_coords, const function<void(const CigarInterval& cigar)>& f) = 0;
 
 
     /**
@@ -182,19 +184,27 @@ public:
     virtual int32_t get_query_length() const = 0;
     virtual void get_query_sequence(string& result, int32_t start, int32_t stop) = 0;
     virtual void get_query_sequence(string& result) = 0;
+    virtual void get_query_sequence(BinarySequence<uint64_t>& result) = 0;
+    virtual void get_qualities(vector<uint8_t>& result) = 0;
     virtual void get_query_name(string& result) const = 0;
+    virtual void get_tag_as_string(const string& name, string& result, bool allow_missing=false) const = 0;
     virtual int32_t get_ref_start() const = 0;
     virtual int32_t get_ref_stop() const = 0;
     virtual int32_t get_query_start() const = 0;
     virtual bool is_unmapped() const = 0;
     virtual bool is_reverse() const = 0;
     virtual bool is_primary() const = 0;
+    virtual bool is_supplementary() const = 0;
 };
 
 
 /**
  * Iterate cigar intervals and return cigar intervals that are clipped to match the bounds of each window provided by
- * the user as a vector of interval_t. Useful for parsing cigars over a region of interest.
+ * the user as a vector of interval_t. Useful for parsing cigars over a region of interest. WARNING: empty intervals
+ * such as [2,2) are not ever returned by this iterator. Iterate in F direction of REF coords. Returned query coords
+ * are in the orientation that they occur in the REF. I.e. if reverse alignment, then query_stop is < query_start.
+ * When observing successive reverse cigars, query coords will decrease, while ref coords will increase.
+ * @param unclip_coords - re-interpret hardclips as softclips. Intended to fetch coords for native/unclipped sequence
  * @param alignment - pointer to htslib alignment struct
  * @param ref_intervals - intervals which MUST BE NON-OVERLAPPING and NO CHECK is performed to verify this! Intervals
  * must be half-open in F orientation, e.g.: [[0,2),[2,4)] are two adjacent intervals of length 2.
@@ -204,6 +214,7 @@ public:
  * @param f_query lambda function to operate on query intervals
  */
 void for_cigar_interval_in_alignment(
+        bool unclip_coords,
         Alignment& alignment,
         vector<interval_t>& ref_intervals,
         vector<interval_t>& query_intervals,

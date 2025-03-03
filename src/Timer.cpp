@@ -9,6 +9,12 @@ Timer::Timer():
 {}
 
 
+milliseconds Timer::elapsed_milliseconds() const {
+    milliseconds d = duration_cast<milliseconds>(std::chrono::steady_clock::now() - start);
+    return d;
+}
+
+
 string Timer::elapsed() const {
     auto d = std::chrono::steady_clock::now() - start;
 
@@ -28,6 +34,16 @@ string Timer::elapsed() const {
     ds.append(to_string(ms.count()));
     ds.append("ms");
     ds.append("] ");
+
+    return ds;
+}
+
+
+string Timer::to_csv() const {
+    auto d = std::chrono::steady_clock::now() - start;
+
+    string ds;
+    duration_to_csv(d, ds);
 
     return ds;
 }
