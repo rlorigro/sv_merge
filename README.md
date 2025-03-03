@@ -1,7 +1,6 @@
-# sv_merge
-C++ implementation of rlorigro/hapslap
+# Hapestry
 
-
+For merging, annotating, and filtering population datasets, using graph alignment, multiobjective optimization, and machine learning.
 
 # Installation
 
@@ -26,7 +25,7 @@ If you are on macOS, you will also need:
 
 Finally, you need to install [GraphAligner](https://github.com/maickrau/GraphAligner) v1.0.19 and add it to you `PATH`.
 
-To install Hapestry, just do the following:
+To install Hapestry:
 ```
 git clone https://github.com/rlorigro/sv_merge.git \
 && cd sv_merge \
@@ -37,30 +36,11 @@ git clone https://github.com/rlorigro/sv_merge.git \
 && make -j $N_THREADS
 ```
 
-## Docker
+## Workflows and docker images
 
-We also provide a Docker image at...
+#### Hapestry merge WDL
+https://dockstore.org/workflows/github.com/rlorigro/sv_merge/hapestry_merge:fc_fetching_tests?tab=info
 
+#### Hapestry merge docker image
+https://hub.docker.com/layers/fcunial/hapestry/merge/images/sha256-8fa681256cfe2f459b6d3fdce9e160f880ecc49f2b9cb39fa84699b49c890dd3
 
-
-
-
-
-
-<!-- REMOVED BECAUSE GRAPHALIGNER API IS BAD
-### GraphAligner
-
-- protobuf-compiler
-- libsparsehash-dev
-- libsdsl-dev
-- jemalloc (source installation required on Ubuntu 22.04)
-
-```
-cd ~/software/
-git clone https://github.com/jemalloc/jemalloc.git
-cd jemalloc/
-./autogen.sh
-make -j [n_threads]
-sudo make install
-```
--->
