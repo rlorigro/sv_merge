@@ -107,4 +107,26 @@ string get_uuid();
 
 void for_each_row_in_csv(path csv_path, const function<void(const vector<string>& items)>& f);
 
+/**
+ * Find the index of the first occurrence of an item in a vector. If it doesn't exist, return an index greater than the
+ * vector size.
+ * @tparam T type of vector
+ * @param v vector to be searched
+ * @param query search term
+ * @return index of item if found, otherwise an arbitrary index greater than the length of the vector
+ */
+template <class T> size_t index_of_first_occurrence(const vector<T>& v, const T& query) {
+    size_t i = 0;
+    for (const auto& item: v) {
+        if (item == query) {
+            return i;
+            break;
+        }
+        i++;
+    }
+
+    return i + 1;
+}
+
+
 }

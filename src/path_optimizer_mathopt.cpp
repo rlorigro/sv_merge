@@ -385,7 +385,7 @@ void parse_read_model_solution(
     unordered_set <pair <int64_t, int64_t> > to_be_removed;
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
-    if (termination_reason == TerminationReason::kOptimal) {
+    if (termination_reason == TerminationReason::kOptimal or termination_reason == TerminationReason::kFeasible) {
         transmap.for_each_sample([&](const string& sample_name, int64_t sample_id){
             transmap.for_each_read_of_sample(sample_id, [&](int64_t read_id){
                 transmap.for_each_path_of_read(read_id, [&](int64_t path_id){
