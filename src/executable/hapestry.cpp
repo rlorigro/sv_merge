@@ -1438,7 +1438,7 @@ void concatenate_output_vcfs(
         // Skip if the file does not exist
         if (not exists(sub_vcf)){
             // Log that this region did not contain any solution
-            fail_regions_file << region.to_unflanked_string('\t',flank_length) << '\n';
+            fail_regions_file << region.to_unflanked_bed(flank_length) << '\n';
             fail_regions_flanked_file << region.to_bed() << '\n';
             continue;
         }

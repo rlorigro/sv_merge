@@ -1420,8 +1420,8 @@ TerminationReason optimize_reads_with_d_plus_n(
     write_optimization_log(termination_reason, duration, transmap, "optimize_d_plus_n", output_dir);
     t.reset();
 
-    // Check if the final solution is optimal
-    if (termination_reason != TerminationReason::kOptimal){
+    // Check if the final solution is optimal or "feasible", which indicates a non-optimal solution was found
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1604,8 +1604,6 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     clone = transmap;
 
     // For d_min step, n_weight is 0 and d_weight is 1 because n is not considered in the objective
-//    clone.sort_adjacency_lists();
-//    clone.update_first_of_type();
     clone.compress_haplotypes_local(0,1,0);
     clone.solve_easy_samples(0,1,0);
     clone.compress_reads(0);
@@ -1648,8 +1646,6 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     auto c_d = float(config.d_weight/d_min);
 
     t.reset();
-//    clone.sort_adjacency_lists();
-//    clone.update_first_of_type();
 
     if (clone.has_large_weight(c_n,c_d)) {
         clone.compress_haplotypes_local(c_n,c_d,config.compress_quantum);
