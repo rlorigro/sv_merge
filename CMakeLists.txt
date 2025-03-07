@@ -111,7 +111,8 @@ set(SOURCES
         src/VcfReader.cpp
         src/VariantGraph.cpp
         src/windows.cpp
-        )
+        src/executable/count_distinct_haplotypes.cpp
+)
 
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
@@ -692,6 +693,7 @@ set(EXECUTABLES
 #        extract_reads_from_windows
         find_windows
         make_local_hapestry_test_set
+        count_distinct_haplotypes
 )
 
 if (NOT no_ortools OR NOT DEFINED no_ortools)
