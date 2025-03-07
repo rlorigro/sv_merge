@@ -38,12 +38,15 @@ public:
     int32_t flank_length = 150;
     int32_t interval_max_length = 15000;
     int32_t min_sv_length = 20;
+    int32_t min_hap_coverage = 1;
     size_t graphaligner_timeout = 90;
+    float min_read_hap_identity = 0.5;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
     bool write_hap_vcf = false;
     bool skip_nonessential_logs = false;
     bool obscure_sample_names = false;
+    bool deduplicate_reads = true;      // TODO: make this an actual CLI option? always true, currently
 };
 
 

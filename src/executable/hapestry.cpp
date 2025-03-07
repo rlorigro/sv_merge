@@ -584,7 +584,16 @@ void write_region_subsequences_to_file_thread_fn(
 }
 
 
-void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unordered_map<string,int64_t>& path_coverage){
+/**
+ * Parse a GAF file and infer the coverage of each unique observed path. If reads were deduplicated, then infer their
+ * coverage using their name, i.e. "[id]_[n]" where n is the number of reads that were deduplicated into that ID
+ * @param gaf_path path to GAF which contains reads aligned to the variant graph
+ * @param variant_graph data structure maintaining the variant graph that was used in alignment
+ * @param path_coverage result object with path_name --> coverage
+ * @param reads_deduplicated whether or not hapestry config specifies that the reads should be deduplicated (important,
+ * because if deduplicated, then their coverage needs to be inferred from the name)
+ */
+void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unordered_map<string,int64_t>& path_coverage, bool reads_deduplicated){
     // Despite removing duplicate variants, it is still possible for a duplicate path sequence to exist with a different
     // combination of variants. In this case, we reassign any duplicates arbitrarily to the first path iterated
 
@@ -614,8 +623,25 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
         }
 
         auto path_name = alignment.get_path_string();
-
         string sequence;
+
+        int64_t c = 1;
+
+        // Exctract the coverage from the read name if the reads were deduplicated. Otherwise c is always 1 per read id.
+        if (reads_deduplicated) {
+            string query_name = alignment.get_query_name();
+            auto i = query_name.find('_');
+
+            if (i != string::npos) {
+                c = stoll(query_name.substr(i + 1));
+
+                // Update the coverage by adding the number of reads that were deduplicated into this id
+                path_coverage[path_name] += c;
+            }
+            else {
+                throw runtime_error("ERROR: cannot parse coverage for deduplicated reads that do not follow [id]_[n] name scheme: " + query_name);
+            }
+        }
 
         // Get the corresponding bdsg handles from the handlegraph for each step in the path and concatenate their seqs
         for (const auto& [node_name, reversal]: path) {
@@ -631,11 +657,14 @@ void get_path_coverages(path gaf_path, const VariantGraph& variant_graph, unorde
         if (is_new){
             // Add the path to the reassignment map and increment its coverage
             path_reassignment.emplace(sequence, alignment.get_path_string());
-            path_coverage[path_name]++;
+
+            // Count the unique reads covering the path in the GAF. C is 1 unless reads have been deduplicated prior to
+            // alignment, in which case possibly >1
+            path_coverage[path_name] += c;
         }
         else{
             // Arbitrarily reassign the path to the first path with the same sequence
-            path_coverage[result->second]++;
+            path_coverage[result->second] += c;
         }
     });
 }
@@ -1040,9 +1069,6 @@ void merge_thread_fn(
     Timer t;
     Timer t_total;
 
-    // TODO: make this a parameter
-    int64_t min_path_coverage = 1;
-
     unordered_map<string, interval_tree_t<int32_t> > contig_interval_trees;
 
     for (const auto &[contig, intervals]: contig_tandems) {
@@ -1150,22 +1176,19 @@ void merge_thread_fn(
 
         // Iterate the alignments and accumulate their coverages
         unordered_map<string,int64_t> path_coverage;
-        get_path_coverages(gaf_path, variant_graph, path_coverage);
+        get_path_coverages(gaf_path, variant_graph, path_coverage, hapestry_config.deduplicate_reads);
 
         // Add the paths to the TransMap
         for (const auto& [path_name, coverage]: path_coverage) {
-            if (coverage >= min_path_coverage){
+            if (coverage >= hapestry_config.min_hap_coverage){
                 transmap.add_path(path_name);
-            }
-            else{
-                cerr << "WARNING: skipping path with low coverage: " << path_name << '\n';
             }
         }
 
         t.reset();
 
         // Align all reads to all candidate paths and update transmap
-        align_reads_vs_paths(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
+        align_reads_vs_paths(transmap, variant_graph, hapestry_config.min_read_hap_identity, flank_length, subdir / "pre_optimization_alignments");
 
         write_time_log(subdir, "align_reads_to_paths", t, true);
 
@@ -1284,7 +1307,7 @@ void merge_thread_fn(
             }
             else {
                 write_sample_path_divergence(variant_graph, transmap, subdir);
-                align_read_path_edges_of_transmap(transmap, variant_graph, opt_config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
+                align_read_path_edges_of_transmap(transmap, variant_graph, hapestry_config.min_read_hap_identity, flank_length, subdir / "post_optimization_alignments");
             }
         }
 
@@ -1718,7 +1741,7 @@ void hapestry(
                                          std::cref(staging_dir),
                                          std::cref(fasta_filename),
                                          hapestry_config.flank_length,
-                                         true,
+                                         hapestry_config.deduplicate_reads,
                                          std::ref(job_index)
                     );
                 } catch (const exception &e) {
@@ -1869,14 +1892,21 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--min_read_hap_identity",
-            optimizer_config.min_read_hap_identity,
-            "Minimum alignment identity to consider a read-hap assignment in the optimization step")
+            hapestry_config.min_read_hap_identity,
+            "Minimum alignment identity to consider a read-hap assignment in the optimization step. "
+            "Choosing a value that is too large can increase FPs. Choosing a value that is too small can explode "
+            "computation time.")
             ->required();
+
+    app.add_option(
+            "--min_hap_coverage",
+            hapestry_config.min_hap_coverage,
+            "Minimum number of reads that must support a candidate haplotype");
 
     app.add_option(
             "--d_weight",
             optimizer_config.d_weight,
-            "Scalar coefficient to apply to d_norm^2 in the optimization step, used to priotize or deprioritize the distance term");
+            "Scalar coefficient to apply to d_norm^2 in the optimization step, used to prioritize or deprioritize the distance term");
 
     app.add_flag("--skip_solve", optimizer_config.skip_solve, "Invoke this to skip the optimization step. CSVs for each optimization input will still be written.");
 
