@@ -4,6 +4,7 @@
 using sv_merge::VcfRecord;
 using sv_merge::VcfReader;
 
+#include <sstream>
 #include <iostream>
 #include <filesystem>
 
@@ -19,6 +20,7 @@ using std::to_string;
 using std::ofstream;
 using std::pair;
 using std::cout;
+using std::stringstream;
 
 
 using namespace sv_merge;
@@ -59,16 +61,18 @@ int64_t count_distinct_haplotypes(vector<VcfRecord>& window) {
 
 
 int main (int argc, char* argv[]) {
-    size_t i;
-    int64_t neighborhood_id, nid, n_haps;
-    string buffer;
-    path INPUT_VCF, WINDOW_INFO_FIELD;
+    int64_t i;
+    int64_t neighborhood_id, nid, n_haps, format_id;
+    string buffer, WINDOW_FORMAT_FIELD;
+    const char FORMAT_DELIMITER = ':';
+    path INPUT_VCF;
+    vector<string> format;
     vector<VcfRecord> window;
 
     // Parsing the input
-    CLI::App app{"For every phased window, prints the number of distinct haplotypes in the cohort."};
+    CLI::App app{"For every window, prints the number of distinct haplotypes in the cohort."};
     app.add_option("--input_vcf",INPUT_VCF,"Input VCF")->required();
-    app.add_option("--window_info_field",WINDOW_INFO_FIELD,"Info field that specifies the window ID")->required();
+    app.add_option("--window_format_field",WINDOW_FORMAT_FIELD,"Format field that specifies the window ID. We assume that the same windows are used in every sample, but that they might have different IDs in different samples.")->required();
     app.parse(argc,argv);
     INPUT_VCF=std::filesystem::weakly_canonical(INPUT_VCF);
 
@@ -77,18 +81,36 @@ int main (int argc, char* argv[]) {
     reader.progress_n_lines=0;
     neighborhood_id=-1;
     reader.for_record_in_vcf([&](VcfRecord& record) {
-        i=record.get_info_field(WINDOW_INFO_FIELD,0,buffer);
-        if (i==string::npos) {
-            // The record does not belong to any window
-            if (!window.empty()) {
-                n_haps=count_distinct_haplotypes(window);
-                cout << to_string(n_haps) << '\n';
-                window.clear();
-            }
-            neighborhood_id=-1;
-            return;
+        // Finding the format field
+        stringstream stream1(record.format);
+        format_id=-1; i=-1;
+        while (!stream1.eof()) {
+            getline(stream1,buffer,FORMAT_DELIMITER);
+            i++;
+            if (buffer==WINDOW_FORMAT_FIELD) { format_id=i; break; }
         }
-        nid=stoi(buffer);
+        if (format_id==-1) throw runtime_error("Cannot find "+WINDOW_FORMAT_FIELD+" among the format fields");
+
+        // Reading the window ID from the first sample
+        stringstream stream2(record.genotypes.at(0));
+        nid=-1; i=-1;
+        while (!stream2.eof()) {
+            getline(stream2,buffer,FORMAT_DELIMITER);
+            i++;
+            if (i<format_id) continue;
+            if (buffer==".") {
+                // The record does not belong to any window
+                if (!window.empty()) {
+                    n_haps=count_distinct_haplotypes(window);
+                    cout << to_string(n_haps) << '\n';
+                    window.clear();
+                }
+                neighborhood_id=-1;
+                return;
+            }
+            nid=stoi(buffer);
+            break;
+        }
         if (neighborhood_id==-1) {
             neighborhood_id=nid;
             window.emplace_back(record);
