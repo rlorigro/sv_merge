@@ -27,6 +27,7 @@ task merge {
         Int solver_timeout = 30*60
         Float min_read_hap_identity = 0.5
         Float d_weight = 1.0
+        Int min_hap_coverage = 1
         Int n_threads
         File tandems_bed
         File? windows_bed
@@ -97,6 +98,7 @@ task merge {
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
+        --min_hap_coverage ~{min_hap_coverage} \
         --flank_length ~{flank_length} \
         --graphaligner_timeout ~{graphaligner_timeout} \
         --solver_timeout ~{solver_timeout} \
@@ -115,7 +117,7 @@ task merge {
         ~{if skip_nonessential_logs then "--skip_nonessential_logs" else ""} \
         ~{if obscure_sample_names_from_csv then "--obscure_sample_names_from_csv" else ""} \
         ~{if no_sum_constraints then "--no_sum_constraints" else ""} \
-        ~{if defined(gurobi_license) then "--use_gurobi" else ""}
+        ~{if defined(gurobi_license) then "--use_gurobi" else ""} \
 
         # Ensure write buffers are flushed to disk
         sync
@@ -169,6 +171,7 @@ task merge {
         haps_vs_ref_csv: "CSV file of haplotype vs reference BAMs"
         interval_max_length: "Maximum length of each window evaluated"
         min_read_hap_identity: "Minimum identity between read and haplotype to consider as input to optimizer"
+        min_hap_coverage: "Minimum number of reads that must support a candidate haplotype"
         d_weight: "Scaling factor for the D term in the optimizer, greater than 1.0 will prioritize minimizing edit distance"
         min_sv_length: "Only variants that affect at least this number of bps are merged. Shorter variants are used to build graphs and haplotypes, but they are not merged or printed in output."
         n_threads: "Maximum number of threads to use"
