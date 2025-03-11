@@ -1345,8 +1345,11 @@ void merge_variants(
 
     // Load records for this VCF
     VcfReader vcf_reader(vcf);
-    vcf_reader.min_qual = numeric_limits<float>::min();
+
+    // This stays at 1, but the windows are found using min_sv_len, so anything inside the windows is used for eval,
+    // including SNPs
     vcf_reader.min_sv_length = 1;  // Every record is loaded and used to build the graph, including SNPs/small indels.
+    vcf_reader.min_qual = numeric_limits<float>::min();
     vcf_reader.progress_n_lines = 100'000;
     coord_t record_coord;
 
