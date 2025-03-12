@@ -32,10 +32,6 @@ namespace sv_merge{
 
 
 class Authenticator{
-public:
-    bool is_gcs = false;
-
-private:
     mutex m;
     string token = "NULL";
 
@@ -43,6 +39,9 @@ private:
     system_clock::time_point expiration = get_current_time() - hours(128);
 
 public:
+    bool is_gcs = false;
+    size_t max_jitter_ms = 1000;
+
     /// Methods
     Authenticator();
     explicit Authenticator(bool is_gcs);

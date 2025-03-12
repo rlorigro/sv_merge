@@ -11,7 +11,6 @@ using std::this_thread::sleep_for;
 namespace sv_merge{
 
 
-
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     ((std::string*)userp)->append((char*)contents, size * nmemb);
@@ -122,11 +121,12 @@ int64_t get_remaining_seconds(const string& token){
 }
 
 
-Authenticator::Authenticator() {};
+Authenticator::Authenticator()
+{}
 
 
 Authenticator::Authenticator(bool is_gcs):
-    is_gcs(is_gcs)
+        is_gcs(is_gcs)
 {}
 
 
@@ -140,7 +140,7 @@ void Authenticator::update() {
 void Authenticator::update_gcs_token() {
     std::lock_guard<std::mutex> lock(m);
 
-    // Don't bother querying the info server if we aren't withing 60 seconds of the expiration
+    // Don't bother querying the info server if we aren't within 60 seconds of the expiration
     if (get_current_time() < expiration - seconds(60)){
         return;
     }
@@ -198,12 +198,22 @@ void Authenticator::update_gcs_token() {
 
 
 void Authenticator::try_with_authentication(int64_t n_retries, const function<void()>& f){
+    // random_device may become exhausted if too many threads are calling it...
+    // For simplicity we assume that this is not an issue
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::uniform_int_distribution<size_t> jitter_distribution(0,max_jitter_ms);
+
     update();
     int64_t n = 0;
     bool success = false;
     int duration = 1;
 
     while (not success and n < n_retries) {
+        // Apply jitter even on first request to avoid lockstep with other threads
+        size_t ms = jitter_distribution(generator);
+        sleep_for(milliseconds(ms));
+
         success = true;
 
         try {
@@ -211,9 +221,8 @@ void Authenticator::try_with_authentication(int64_t n_retries, const function<vo
         }
         catch (exception& e) {
             cerr << e.what() << '\n';
-            cerr << "Authenticating..." << '\n';
             update();
-            cerr << "Retrying after " << duration << " seconds ..." << '\n';
+            cerr << "Retrying after " << duration << " seconds (and " << ms << "ms of jitter on prev attempt) ..." << '\n';
             n++;
 
             sleep_for(seconds(duration));
