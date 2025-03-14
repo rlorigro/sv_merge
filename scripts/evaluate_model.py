@@ -14,7 +14,7 @@ from sklearn.metrics import roc_curve, auc, confusion_matrix
 
 def test_batch(model, x, y):
     # run forward calculation
-    y_predict = model.forward(x)
+    y_predict = model(x)
 
     return y, y_predict
 

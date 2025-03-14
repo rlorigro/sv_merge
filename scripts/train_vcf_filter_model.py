@@ -101,7 +101,7 @@ def train(model, train_loader, test_loader, optimizer, scheduler, loss_fn, epoch
 
 def train_batch(model, x, y, optimizer, scheduler, loss_fn):
     # Run forward calculation
-    y_predict = model.forward(x)
+    y_predict = model(x)
 
     # convert 1-hot vectors back into indices
     # max_values, target_index = y.max(dim=1)
@@ -136,7 +136,7 @@ def test(model, loader, loss_fn, use_sigmoid=False):
 
     batch_index = 0
     for x, y in loader.iter_batches():
-        y_predict = model.forward(x, use_sigmoid=use_sigmoid)
+        y_predict = model(x, use_sigmoid=use_sigmoid)
 
         y_vectors.append(y.data.numpy())
         y_predict_vectors.append(y_predict.data.numpy())
