@@ -313,6 +313,56 @@ task concat_beds{
 }
 
 
+# Task to combine the chunks
+task concat_logs{
+    input {
+        Array[File] tarballs
+
+        String docker = "ubuntu:22.04"
+
+        RuntimeAttributes runtime_attributes = {}
+    }
+
+    command <<<
+    set -eoxu pipefail
+
+    # YES I'M AWARE YOU "SHOULD" BE ABLE TO cat TAR.GZ FILES BUT I TESTED IT LOCALLY ON OUR FILES AND IT DIDN'T
+    # CREATE A USABLE OUTPUT
+
+    # Temporary directory for extracted files
+    temp_dir=$(mktemp -d)
+    echo "Temporary directory created at: $temp_dir"
+
+    # Iterate the tarballs and concatenate
+    for archive in ~{sep=' ' tarballs}; do
+        echo "Processing archive: $archive"
+
+        # extract the BED files
+        tar -xzf "$archive" -C "$temp_dir"
+    done
+
+    # tarball all the outputs
+    tar -cvzf logs.tar.gz $temp_dir
+
+    >>>
+
+    output {
+        File tarball = "logs.tar.gz"
+    }
+
+
+    runtime {
+        docker: docker
+        cpu: select_first([runtime_attributes.cpu, 1])
+        memory: select_first([runtime_attributes.command_mem_gb, 6]) + select_first([runtime_attributes.additional_mem_gb, 1]) + " GB"
+        disks: "local-disk " + select_first([runtime_attributes.disk_size_gb, 100]) + if select_first([runtime_attributes.use_ssd, false]) then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attributes.boot_disk_size_gb, 15])
+        preemptible: select_first([runtime_attributes.preemptible, 2])
+        maxRetries: select_first([runtime_attributes.max_retries, 1])
+    }
+}
+
+
 workflow hapestry_merge_scattered {
     input {
         File vcf_gz
@@ -439,6 +489,11 @@ workflow hapestry_merge_scattered {
     call concat_beds {
         input:
             bed_tarballs = scattered_merge.beds_tarball
+    }
+
+    call concat_logs {
+        input:
+            tarballs = scattered_merge.logs_tarball
     }
 
     output {

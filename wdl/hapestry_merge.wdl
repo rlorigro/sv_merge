@@ -307,6 +307,7 @@ workflow hapestry_merge {
     }
 
     output {
+        File logs_tarball = merge.logs_tarball
         File non_sequence_data_tarball = merge.non_sequence_data_tarball
         File sequence_data_tarball = merge.sequence_data_tarball
         File beds_tarball = merge.beds_tarball
