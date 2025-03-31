@@ -505,5 +505,6 @@ workflow hapestry_merge_scattered {
         File hapestry_vcf_tbi = concat_standard_vcfs.concatenated_vcf_tbi
         File hapestry_hap_vcf_tbi = concat_hap_vcfs.concatenated_vcf_tbi
         File hapestry_beds_tarball = concat_beds.beds_tarball
+        File hapestry_logss_tarball = concat_logs.tarball
     }
 }
