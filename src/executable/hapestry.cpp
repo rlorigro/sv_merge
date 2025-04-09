@@ -1233,12 +1233,13 @@ void merge_thread_fn(
                 if (termination_reason == TerminationReason::kNoSolutionFound or termination_reason == TerminationReason::kFeasible) {
                     cerr << "WARNING: solver timed out: " << region.to_unflanked_string(':',flank_length) << '\n';
                 }
-                // Handle failure case (ERROR)
+                // Handle failure case (ERROR) not Optimal, Feasible, or NoSolutionFound, indicates some more serious error
                 else if (termination_reason != TerminationReason::kOptimal) {
                     throw runtime_error("ERROR: solver failed with reason " + termination_reason_to_string(termination_reason) + " at: " + region.to_unflanked_string(':',flank_length));
                 }
-                // Normal operation, solver succeeded
-                else {
+
+                // Normal operation, solver succeeded (though we also allow non-optimal timed-out solutions here)
+                if (termination_reason == TerminationReason::kOptimal or termination_reason == TerminationReason::kFeasible) {
                     vector<int64_t> unused_paths;
 
                     transmap.for_each_path([&](const string& path_name, int64_t path_id) {

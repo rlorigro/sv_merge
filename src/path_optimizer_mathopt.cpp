@@ -446,7 +446,7 @@ void parse_read_feasibility_solution(
     unordered_set <int64_t> to_be_removed;
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
-    if (termination_reason == TerminationReason::kOptimal) {
+    if (termination_reason == TerminationReason::kOptimal and termination_reason == TerminationReason::kFeasible) {
         transmap.for_each_read([&](const string& read_name, int64_t read_id){
             const Variable& var = vars.reads.at(read_id);
 
@@ -532,7 +532,7 @@ double optimize_d_given_n(
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -599,7 +599,7 @@ double optimize_n_given_d(
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -657,7 +657,7 @@ double optimize_d_given_n(
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -703,7 +703,7 @@ double optimize_n_given_d(
     model.DeleteLinearConstraint(constraint);
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -742,7 +742,7 @@ double optimize_n(
 	result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -771,7 +771,7 @@ double optimize_d(
     result_duration = std::chrono::milliseconds(result.solve_stats.solve_time / absl::Milliseconds(1));
 
     // Check if the first solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         return -1;
     }
 
@@ -829,7 +829,7 @@ TerminationReason optimize_d(
     write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
     // Check if the first solution is feasible/optimal
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1151,14 +1151,14 @@ TerminationReason optimize_reads_with_d_and_n(
     d_min = round(optimize_d(model, vars, solver_type, args, termination_reason, duration));
     write_optimization_log(termination_reason, duration, transmap, "optimize_d", output_dir);
 
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
     n_max = round(optimize_n_given_d(model, vars, solver_type, args, termination_reason, duration, d_min));
     write_optimization_log(termination_reason, duration, transmap, "optimize_n_given_d", output_dir);
 
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1166,14 +1166,14 @@ TerminationReason optimize_reads_with_d_and_n(
     n_min = round(optimize_n(model, vars, solver_type, args, termination_reason, duration));
     write_optimization_log(termination_reason, duration, transmap, "optimize_n", output_dir);
 
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
     d_max = round(optimize_d_given_n(model, vars, solver_type, args, termination_reason, duration, n_min));
     write_optimization_log(termination_reason, duration, transmap, "optimize_d_given_n", output_dir);
 
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1202,7 +1202,7 @@ TerminationReason optimize_reads_with_d_and_n(
     duration = std::chrono::milliseconds(result_n_d.solve_stats.solve_time / absl::Milliseconds(1));
 	write_optimization_log(termination_reason, duration, transmap, "optimize_n_d_quadratic", output_dir);
 
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1277,7 +1277,7 @@ TerminationReason prune_paths_with_d_min(
     t.reset();
 
     // EXIT EARLY
-    if (termination_reason != TerminationReason::kOptimal){
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible){
         return termination_reason;
     }
 
@@ -1506,10 +1506,11 @@ TerminationReason optimize_read_feasibility(
     string time_csv;
     duration_to_csv(duration, time_csv);
 
+    // For logging (doesn't affect execution)
     bool success = result.termination.reason == TerminationReason::kOptimal;
 
     // Check if the final solution is feasible
-    if (result.termination.reason != TerminationReason::kOptimal){
+    if (result.termination.reason != TerminationReason::kOptimal and result.termination.reason != TerminationReason::kFeasible){
         // Append log line to output file which contains the result of each optimization
         // If it failed, then r_out is 0 by default
         string notes = "n_read_hap_vars=" + to_string(vars.read_hap.size()) + ";r_in=" + to_string(r_in) + ";r_out=0"  + ";" + termination_reason_to_string(result.termination.reason);
@@ -1552,7 +1553,7 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
     // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
     termination_reason = optimize_read_feasibility(transmap, 1, config.timeout_sec, subdir, config.solver_type);
 
-    if (termination_reason != TerminationReason::kOptimal) {
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible) {
         return termination_reason;
     }
 
@@ -1564,7 +1565,7 @@ TerminationReason optimize(TransMap& transmap, const OptimizerConfig& config, pa
         termination_reason = optimize_d(transmap, config, subdir, 1, d_min, n_max);
     }
 
-    if (termination_reason != TerminationReason::kOptimal) {
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible) {
         return termination_reason;
     }
 
@@ -1585,7 +1586,7 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
     // First resolve any samples that break ploidy feasibility by removing the minimum # of reads
     termination_reason = optimize_read_feasibility(transmap, 1, config.timeout_sec, subdir, config.solver_type);
 
-    if (termination_reason != TerminationReason::kOptimal) {
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible) {
         return termination_reason;
     }
 
@@ -1633,7 +1634,7 @@ TerminationReason optimize_compressed(TransMap& transmap, const OptimizerConfig&
         termination_reason = optimize_d(clone, config, subdir, 1, d_min, n_max);
     }
 
-    if (termination_reason != TerminationReason::kOptimal) {
+    if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible) {
         return termination_reason;
     }
 
@@ -1686,7 +1687,7 @@ TerminationReason optimize_samplewise(TransMap& transmap, const OptimizerConfig&
         // cerr << sample_name << ' ' << termination_reason_to_string(termination_reason) << '\n';
 
         // TODO handle this more smarter.. what about kFeasible?
-        if (termination_reason != TerminationReason::kOptimal) {
+        if (termination_reason != TerminationReason::kOptimal and termination_reason != TerminationReason::kFeasible) {
             return;
         }
 
