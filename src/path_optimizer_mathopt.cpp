@@ -446,7 +446,7 @@ void parse_read_feasibility_solution(
     unordered_set <int64_t> to_be_removed;
 
     // Print the results of the ILP by iterating all samples, all reads of each sample, and all read/path edges in the transmap
-    if (termination_reason == TerminationReason::kOptimal and termination_reason == TerminationReason::kFeasible) {
+    if (termination_reason == TerminationReason::kOptimal or termination_reason == TerminationReason::kFeasible) {
         transmap.for_each_read([&](const string& read_name, int64_t read_id){
             const Variable& var = vars.reads.at(read_id);
 
