@@ -11,6 +11,7 @@ def parse_nodes_csv(file_path):
         return 0
 
     avg_coverage = 0
+    n_nonref = 0
 
     column_name_to_index = dict()
     with open(file_path, 'r') as f:
@@ -27,9 +28,12 @@ def parse_nodes_csv(file_path):
                 if nonref:
                     x = data[column_name_to_index['coverage']]
                     avg_coverage += float(x) if "nan" not in x.lower() else 0
+                    n_nonref += 1
 
-    if i > 0:
-        avg_coverage /= i
+    if n_nonref > 0:
+        avg_coverage /= n_nonref
+    else:
+        avg_coverage = 1
 
     return avg_coverage
 

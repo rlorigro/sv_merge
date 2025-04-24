@@ -367,13 +367,19 @@ void for_each_row_in_csv(path csv_path, const function<void(const vector<string>
     int64_t n_char_in_line = 0;
     char delimiter = ',';
 
+    bool carriage_warned = false;
+
     while (file.get(c)){
         if (c == delimiter){
             items.emplace_back();
             continue;
         }
         if (c == '\r'){
-            throw runtime_error("ERROR: carriage return not supported: " + csv_path.string());
+            if (not carriage_warned) {
+                cerr << "WARNING: Windows user detected! Please punish them appropriately. File with carriage returns: " + csv_path.string() << '\n';
+                carriage_warned = true;
+            }
+            continue;
         }
 
         if (c == '\n'){

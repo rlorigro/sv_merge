@@ -1,6 +1,5 @@
 #include "bdsg/include/bdsg/internal/hash_map.hpp"
 #include "path_optimizer_mathopt.hpp"
-//#include "gurobi_manager.hpp"
 #include "Timer.hpp"
 
 #include <fstream>
@@ -16,31 +15,31 @@ namespace sv_merge{
 
 
 string termination_reason_to_string(const TerminationReason& reason){
-    if (reason ==  TerminationReason::kOptimal){
+    if (reason == TerminationReason::kOptimal){
         return "Optimal";
     }
-    else if (reason ==  TerminationReason::kInfeasible){
+    else if (reason == TerminationReason::kInfeasible){
         return "Infeasible";
     }
-    else if (reason ==  TerminationReason::kUnbounded){
+    else if (reason == TerminationReason::kUnbounded){
         return "Unbounded";
     }
-    else if (reason ==  TerminationReason::kInfeasibleOrUnbounded){
+    else if (reason == TerminationReason::kInfeasibleOrUnbounded){
         return "InfeasibleOrUnbounded";
     }
-    else if (reason ==  TerminationReason::kImprecise){
+    else if (reason == TerminationReason::kImprecise){
         return "Imprecise";
     }
-    else if (reason ==  TerminationReason::kFeasible){
+    else if (reason == TerminationReason::kFeasible){
         return "Feasible";
     }
-    else if (reason ==  TerminationReason::kNoSolutionFound){
+    else if (reason == TerminationReason::kNoSolutionFound){
         return "NoSolutionFound";
     }
-    else if (reason ==  TerminationReason::kNumericalError){
+    else if (reason == TerminationReason::kNumericalError){
         return "NumericalError";
     }
-    else if (reason ==  TerminationReason::kOtherError){
+    else if (reason == TerminationReason::kOtherError){
         return "OtherError";
     }
     else{

@@ -1,5 +1,7 @@
 from collections import defaultdict
 import argparse
+import paxplot
+import random
 import numpy
 import sys
 import re
@@ -168,7 +170,7 @@ def plot_6_major_distributions(histograms: dict, title, colors, output_dir=None)
         for series_label,coord in axes_locations.items():
             i,j = coord
 
-            print(sample_label)
+            # print(sample_label)
             h,bins = histograms[sample_label][series_label]
 
             h = numpy.append(numpy.array([0]), h)
@@ -184,6 +186,9 @@ def plot_6_major_distributions(histograms: dict, title, colors, output_dir=None)
                 sys.stderr.write("WARNING: could not find color for %s, using default of red\n" % sample_label)
             else:
                 c = colors[sample_label]
+
+            if "2cov" in sample_label:
+                c = "purple"
 
             axes[i][j].plot(bins,cdf, label=sample_label, alpha=0.7, linewidth=2, color=c)
             axes[i][j].set_xlabel(series_label)
@@ -254,7 +259,7 @@ def plot_all(histograms: dict, colors):
         all_series = list()
 
         for sample_label,series in item.items():
-            print(sample_label)
+            # print(sample_label)
             h,bins = series
 
             h = numpy.append(numpy.array([0]), h)
@@ -364,6 +369,38 @@ def load_dir(input_dir: str, data: defaultdict[lambda: defaultdict[list]]):
 
     return data
 
+
+def sample_order(x):
+    if "rescale" in x:
+        tokens = x.split("_")
+
+        token = None
+        for t in tokens:
+            if t[0].isnumeric() and (t[-1] == 'd' or t[-1] == 'n'):
+                token = t
+
+        numeric = float(token[:2])
+
+        y = numeric if "d" in token else 1.0/numeric
+
+    else:
+        if "dipcall" in x:
+            y = 0
+        elif "reference" in x:
+            y = 100
+        elif "bcftools" in x:
+            y = 101
+        elif "truvari" in x:
+            y = 102
+        elif "pbsv" in x:
+            y = 103
+        else:
+            y = hash(x)
+
+    # print(x,y)
+    return y
+
+
 def plot_radar(data, data_ranges, title, colors, output_dir=None):
     radar_series_labels = [
         "alignment_identity_avg",
@@ -375,14 +412,11 @@ def plot_radar(data, data_ranges, title, colors, output_dir=None):
     ]
 
     for key,range in data_ranges.items():
-        print(key)
-        print(range)
-
         range[0] = max(0,range[0]*0.9999)
         # range[1] = min(1,range[1]*1.001)
 
-        print(range)
-        print()
+        # range[0] = 0
+        # range[1] = 1
 
         data_ranges[key] = range
 
@@ -391,12 +425,14 @@ def plot_radar(data, data_ranges, title, colors, output_dir=None):
     fig = pyplot.figure()
     radar = ComplexRadar(fig, radar_series_labels, radar_ranges)
 
-    for s,sample in enumerate(data):
-        y = [data[sample][k] for k in radar_series_labels]
+    colormap = matplotlib.colormaps["nipy_spectral"]
 
-        print(sample)
-        print(radar_series_labels)
-        print(y)
+    s_color = 0
+    s_max = len([name for name in data.keys() if "reference" not in name and "dipcall" not in name and "bcftools" not in name and "mode2" not in name])
+
+    for s,sample in enumerate(sorted(data)):
+    # for s,sample in enumerate(sorted(data, key=lambda x: sample_order(x))):
+        y = [data[sample][k] for k in radar_series_labels]
 
         c = "red"
         if sample not in colors:
@@ -404,14 +440,38 @@ def plot_radar(data, data_ranges, title, colors, output_dir=None):
         else:
             c = colors[sample]
 
-        radar.plot(y, label=sample, linewidth=3.2, alpha=0.7, color=c)
+        style = '-'
+        width = 2
+        z=100
+
+        if "reference" in sample:
+            c = "gray"
+            width = 3
+        elif "dipcall" in sample:
+            c = "#262626"
+            style = '--'
+            width = 1
+        elif "bcftools" in sample:
+            c = "black"
+            style = '--'
+            width = 1
+        else:
+            color_index = (float(s_color) + 1) /float(s_max + 1)
+            c = colormap(color_index)
+            s_color += 1
+
+        sample = sample.replace("_mode1", "")
+
+        radar.plot(y, label=sample, linewidth=width, alpha=0.7, color=c, linestyle=style, zorder=z)
         # radar.fill(y, alpha=0.05, color=colors[sample])
 
     # axes.legend()
-    radar.ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.))
+    fig.set_size_inches(12,8)
+
+    radar.ax.legend(loc='upper right', bbox_to_anchor=(1.8, 1.))
     fig.suptitle(title)
 
-    fig.set_size_inches(8,8)
+    fig.tight_layout()
 
     if output_dir is None:
         pyplot.show()
@@ -422,7 +482,85 @@ def plot_radar(data, data_ranges, title, colors, output_dir=None):
         pyplot.savefig(out_path, dpi=300)
 
 
-def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_fig: bool):
+def plot_parallel_coordinate(data, data_ranges, title, colors, output_dir=None):
+    ordered_names = [
+        "alignment_identity_avg",
+        "haplotype_coverage_avg",
+        "nonref_nodes_fully_covered",
+        "nonref_edges_covered",
+    ]
+
+    ordered_names_english = [
+        "Alignment identity",
+        "Haplotype coverage",
+        "Non-ref nodes covered",
+        "Non-ref edges covered",
+    ]
+
+    colormap = matplotlib.colormaps["nipy_spectral"]
+    s_max = len([name for name in data.keys() if "reference" not in name and "dipcall" not in name and "bcftools" not in name and "mode2" not in name])
+
+    values = list()
+    colors = list()
+    s_color = 0
+
+    for s,sample in enumerate(data.keys()):
+        y = [data[sample][name] for name in ordered_names]
+        values.append(y)
+
+        if "ref" in sample:
+            c = "#262626"
+        elif "dipcall" in sample:
+            c = "gray"
+        elif "bcftools" in sample:
+            c = "black"
+        else:
+            color_index = (float(s_color) + 1) /float(s_max + 2)
+            c = colormap(color_index)
+            s_color += 1
+
+        print(sample, s_color, s_max)
+
+        colors.append(c)
+
+    # Create figure
+    paxfig = paxplot.pax_parallel(n_axes=len(ordered_names))
+
+    for v,value in enumerate(values):
+        paxfig.plot([value], {"color":colors[v], "linewidth":3})
+
+    for ax in paxfig.get_axes():  # Iterate over all axes in the figure
+        ymin, ymax = ax.get_ylim()  # Get current y-limits
+        range_expand = (ymax - ymin) * 0.01  # Compute 1% expansion
+        ax.set_ylim(ymin - range_expand, ymax + range_expand)  # Apply new limits
+        ax.tick_params(axis="x", labelrotation=15)
+
+    # Add labels
+    paxfig.set_labels(ordered_names_english)
+    paxfig.set_size_inches(12,8)
+    paxfig.suptitle(title)
+
+    # paxfig.add_legend(list(data.keys()))
+
+    # print(type(paxfig))
+
+    from matplotlib.lines import Line2D
+
+    custom_lines = [Line2D([0], [0], color=colors[i], lw=4) for i in range(len(data))]
+
+    l = paxfig.axes[-1].legend(custom_lines, data.keys(), loc="lower right", facecolor="white")
+    l.set_zorder(999)
+
+    if output_dir is None:
+        pyplot.show()
+        pyplot.close()
+    else:
+        out_path = os.path.join(output_dir, title + ".png")
+        print("SAVING: " + out_path)
+        pyplot.savefig(out_path, dpi=300)
+
+
+def evaluate_subdirs(subdirs: list[str], parent_dir: str, plot_type: str, save_fig: bool):
     # Arbitrary histogram bounds TODO: determine n_haps automatically
     n_haps = 95
     n_node_max = 300
@@ -466,16 +604,27 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
     # c6,c3,c1,c8,c9,c0,c4,
     colors = {
         'bcftools': "C0",
+        'dipcall': "#262626",
+        'dipcall_10': "#262626",
+        'dipcall_50': "#262626",
+        'hapestry': "red",
+        'hapestry_fix_fetch': "blue",
+        'hapestry_02n_rescale_50bp_prune': "red",
+        'reference': "gray",
+        'pbsv_joint': "C1",
+        'sniffles_joint': "C4",
         'truvari': "C9",
+        'truvari_kanpig': "C8",
+        'truvari_mode1': "C9",
+        'truvari_mode2': "C8",
         'svmerger': "C2",
         'jasmine': "C1",
         'svimmer': "C3",
-        'sniffles_joint': "C6",
-        'dipcall': "C4",
-        'reference': "gray",
         'merged_hap': "gray",
-        'merged': "blue",
-        'hapestry': "red",
+        'merged': "purple",
+        'merged_pruned': "blue",
+        'merged_compressed': "green",
+        'merged_compressed_pruned': "orange",
         'null': "gray",
     }
 
@@ -487,11 +636,11 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
     averages_per_stratification = defaultdict(lambda: defaultdict(dict))
 
     '''
-    analysis_small_overlap/               <--- parent dir
-        ├── chr10_analysis_small          <--- subdir
-        │    ├── all_windows              <--- stratification label
-        │    │    ├── bcftools
-        │    │    │    ├── alignment_identity_avg.txt
+    analysis_small_overlap/                                         <--- parent dir
+        ├── chr10_analysis_small                                    <--- subdir
+        │    ├── all_windows                                        <--- stratification label
+        │    │    ├── bcftools                                      <--- sample label
+        │    │    │    ├── alignment_identity_avg.txt               <--- series label
         │    │    │    ├── anomalous_windows.bed
         │    │    │    ├── cluster_alignment_identity_avg.txt
         │    │    │    ├── cluster_coverage_avg.txt
@@ -523,7 +672,7 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
 
     print(fig_dir)
 
-    for subdir_path in subdirs:
+    for subdir_path in sorted(subdirs):
         for stratification_label in os.listdir(subdir_path):
             stratification_dir = os.path.join(subdir_path, stratification_label)
 
@@ -537,9 +686,9 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
                 data=data_per_stratification[stratification_label]
             )
 
-    if not use_radar:
+    if plot_type == "c":
         for stratification_label,data in data_per_stratification.items():
-            for sample_label in data.keys():
+            for sample_label in sorted(data.keys()):
                 for series_label,values in data[sample_label].items():
                     range = data_ranges[series_label]
                     h,bins = numpy.histogram(values, 300, range)
@@ -563,8 +712,9 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
         for stratification_label,data in data_per_stratification.items():
             empirical_data_ranges = defaultdict(lambda: [1e9,-1e9])
 
-            for sample_label in data.keys():
-                for series_label,values in data[sample_label].items():
+            for sample_label in sorted(data.keys()):
+
+                for series_label,values in sorted(data[sample_label].items()):
                     avg = numpy.mean(values)
 
                     averages_per_stratification[stratification_label][sample_label][series_label] = avg
@@ -576,15 +726,36 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, use_radar: bool, save_
                         empirical_data_ranges[series_label][1] = avg
 
             print(histograms_per_stratification[stratification_label].keys())
-            print("Plotting radar: ", stratification_label)
+            print("Processing: ", stratification_label)
 
-            plot_radar(
-                data=averages_per_stratification[stratification_label],
-                data_ranges=empirical_data_ranges,
-                title=stratification_label,
-                colors=colors,
-                output_dir=fig_dir
-            )
+            if plot_type == "r":
+                plot_radar(
+                    data=averages_per_stratification[stratification_label],
+                    data_ranges=empirical_data_ranges,
+                    title=stratification_label,
+                    colors=colors,
+                    output_dir=fig_dir
+                )
+            elif plot_type == "p":
+                plot_parallel_coordinate(
+                    data=averages_per_stratification[stratification_label],
+                    data_ranges=empirical_data_ranges,
+                    title=stratification_label,
+                    colors=colors,
+                    output_dir=fig_dir
+                )
+            elif plot_type == "none":
+                filename_prefix = '_'.join(subdir_path.strip('/').split('/')[-2:])
+                file_path = filename_prefix + ".csv"
+
+                print("Writing CSV to: ", file_path)
+                with open(file_path, 'w') as file:
+                    c = ','
+                    for i,[name,item] in enumerate(averages_per_stratification[stratification_label].items()):
+                        if i == 0:
+                            file.write("name" + c + c.join(item.keys()) + '\n')
+                        file.write(name + c + c.join(list(map(lambda x: "%.4f"%x,item.values()))) + '\n')
+
 
 
 if __name__ == "__main__":
@@ -612,9 +783,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-r","--radar",
-        action=argparse.BooleanOptionalAction,
-        help="If invoked, produce radar plots on this data"
+        "-t","--type",
+        required=False,
+        default="c",
+        type=str,
+        help="plot type to use:\n"
+             "\tc: cumulative distributions\n"
+             "\tr: radar plot of averages\n"
+             "\tb: bar chart of averages"
     )
 
     args = parser.parse_args()
@@ -625,5 +801,5 @@ if __name__ == "__main__":
     if has_input_dir == has_parent_dir == 0:
         exit("ERROR: must provide one of input_dir or parent_dir but not both")
 
-    evaluate_subdirs(subdirs=[args.input_dir] if args.input_dir is not None else None, parent_dir=args.parent_dir, use_radar=args.radar, save_fig=args.save_fig)
+    evaluate_subdirs(subdirs=[args.input_dir] if args.input_dir is not None else None, parent_dir=args.parent_dir, plot_type=args.type, save_fig=args.save_fig)
 
