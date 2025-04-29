@@ -70,7 +70,7 @@ task plot_hwe_from_counts {
         set -euo pipefail
 
         # Download the R script
-        curl -L -o PlotHW.r https://raw.githubusercontent.com/rlorigro/sv_merge/dev/wdl/PlotHW.r
+        wget https://raw.githubusercontent.com/rlorigro/sv_merge/dev/wdl/PlotHW.r
 
         Rscript PlotHW.r ${input_matrix} hwe_plot.png
     }
