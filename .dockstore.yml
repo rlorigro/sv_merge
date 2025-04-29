@@ -88,3 +88,7 @@ workflows:
   subclass: wdl
   publish: True
   primaryDescriptorPath: /wdl/subset_csv_samples_using_vcf.wdl
+- name: plotHWE
+  subclass: wdl
+  publish: True
+  primaryDescriptorPath: /wdl/plotHWE.wdl
