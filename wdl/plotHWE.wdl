@@ -69,7 +69,7 @@ task plot_hwe_from_counts {
     command {
         set -euo pipefail
 
-        Rscript PlotHW.r ${input_matrix} hwe_plot.png
+        Rscript /hwe/PlotHW.r ${input_matrix} hwe_plot.png
     }
 
     output {
