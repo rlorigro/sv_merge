@@ -59,4 +59,8 @@ RUN pip3 install cmake==3.31.6
 
 RUN wget https://raw.githubusercontent.com/rlorigro/sv_merge/refs/heads/dev/wdl/PlotHW.r
 
-RUN Rscript PlotHW.r
+RUN Rscript -e "install.packages(pkgs='HardyWeinberg', repos='http://cran.us.r-project.org', verbose=TRUE, Ncpus=4)"
+
+ADD https://raw.githubusercontent.com/rlorigro/sv_merge/refs/heads/dev/docker/hwe/test_hwe.txt .
+RUN Rscript PlotHW.r test_hwe.txt test.png
+
