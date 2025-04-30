@@ -77,7 +77,7 @@ task plot_hwe_from_counts {
     }
 
     runtime {
-        docker: "r-base:4.4.2"
+        docker: "fcunial/hapestry:hwe"
         memory: "4G"
         cpu: 1
     }
