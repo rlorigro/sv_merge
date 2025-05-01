@@ -45,6 +45,7 @@ task merge {
         Boolean skip_nonessential_logs = false
         Boolean obscure_sample_names_from_csv = false
         Boolean no_sum_constraints = false
+        Boolean no_incomplete_gafs = false
         Boolean upload_debug_data = false
 
         String docker = "fcunial/hapestry:merge"
@@ -117,6 +118,7 @@ task merge {
         ~{if skip_nonessential_logs then "--skip_nonessential_logs" else ""} \
         ~{if obscure_sample_names_from_csv then "--obscure_sample_names_from_csv" else ""} \
         ~{if no_sum_constraints then "--no_sum_constraints" else ""} \
+        ~{if no_incomplete_gafs then "--no_imcomplete_gafs" else ""} \
         ~{if defined(gurobi_license) then "--use_gurobi" else ""} \
 
         # Ensure write buffers are flushed to disk
@@ -185,6 +187,7 @@ task merge {
         skip_nonessential_logs: "Invoke this to skip logs: reads_to_paths.csv, solution.csv, nodes.csv"
         obscure_sample_names_from_csv: "Don't write sample names to reads_to_paths.csv. Instead, write an arbitrarily determined integer ID."
         no_sum_constraints: "Use individual constraints instead of a sum for 'any of' implications (strongly recommended NOT to use sums for SCIP)"
+        no_incomplete_gafs: "If invoked DO NOT attempt to use incomplete GAFs that result from timed-out graph alignment. Skip window instead."
         tandems_bed: "BED file of tandem repeats"
         windows_bed: "BED file of windows to use for hapestry. Overrides automatic window finding if provided. Flank length is added to the bounds of each window in the BED."
     }

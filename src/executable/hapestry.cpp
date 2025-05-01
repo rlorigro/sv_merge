@@ -510,6 +510,9 @@ void write_region_subsequences_to_file(const TransMap& t, const path& output_fas
 
     ofstream file(output_fasta);
 
+    vector<pair<string,int64_t>> ids;
+    ids.reserve(t.get_read_count());
+
     t.for_each_read([&](const string& name, int64_t id){
         t.get_sequence(id,s);
 
@@ -517,9 +520,18 @@ void write_region_subsequences_to_file(const TransMap& t, const path& output_fas
             return;
         }
 
+        ids.emplace_back(name,id);
+    });
+
+    // Reads will be accessed from an unordered_map<int,...>, but not guaranteed to be shuffled so we enforce shuffling
+    std::ranges::shuffle(ids, std::mt19937(1337));
+
+    for (auto& [name,id]: ids) {
+        t.get_sequence(id,s);
+
         file << '>' << name << '\n';
         file << s << '\n';
-    });
+    }
 }
 
 
@@ -540,11 +552,21 @@ void write_deduplicated_region_subsequences_to_file(const TransMap& t, const pat
 
     ofstream file(output_fasta);
 
+    // Iterating hashed sequences SHOULD be random but we want to guarantee it
+    vector<pair<const string*,int64_t>> seqs;
+    seqs.reserve(counter.size());
+
+    for (const auto& [seq, n]: counter) {
+        seqs.emplace_back(std::make_pair(&seq, n));
+    }
+
+    std::ranges::shuffle(seqs, std::mt19937(1337));
+
     // Write arbitrary read names to the FASTA, and keep track of their count (in case needed for coverage later)
     size_t i = 0;
-    for (const auto& [seq, n]: counter) {
+    for (const auto [seq, n]: seqs) {
         file << '>' << i << '_' << n << '\n';
-        file << seq << '\n';
+        file << *seq << '\n';
 
         i++;
     }
@@ -1159,19 +1181,24 @@ void merge_thread_fn(
 
         write_time_log(subdir, "graphaligner", t, success);
 
-        // Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
         if (not success) {
             cerr << "WARNING: Command timed out: " << command << '\n';
-            write_time_log(subdir, "window_total", t_total, false);
 
-            // Write the solution to a VCF
-            path output_path = subdir / "solution.vcf";
+            // IF TRUE: Skip remaining steps for this region/tool if alignment failed and get the next job index for the thread
+            // ELSE: attempt to use the subset of alignments that succeeded and proceed as normal
+            if (not hapestry_config.use_incomplete_gafs) {
+                // Write the log
+                write_time_log(subdir, "window_total", t_total, false);
 
-            write_all_variants_to_vcf(variant_graph, vcf_reader.sample_ids, output_path, region);
+                // Write the solution to a VCF
+                path output_path = subdir / "solution.vcf";
 
-            transmap = {};
-            i = job_index.fetch_add(1);
-            continue;
+                write_all_variants_to_vcf(variant_graph, vcf_reader.sample_ids, output_path, region);
+
+                transmap = {};
+                i = job_index.fetch_add(1);
+                continue;
+            }
         }
 
         // Iterate the alignments and accumulate their coverages
@@ -1323,7 +1350,7 @@ void merge_thread_fn(
 
 
 /**
- * @param min_sv_length only variants that affect at least this number of bps are merged; shorter variants are used to
+ * @param config (min_sv_length) only variants that affect at least this number of bps are merged; shorter variants are used to
  * build graphs and haplotypes, but they are not merged or printed in output.
  */
 void merge_variants(
@@ -1921,6 +1948,8 @@ int main (int argc, char* argv[]){
     app.add_flag("--use_gurobi", use_gurobi, "Invoke this to use Gurobi instead of SCIP. License must be in conventional location.");
 
     app.add_flag("!--no_sum_constraints", optimizer_config.use_sum_constraints, "Use individual constraints instead of a sum for 'any of' implications (strongly recommended NOT to use sums for SCIP, RAM+CPU explodes with sums)");
+
+    app.add_flag("!--no_incomplete_gafs", hapestry_config.use_incomplete_gafs, "If invoked DO NOT attempt to use incomplete GAFs that result from timed-out graph alignment. Instead, skip processing the region and dump the raw vars straight to output. Hapestry attempts to use the incomplete alignments by default.");
 
     app.add_flag("--force_unique_reads", hapestry_config.force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 

@@ -445,13 +445,13 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
                     a.set_query_name(token);
                     break;
                 case 1:
-                    a.set_query_length(stoll(token));
+                    a.set_query_length(stoi(token));
                     break;
                 case 2:
-                    a.set_query_start(stoll(token));
+                    a.set_query_start(stoi(token));
                     break;
                 case 3:
-                    a.set_query_stop(stoll(token));
+                    a.set_query_stop(stoi(token));
                     break;
                 case 4:
                     a.set_reversal(parse_reversal_token(token));
@@ -460,22 +460,22 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
                     a.set_path(token);
                     break;
                 case 6:
-                    a.set_path_length(stoll(token));
+                    a.set_path_length(stoi(token));
                     break;
                 case 7:
-                    a.set_path_start(stoll(token));
+                    a.set_path_start(stoi(token));
                     break;
                 case 8:
-                    a.set_path_stop(stoll(token));
+                    a.set_path_stop(stoi(token));
                     break;
                 case 9:
-                    a.set_n_match(stoll(token));
+                    a.set_n_match(stoi(token));
                     break;
                 case 10:
-                    a.set_alignment_length(stoll(token));
+                    a.set_alignment_length(stoi(token));
                     break;
                 case 11:
-                    a.set_map_quality(stoll(token));
+                    a.set_map_quality(stoi(token));
                     break;
                 default:
                     a.add_tag(token);
@@ -487,10 +487,18 @@ void for_alignment_in_gaf(const path& gaf_path, const function<void(GafAlignment
             continue;
         }
 
+        /* -------------------------------------------------------------------------------------------------------------
+         *
+         *   WARNING: for the parsing of timed-out GraphAligner GAFs, we INTENTIONALLY do not read any trailing
+         *   lines NOT terminated by \n. If the GAF doesn't have a trailing newline AND it was NOT timed out then it
+         *   is WRONG and the authors should be contacted/shamed.
+         *
+         * -------------------------------------------------------------------------------------------------------------
+         */
         else if (c == '\n'){
             if (n_delimiters == 11){
                 // Handle case where there is no delimiter after the last mandatory column
-                a.set_map_quality(stoll(token));
+                a.set_map_quality(stoi(token));
             }
             if (n_delimiters > 11){
                 // Handle case where there is no delimiter after the last tag

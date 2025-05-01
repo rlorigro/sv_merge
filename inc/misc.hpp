@@ -45,6 +45,7 @@ public:
     bool bam_not_hardclipped = false;
     bool write_hap_vcf = false;
     bool skip_nonessential_logs = false;
+    bool use_incomplete_gafs = true;
     bool obscure_sample_names = false;
     bool deduplicate_reads = true;      // TODO: make this an actual CLI option? always true, currently
 };
