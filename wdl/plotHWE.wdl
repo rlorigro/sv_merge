@@ -69,11 +69,11 @@ task plot_hwe_from_counts {
     command {
         set -euo pipefail
 
-        Rscript /hwe/PlotHW.r ${input_matrix} hwe_plot.png
+        Rscript /hwe/PlotHW.r ${input_matrix} hwe_plot.pdf
     }
 
     output {
-        File output_png = "hwe_plot.png"
+        File output_pdf = "hwe_plot.pdf"
     }
 
     runtime {
@@ -109,6 +109,6 @@ workflow plot_hwe {
     }
 
     output {
-        File hwe_plot = plot_hwe_from_counts.output_png
+        File hwe_plot = plot_hwe_from_counts.output_pdf
     }
 }
