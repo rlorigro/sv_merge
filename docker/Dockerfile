@@ -119,6 +119,7 @@ RUN mkdir -p /miniconda3 \
     && /miniconda3/bin/conda init bash zsh
 RUN git clone https://github.com/maickrau/GraphAligner.git \
     && cd GraphAligner \
+    && git checkout 7939c3e1ec8cbc713367c641d57ca753b527e463 \
     && git submodule update --init --recursive \
     && /miniconda3/bin/conda env create -f CondaEnvironment_linux.yml
 SHELL ["/miniconda3/bin/conda", "run", "-n", "GraphAligner", "/bin/bash", "-c"]    
@@ -138,7 +139,7 @@ RUN mkdir /opt/gurobi
 
 # HAPESTRY
 RUN apt remove cmake -y
-RUN pip3 install cmake --upgrade
+RUN pip3 install cmake==3.31.6
 RUN pip3 install matplotlib
 RUN pip3 install networkx
 RUN pip3 install numpy
@@ -156,7 +157,8 @@ RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
 
-ARG HAPESTRY_COMMIT=60122fe34b8f6abbb09f9a5bf6ae339f5464c4b3
+ARG HAPESTRY_COMMIT=d7cbe6793c8925e2eb6412cb9d9bc0550b83a19b
+RUN git fetch
 RUN git checkout ${HAPESTRY_COMMIT}
 RUN mkdir build
 
