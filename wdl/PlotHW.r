@@ -8,13 +8,13 @@
 #
 # Rscript PlotHW.r input output
 # @param args 0=input GT count matrix; must have header $AA,AB,BB$, where
-# AA=homref, AB=het, BB=homvar; 1=output PNG.
+# AA=homref, AB=het, BB=homvar; 1=output PDF.
 #
 args=commandArgs(trailingOnly=TRUE)
 install.packages(pkgs='HardyWeinberg', repos="http://cran.us.r-project.org", verbose=TRUE, Ncpus=4)
 library(HardyWeinberg)
 
-png(args[2],res=300,height=1800,width=1800)
+pdf(args[2], height=6, width=6)
 
 lab.cex=1
 
