@@ -148,7 +148,7 @@ public:
      * Remark: this performs a linear scan of `info`.
      *
      * @return the first occurrence of `key` in `ìnfo[from..]`, if present (in this case `out` contains the value of
-     * `key`); `string::npos` if `key` does not occur in `ìnfo`.
+     * `key`); `string::npos` if `key` does not occur in `info`.
      */
     size_t get_info_field(const string& key, size_t from, string& out) const;
 
