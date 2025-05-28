@@ -20,7 +20,7 @@ fi
 
 
 # Process the first VCF file
-bcftools view -Oz $VCF_INPUT > $OUTPUT_DIR/merged.vcf.gz
+bcftools view -Oz $VCF_INPUT $REGION > $OUTPUT_DIR/merged.vcf.gz
 bcftools index -t $OUTPUT_DIR/merged.vcf.gz
 
 # Resolve variants with Python script
@@ -42,20 +42,20 @@ bcftools consensus \
   -s $SAMPLE_NAME \
   -H 1 \
   -f $REFERENCE_FASTA \
-  $OUTPUT_DIR/merged_resolved_filled.vcf.gz > $OUTPUT_DIR/${SAMPLE_NAME}_hap_0_full.fasta
+  $OUTPUT_DIR/merged_resolved_filled.vcf.gz > "$OUTPUT_DIR"/"${SAMPLE_NAME}"_hap_0_full.fasta
 
 # Generate consensus for haplotype 2
 bcftools consensus \
   -s $SAMPLE_NAME \
   -H 2 \
   -f $REFERENCE_FASTA \
-  $OUTPUT_DIR/merged_resolved_filled.vcf.gz > $OUTPUT_DIR/${SAMPLE_NAME}_hap_1_full.fasta
+  $OUTPUT_DIR/merged_resolved_filled.vcf.gz > "$OUTPUT_DIR"/"${SAMPLE_NAME}"_hap_1_full.fasta
 
-samtools faidx $OUTPUT_DIR/${SAMPLE_NAME}_hap_0_full.fasta ${REGION} > $OUTPUT_DIR/${SAMPLE_NAME}_hap_0.fasta
-samtools faidx $OUTPUT_DIR/${SAMPLE_NAME}_hap_1_full.fasta ${REGION} > $OUTPUT_DIR/${SAMPLE_NAME}_hap_1.fasta
+samtools faidx $OUTPUT_DIR/${SAMPLE_NAME}_hap_0_full.fasta ${REGION} > "$OUTPUT_DIR"/${SAMPLE_NAME}_hap_0.fasta
+samtools faidx $OUTPUT_DIR/${SAMPLE_NAME}_hap_1_full.fasta ${REGION} > "$OUTPUT_DIR"/${SAMPLE_NAME}_hap_1.fasta
 
 # Run minimap2 to align the haplotype FASTA files to the target reference genome
-minimap2 -t ${N_THREADS} -x asm5 -a -L ${REFERENCE_FASTA} $OUTPUT_DIR/${SAMPLE_NAME}_hap_0.fasta $OUTPUT_DIR/${SAMPLE_NAME}_hap_1.fasta > $OUTPUT_DIR/${SAMPLE_NAME}_haps_vs_ref.sam
+minimap2 -t ${N_THREADS} -x asm20 -a -L ${REFERENCE_FASTA} $OUTPUT_DIR/${SAMPLE_NAME}_hap_0.fasta $OUTPUT_DIR/${SAMPLE_NAME}_hap_1.fasta > $OUTPUT_DIR/${SAMPLE_NAME}_haps_vs_ref.sam
 
 # Sort the SAM file, convert to BAM, and index it
 samtools sort $OUTPUT_DIR/${SAMPLE_NAME}_haps_vs_ref.sam -o $OUTPUT_DIR/${SAMPLE_NAME}_haps_vs_ref.sorted.bam
