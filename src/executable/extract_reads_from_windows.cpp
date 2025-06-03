@@ -76,6 +76,10 @@ void extract(
 
     Authenticator authenticator;
 
+    if (bam_path.string().starts_with("gs://")){
+        authenticator.is_gcs = true;
+    }
+
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_flanked_coord_map_t sample_to_region_coords;
 

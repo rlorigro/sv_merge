@@ -30,7 +30,10 @@ using sv_merge::get_current_time;
 
 namespace sv_merge{
 
-
+/**
+ * Class to handle authenticated contexts with retries, jitter, and exponential backoff. is_gcs must be set to true if
+ * you want to use Google OAUTH.
+ */
 class Authenticator{
     mutex m;
     string token = "NULL";
