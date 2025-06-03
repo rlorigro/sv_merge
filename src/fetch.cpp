@@ -465,7 +465,12 @@ void extract_subregions_from_sample_contig(
  * @param subregions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
  * @param require_spanning any read that is returned must, among all its alignments, cover the left and right bounds
  * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
+ * @param get_qualities
+ * @param bam_path file path or GS URI
  * @param bam_path
+ * @param tags_to_fetch If not empty, store BAM tags specified in the vector as strings
+ * @param allow_unused_tags Do not throw error if tag not found
+ * @param max_clip_fetch extend this length into softclipped portion of reads (only really useful for BNDs)
  */
 void extract_subregions_from_sample(
         Authenticator& authenticator,

@@ -689,7 +689,7 @@ set(EXECUTABLES
         analyze_evaluation
         annotate
         evaluate
-#        extract_reads_from_windows
+        extract_reads_from_windows
         find_windows
         make_local_hapestry_test_set
 )

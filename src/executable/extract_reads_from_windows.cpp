@@ -40,6 +40,7 @@ void extract(
         int32_t flank_length,
         bool require_spanning,
         bool force_forward,
+        bool get_qualities,
         const vector<string>& tags_to_fetch,
         size_t n_threads
         ){
@@ -104,8 +105,6 @@ void extract(
 
     threads.reserve(n_threads);
 
-    bool get_qualities = true;
-
     // Launch threads
     for (uint64_t n=0; n<n_threads; n++){
         try {
@@ -132,33 +131,49 @@ void extract(
     for (auto& n: threads){
         n.join();
     }
-    cerr << t << "Writing reads to fastq" << '\n';
+    cerr << t << "Writing sequences" << '\n';
 
     string sequence;
 
     for (const auto& sample_reads: sample_to_region_reads){
         for (const auto& [region, reads]: sample_reads.second){
-            path fastq_path = output_dir / (region.to_string('_') + ".fastq");
+            path output_path;
 
-            ofstream fastq_file(fastq_path);
-
-            if ((not fastq_file.is_open()) or (not fastq_file.good())){
-                throw runtime_error("ERROR: could not write to file: " + fastq_path.string());
+            if (get_qualities) {
+                output_path = output_dir / (region.to_string('_') + ".fastq");
+            }
+            else {
+                output_path = output_dir / (region.to_string('_') + ".fasta");
             }
 
-            for (const auto& read: reads){
-                read.sequence.to_string(sequence);
-                fastq_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
-                fastq_file << sequence << '\n';
-                fastq_file << "+" << '\n';
-                for (const auto& q: read.qualities){
-                    if (q+33 < 33 or q+33 > 126){
-                        throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + read.name + " in region: " + region.to_string() + " at position: " + std::to_string(q));
-                    }
+            ofstream output_file(output_path);
 
-                    fastq_file << char(q+33);
+            if ((not output_file.is_open()) or (not output_file.good())){
+                throw runtime_error("ERROR: could not write to file: " + output_path.string());
+            }
+
+            if (get_qualities) {
+                for (const auto& read: reads){
+                    read.sequence.to_string(sequence);
+                    output_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
+                    output_file << sequence << '\n';
+                    output_file << "+" << '\n';
+                    for (const auto& q: read.qualities){
+                        if (q+33 < 33 or q+33 > 126){
+                            throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + read.name + " in region: " + region.to_string() + " at position: " + std::to_string(q));
+                        }
+
+                        output_file << char(q+33);
+                    }
+                    output_file << '\n';
                 }
-                fastq_file << '\n';
+            }
+            else {
+                for (const auto& read: reads){
+                    read.sequence.to_string(sequence);
+                    output_file << ">" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
+                    output_file << sequence << '\n';
+                }
             }
         }
     }
@@ -196,6 +211,7 @@ int main (int argc, char* argv[]){
     size_t n_threads = 1;
     bool require_spanning = false;
     bool force_forward = false;
+    bool get_qualities = false;
     vector<string> tags_to_fetch;
     string tags_arg;
 
@@ -240,6 +256,11 @@ int main (int argc, char* argv[]){
             force_forward,
             "If this flag is invoked, reverse complement any reads that are on the reverse strand");
 
+    app.add_flag(
+            "--get_qualities",
+            get_qualities,
+            "If this flag is invoked, also fetch the qualities of the reads as a fastq");
+
     app.add_option(
             "--tags",
             tags_arg,
@@ -257,6 +278,7 @@ int main (int argc, char* argv[]){
         flank_length,
         require_spanning,
         force_forward,
+        get_qualities,
         tags_to_fetch,
         n_threads
     );
