@@ -85,11 +85,20 @@ void find_windows(
 
     unordered_map<string,vector<interval_t> > contig_tandems;
     interval_t interval;
-    for_region_in_bed_file(tandem_bed, [&](const Region& r){
-        interval.first = r.start;
-        interval.second = r.stop;
-        contig_tandems[r.name].emplace_back(interval);
-    });
+
+    if (not tandem_bed.empty()) {
+        cerr << "Reading tandem BED" << '\n';
+
+        interval_t interval;
+        for_region_in_bed_file(tandem_bed, [&](const Region& r){
+            interval.first = r.start;
+            interval.second = r.stop;
+            contig_tandems[r.name].emplace_back(interval);
+        });
+    }
+    else if (windows_bed.empty()){
+        cerr << "WARNING: window inference without tandem BED track is strongly discouraged. Performance may be degraded." << '\n';
+    }
 
     vector<path> vcfs = {vcf};
     path bed_log_path = output_dir / "log.bed";
