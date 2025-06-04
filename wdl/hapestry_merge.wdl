@@ -29,7 +29,7 @@ task merge {
         Float d_weight = 1.0
         Int min_hap_coverage = 1
         Int n_threads
-        File tandems_bed
+        File? tandems_bed
         File? windows_bed
         File reference_fa
         File haps_vs_ref_csv
@@ -94,7 +94,7 @@ task merge {
         --output_dir ~{output_dir}/run/ \
         --bam_csv ~{haps_vs_ref_csv} \
         --vcf confident.vcf \
-        --tandems ~{tandems_bed} \
+        ~{if defined(tandems_bed) then "--tandems " + tandems_bed else ""} \
         ~{if defined(windows_bed) then "--windows " + windows_bed else ""} \
         --ref ~{reference_fa} \
         --interval_max_length ~{interval_max_length} \
@@ -227,7 +227,7 @@ workflow hapestry_merge {
         Float min_read_hap_identity = 0.5
         Float d_weight = 1.0
         Int n_threads
-        File tandems_bed
+        File? tandems_bed
         File? windows_bed
         File reference_fa
         File haps_vs_ref_csv

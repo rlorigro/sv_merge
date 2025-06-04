@@ -27,7 +27,7 @@ task chunk_vcf {
         Int min_sv_length = 20
         Int n_chunks = 32
         Int n_threads = 0
-        File tandems_bed
+        File? tandems_bed
         File? windows_override_bed
         File? reference_fa
 
@@ -78,7 +78,7 @@ task chunk_vcf {
         --output_dir ~{output_dir}/run/ \
         --n_chunks ~{n_chunks} \
         --vcf ${vcf} \
-        --tandems ~{tandems_bed} \
+        ~{if defined(tandems_bed) then "--tandems " + tandems_bed else ""} \
         --interval_max_length ~{interval_max_length} \
         --min_sv_length ~{min_sv_length} \
         --flank_length ~{flank_length} \
@@ -379,7 +379,7 @@ workflow hapestry_merge_scattered {
         Float d_weight = 1.0
         Int n_threads
         Int n_chunks
-        File tandems_bed
+        File? tandems_bed
         File reference_fa
         File haps_vs_ref_csv
         File? gurobi_license
