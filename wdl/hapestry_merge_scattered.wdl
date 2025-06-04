@@ -367,7 +367,7 @@ workflow hapestry_merge_scattered {
     input {
         File vcf_gz
         File vcf_gz_tbi
-        File confident_bed
+        File? confident_bed
         File? windows_override_bed
 
         Int interval_max_length = 50000
