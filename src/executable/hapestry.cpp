@@ -1646,15 +1646,22 @@ void hapestry(
     });
 
     cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
-    cerr << "Reading tandem BED" << '\n';
 
     unordered_map<string,vector<interval_t> > contig_tandems;
-    interval_t interval;
-    for_region_in_bed_file(tandem_bed, [&](const Region& r){
-        interval.first = r.start;
-        interval.second = r.stop;
-        contig_tandems[r.name].emplace_back(interval);
-    });
+
+    if (not tandem_bed.empty()) {
+        cerr << "Reading tandem BED" << '\n';
+
+        interval_t interval;
+        for_region_in_bed_file(tandem_bed, [&](const Region& r){
+            interval.first = r.start;
+            interval.second = r.stop;
+            contig_tandems[r.name].emplace_back(interval);
+        });
+    }
+    else if (windows_bed.empty()){
+        cerr << "WARNING: window inference without tandem BED track is strongly discouraged. Performance may be degraded." << '\n';
+    }
 
     if (windows_bed.empty()){
         cerr << t << "Constructing windows from VCFs and tandem BED" << '\n';
@@ -1869,7 +1876,7 @@ int main (int argc, char* argv[]){
     app.add_option(
             "--windows",
             windows_bed,
-            "Path to BED file containing windows to merge (inferred automatically if not provided)");
+            "Path to BED file containing windows to merge (inferred automatically if not provided). If BED is provided, flank_length will be added to the windows.");
 
     app.add_option(
             "--tandems",
