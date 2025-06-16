@@ -29,13 +29,19 @@ class TransMap {
     /// Attributes
     HeteroGraph<HeteroNode> graph;
 
-    // Pains me to add yet another map but here it is
+    // Sequences corresponding to each Read node in the graph
     unordered_map <int64_t, BinarySequence<uint64_t> > sequences;
 
-    // Pains me to add yet another map but here it is
+    // Sequence quality scores, if requested, stored here, for each Read node
+    unordered_map <int64_t, vector<uint8_t> > qualities;
+
+    // Sequence quality scores, if requested, stored here, for each Read node
+    unordered_map <int64_t, string> tags;
+
+    // Sequence flanks, if requested, stored here, for each Read node
     unordered_map<int64_t,coord_t> sequence_flanks;
 
-    // Pains me to add yet another map but here it is
+    // Sequence orientations
     unordered_map<int64_t,bool> sequence_reversals;
 
     /**

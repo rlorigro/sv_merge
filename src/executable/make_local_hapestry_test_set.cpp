@@ -141,7 +141,6 @@ void make_local_test_set(
         int32_t flank_length,
         int32_t interval_max_length,
         int32_t n_threads,
-        bool debug,
         bool force_unique_reads,
         bool bam_not_hardclipped
 ){
@@ -229,6 +228,19 @@ void make_local_test_set(
 
         auto max_length = size_t(float(interval_max_length) * 2.5);
 
+        FetchConfig config;
+        config.n_threads = n_threads;
+        config.require_spanning = false;
+        config.append_sample_to_read = force_unique_reads;
+        config.force_forward = false;
+        config.get_qualities = false;
+        config.max_clip_fetch = 0;
+        config.max_length = max_length;
+        config.get_flank_query_coords = false;
+        config.first_only = false;
+        config.append_sample_to_read = force_unique_reads;
+        config.force_forward = false;
+
         // Fetch the sequences with minimal transformation/requirements to attempt to recreate the BAM locally
         if (bam_not_hardclipped){
             cerr << "Fetching from NON-hardclipped BAMs" << '\n';
@@ -236,13 +248,8 @@ void make_local_test_set(
                     t,
                     regions,
                     bam_csv,
-                    n_threads,
-                    region_transmaps,
-                    false,
-                    force_unique_reads,
-                    false,
-                    false,
-                    0
+                    config,
+                    region_transmaps
             );
         }
         else{
@@ -251,16 +258,8 @@ void make_local_test_set(
                     t,
                     regions,
                     bam_csv,
-                    n_threads,
-                    max_length,
-                    flank_length,
-                    region_transmaps,
-                    false,
-                    false,
-                    false,
-                    force_unique_reads,
-                    false,
-                    0
+                    config,
+                    region_transmaps
             );
         }
 
@@ -334,9 +333,7 @@ int main (int argc, char* argv[]){
     path vcf;
     int32_t flank_length = 150;
     int32_t interval_max_length = 15000;
-    int32_t min_sv_length = 20;
     int32_t n_threads = 1;
-    bool debug = false;
     bool force_unique_reads = false;
     bool bam_not_hardclipped = false;
 
@@ -404,7 +401,6 @@ int main (int argc, char* argv[]){
             flank_length,
             interval_max_length,
             n_threads,
-            debug,
             force_unique_reads,
             bam_not_hardclipped
     );

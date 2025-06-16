@@ -596,20 +596,23 @@ void evaluate(
 
     auto max_length = size_t(float(interval_max_length) * 2.5);
 
+    FetchConfig config;
+    config.n_threads = n_threads;
+    config.max_length = max_length;
+    config.flank_length = flank_length;
+    config.require_spanning = true;
+    config.get_flank_query_coords = true;
+    config.first_only = true;
+    config.append_sample_to_read = force_unique_reads;
+    config.force_forward = true;
+    config.max_clip_fetch = flank_length;
+
     fetch_reads_from_clipped_bam(
             t,
             regions,
             bam_csv,
-            n_threads,
-            max_length,
-            flank_length,
-            region_transmaps,
-            true,
-            true,
-            true,
-            force_unique_reads,
-            true,
-            flank_length
+            config,
+            region_transmaps
     );
 
     cerr << t << "Aligning haplotypes to variant graphs" << '\n';

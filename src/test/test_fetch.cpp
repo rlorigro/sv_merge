@@ -36,20 +36,23 @@ void get_reads_of_region(vector<Region>& regions, path csv_path, int32_t flank_l
     Timer t;
     unordered_map<Region, TransMap> region_transmaps;
 
+    FetchConfig config;
+    config.n_threads = 1;
+    config.max_length = 9999;
+    config.flank_length = flank_length;
+    config.require_spanning = true;
+    config.get_flank_query_coords = true;
+    config.first_only = false;
+    config.append_sample_to_read = false;
+    config.force_forward = false;
+    config.max_clip_fetch = flank_length;
+
     fetch_reads_from_clipped_bam(
         t,
         regions,
         csv_path,
-        1,
-        9999,
-        flank_length,
-        region_transmaps,
-        true,
-        true,
-        false,
-        false,
-        false,
-        flank_length
+        config,
+        region_transmaps
     );
 
     string s;

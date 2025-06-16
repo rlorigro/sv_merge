@@ -24,6 +24,22 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 // This is used when only one half of the ref/query dual iterator `for_alignment_in_bam_region` is desired
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
+FetchConfig::FetchConfig():
+    tags_to_fetch(),
+    n_threads(1),
+    max_length(3'000'000'000),
+    flank_length(0),
+    max_clip_fetch(0),
+    require_spanning(false),
+    get_flank_query_coords(false),
+    first_only(false),
+    append_sample_to_read(false),
+    force_forward(false),
+    unclip_coords(false),
+    get_qualities(false),
+    allow_unused_tags(true)
+{}
+
 
 void update_coord(
         const CigarInterval& cigar,
@@ -228,13 +244,8 @@ void extract_subregions_from_sample_contig(
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const span<const Region>& subregions,
-        bool require_spanning,
-        bool force_forward,
-        bool get_qualities,
-        const path& bam_path,
-        const vector<string>& tags_to_fetch = {},
-        bool allow_unused_tags = false,
-        int32_t max_clip_fetch = 0
+        const FetchConfig& config,
+        const path& bam_path
 ){
     // Keep track of the min and max observed query coordinates that intersect the region of interest
     unordered_map <Region, unordered_map<string,CigarInterval> > query_coords_per_region;
@@ -313,14 +324,14 @@ void extract_subregions_from_sample_contig(
                         // Fill the value with the sequence
                         alignment.get_query_sequence(x.sequence);
 
-                        if (get_qualities) {
+                        if (config.get_qualities) {
                             alignment.get_qualities(x.qualities);
                         }
 
                         // Fetch the tags
-                        for (const auto& tag: tags_to_fetch){
+                        for (const auto& tag: config.tags_to_fetch){
                             string value;
-                            alignment.get_tag_as_string(tag, value, allow_unused_tags);
+                            alignment.get_tag_as_string(tag, value, config.allow_unused_tags);
                             x.tags += value + " ";
                         }
                     }
@@ -352,7 +363,7 @@ void extract_subregions_from_sample_contig(
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
                             auto& coord = query_coords_per_region.at(region).at(name);
-                            update_coord(intersection, coord, require_spanning, region.start, region.stop);
+                            update_coord(intersection, coord, config.require_spanning, region.start, region.stop);
                         }
                     },
                     null_fn
@@ -367,7 +378,7 @@ void extract_subregions_from_sample_contig(
 
             if (not spanning){
                 // If the alignment does not span the region, skip it (when require_spanning is true)
-                if (require_spanning){
+                if (config.require_spanning){
                     continue;
                 }
 
@@ -382,18 +393,18 @@ void extract_subregions_from_sample_contig(
                 // capture some of the (possibly) softclipped sequence (for Fabio)
                 if (coords.is_reverse){
                     if (coords.ref_start != region.start){
-                        coords.query_start = max(0, coords.query_start - max_clip_fetch);
+                        coords.query_start = max(0, coords.query_start - config.max_clip_fetch);
                     }
                     if (coords.ref_stop != region.stop){
-                        coords.query_stop = min(int32_t(l), coords.query_stop + max_clip_fetch);
+                        coords.query_stop = min(int32_t(l), coords.query_stop + config.max_clip_fetch);
                     }
                 }
                 else{
                     if (coords.ref_start != region.start){
-                        coords.query_start = max(0, coords.query_start - max_clip_fetch);
+                        coords.query_start = max(0, coords.query_start - config.max_clip_fetch);
                     }
                     if (coords.ref_stop != region.stop){
-                        coords.query_stop = min(int32_t(l), coords.query_stop + max_clip_fetch);
+                        coords.query_stop = min(int32_t(l), coords.query_stop + config.max_clip_fetch);
                     }
                 }
             }
@@ -411,7 +422,7 @@ void extract_subregions_from_sample_contig(
             // All data must be copied out of the `query_sequences` because a sequence may be reused for multiple
             // regions
             if (coords.is_reverse) {
-                if (force_forward) {
+                if (config.force_forward) {
                     auto s = query_sequences[name].sequence.substr(i, l);
                     s.reverse_complement();
 
@@ -419,7 +430,7 @@ void extract_subregions_from_sample_contig(
                     result.emplace_back(name,s);
                     result.back().is_reverse = coords.is_reverse;
 
-                    if (get_qualities){
+                    if (config.get_qualities){
                         const auto& x = query_sequences[name].qualities.begin();
                         auto q = std::span{x + i, size_t(l)};
 
@@ -431,7 +442,7 @@ void extract_subregions_from_sample_contig(
                     result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
                     result.back().is_reverse = coords.is_reverse;
 
-                    if (get_qualities){
+                    if (config.get_qualities){
                         auto& q = query_sequences[name].qualities;
 
                         // Use iterator to fetch the range without modifying the vector
@@ -443,7 +454,7 @@ void extract_subregions_from_sample_contig(
                 result.emplace_back(name,query_sequences[name].sequence.substr(i, l));
                 result.back().is_reverse = coords.is_reverse;
 
-                if (get_qualities){
+                if (config.get_qualities){
                     auto& q = query_sequences[name].qualities;
 
                     // Use iterator to fetch the range without modifying the vector
@@ -463,27 +474,16 @@ void extract_subregions_from_sample_contig(
  * @param sample_to_region_reads must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name any unique name that identifies the sample from which the reads are derived
  * @param subregions subregions which will be extracted, reads will be clipped to fit the bounds, must be sorted and same contig
- * @param require_spanning any read that is returned must, among all its alignments, cover the left and right bounds
- * @param force_forward if true, complement reverse sequences so they are given in ref forward orientation
- * @param get_qualities
+ * @param config
  * @param bam_path file path or GS URI
- * @param bam_path
- * @param tags_to_fetch If not empty, store BAM tags specified in the vector as strings
- * @param allow_unused_tags Do not throw error if tag not found
- * @param max_clip_fetch extend this length into softclipped portion of reads (only really useful for BNDs)
  */
 void extract_subregions_from_sample(
         Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         const string& sample_name,
         const vector<Region>& subregions,
-        bool require_spanning,
-        bool force_forward,
-        bool get_qualities,
-        const path& bam_path,
-        const vector<string>& tags_to_fetch,
-        bool allow_unused_tags = false,
-        int32_t max_clip_fetch = 0
+        const FetchConfig& config,
+        const path& bam_path
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
@@ -513,13 +513,8 @@ void extract_subregions_from_sample(
             sample_to_region_reads,           // sample_region_read_map_t& sample_to_region_reads,
             sample_name,                         // const string& sample_name,
             regions,                   // const span<const Region>& subregions,
-            require_spanning,                    // bool require_spanning,
-            force_forward,                       // bool force_forward,
-            get_qualities,                       // bool get_qualities,
-            bam_path,                             // const path& bam_path
-            tags_to_fetch,                         // const vector<string>& tags_to_fetch = {}
-            allow_unused_tags,
-            max_clip_fetch
+            config,
+            bam_path                             // const path& bam_path
         );
     }
 }
@@ -528,11 +523,10 @@ void extract_subregions_from_sample(
 /**
  *
  * @param authenticator
- * @param sample_to_region_coords : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
+ * @param sample_to_region_coords must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name
  * @param subregions
- * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
- * @param unclip_coords : reinterpret hardclips as softclips so that query coords are in the native/unclipped sequence
+ * @param config
  * @param bam_path
  */
 void extract_subregion_coords_from_sample(
@@ -540,8 +534,7 @@ void extract_subregion_coords_from_sample(
         sample_region_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
-        bool require_spanning,
-        bool unclip_coords,
+        const FetchConfig& config,
         path bam_path
 ){
     if (subregions.empty()){
@@ -616,7 +609,7 @@ void extract_subregion_coords_from_sample(
                 deoverlap_intervals(ref_intervals, non_overlapping_ref_intervals, mapping);
 
                 // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-                for_cigar_interval_in_alignment(unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
+                for_cigar_interval_in_alignment(config.unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
                     [&](const CigarInterval& intersection, const interval_t& interval) {
                         // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
                         // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
@@ -629,7 +622,7 @@ void extract_subregion_coords_from_sample(
                         // A single alignment may span multiple regions
                         for (auto& region: overlapping_regions){
                             auto& coord = query_coords_per_region.at(region).at(name);
-                            update_coord(intersection, coord, require_spanning, region.start, region.stop);
+                            update_coord(intersection, coord, config.require_spanning, region.start, region.stop);
                         }
                     },
                     null_fn
@@ -641,7 +634,7 @@ void extract_subregion_coords_from_sample(
             for (const auto& [name, coords]: query_coords){
                 bool pass = false;
 
-                if (require_spanning){
+                if (config.require_spanning){
                     pass = (coords.ref_start == region.start and coords.ref_stop == region.stop);
                 }
                 else {
@@ -663,9 +656,7 @@ void extract_subregion_coords_from_sample(
  * @param sample_to_region_coords : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name
  * @param subregions : regions to be fetched by htslib. MUST ALREADY INCLUDE FLANKS.
- * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
- * @param unclip_coords : reinterpret hardclips as softclips so that query coords are in the native/unclipped sequence
- * @param flank_length : length of flank that will be SUBTRACTED from the ends of regions
+ * @param config
  * @param bam_path
  */
 void extract_flanked_subregion_coords_from_sample_contig(
@@ -673,15 +664,15 @@ void extract_flanked_subregion_coords_from_sample_contig(
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const span<const Region>& subregions,
-        bool require_spanning,
-        bool get_flank_query_coords,
-        bool unclip_coords,
-        int32_t flank_length,
+        const FetchConfig& config,
         path bam_path
 ){
     if (subregions.empty()){
         throw runtime_error("ERROR: subregions empty");
     }
+
+    // Break out for brevity of following lines
+    const auto flank_length = config.flank_length;
 
     // Generate a super-region to encompass all subregions, and assume that subregions are sorted, contiguous.
     // If they are not contiguous and sorted, the iterator function will detect that and error out.
@@ -777,7 +768,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                 deoverlap_intervals(ref_intervals, non_overlapping_ref_intervals, mapping);
 
                 // Find the widest possible pair of query coordinates which exactly spans the ref region (accounting for DUPs)
-                for_cigar_interval_in_alignment(unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
+                for_cigar_interval_in_alignment(config.unclip_coords, alignment, non_overlapping_ref_intervals, query_intervals,
                     [&](const CigarInterval& intersection, const interval_t& interval) {
                         // Clips should not be considered to be "spanning" a window bound. This can occur occasionally when
                         // the clip ends at exactly the bound. The adjacent cigar operation should be used instead.
@@ -792,7 +783,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                         for (auto& region: overlapping_regions){
                             auto& [inner_coord, outer_coord] = query_coords_per_region.at(region).at(name);
 
-                            if (get_flank_query_coords){
+                            if (config.get_flank_query_coords){
                                 update_inner_coord(
                                         intersection,
                                         inner_coord,
@@ -804,7 +795,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
                             update_coord(
                                     intersection,
                                     outer_coord,
-                                    require_spanning,
+                                    config.require_spanning,
                                     region.start,
                                     region.stop
                             );
@@ -831,9 +822,9 @@ void extract_flanked_subregion_coords_from_sample_contig(
                 }
 
                 // Require all four bounds are touched by alignment
-                if (require_spanning) {
+                if (config.require_spanning) {
                     bool inner_pass = true;
-                    if (get_flank_query_coords){
+                    if (config.get_flank_query_coords){
                         inner_pass = (inner_coord.ref_start == region.start + flank_length and inner_coord.ref_stop == region.stop - flank_length);
                     }
 
@@ -860,9 +851,7 @@ void extract_flanked_subregion_coords_from_sample_contig(
  * @param sample_to_region_coords : must be pre-allocated with sample-->region-->{} (empty vectors) for multithreading
  * @param sample_name
  * @param subregions : regions to be fetched by htslib. MUST ALREADY INCLUDE FLANKS.
- * @param require_spanning : any read that is returned must, among all its alignments, cover the left and right bounds
- * @param unclip_coords : reinterpret hardclips as softclips so that query coords are in the native/unclipped sequence
- * @param flank_length : length of flank that will be SUBTRACTED from the ends of regions
+ * @param config
  * @param bam_path
  */
 void extract_flanked_subregion_coords_from_sample(
@@ -870,10 +859,7 @@ void extract_flanked_subregion_coords_from_sample(
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const string& sample_name,
         const vector<Region>& subregions,
-        bool require_spanning,
-        bool get_flank_query_coords,
-        bool unclip_coords,
-        int32_t flank_length,
+        const FetchConfig& config,
         path bam_path
 ){
     if (subregions.empty()){
@@ -903,10 +889,7 @@ void extract_flanked_subregion_coords_from_sample(
             sample_to_region_coords,
             sample_name,
             regions,
-            require_spanning,
-            get_flank_query_coords,
-            unclip_coords,
-            flank_length,
+            config,
             bam_path
         );
     }
@@ -919,13 +902,8 @@ void extract_subsequences_from_sample_thread_fn(
         sample_region_read_map_t& sample_to_region_reads,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
-        bool require_spanning,
-        bool force_forward,
-        bool get_qualities,
-        atomic<size_t>& job_index,
-        const vector<string>& tags_to_fetch,
-        bool allow_unused_tags,
-        int32_t max_clip_fetch
+        const FetchConfig& config,
+        atomic<size_t>& job_index
 ){
 
     size_t i = job_index.fetch_add(1);
@@ -940,13 +918,8 @@ void extract_subsequences_from_sample_thread_fn(
                 sample_to_region_reads,             // sample_region_read_map_t& sample_to_region_reads,
                 sample_name,                           // const string& sample_name,
                 regions,                     // const vector<Region>& subregions,
-                require_spanning,                      // bool require_spanning,
-                force_forward,                         // bool force_forward,
-                get_qualities,                         // bool get_qualities,
-                bam_path,                              // const path& bam_path
-                tags_to_fetch,
-                allow_unused_tags,
-                max_clip_fetch
+                config,
+                bam_path                              // const path& bam_path
         );
 
         cerr << t << "Elapsed for: " << sample_name << '\n';
@@ -961,9 +934,7 @@ void extract_subregion_coords_from_sample_thread_fn(
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         const vector <pair <string,path> >& sample_bams,
         const vector<Region>& regions,
-        bool require_spanning,
-        bool get_flank_query_coords,
-        int32_t flank_length,
+        const FetchConfig& config,
         atomic<size_t>& job_index
 ){
     size_t i = job_index.fetch_add(1);
@@ -978,10 +949,7 @@ void extract_subregion_coords_from_sample_thread_fn(
                 sample_to_region_coords,
                 sample_name,
                 regions,
-                require_spanning,
-                get_flank_query_coords,
-                true,
-                flank_length,
+                config,
                 bam_path
         );
 
@@ -998,11 +966,7 @@ void get_reads_for_each_bam_subregion(
         Authenticator& authenticator,
         sample_region_read_map_t& sample_to_region_reads,
         path bam_csv,
-        int64_t n_threads,
-        bool require_spanning,
-        bool force_forward,
-        bool get_qualities,
-        int32_t max_clip_fetch
+        const FetchConfig& config
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -1031,12 +995,12 @@ void get_reads_for_each_bam_subregion(
     atomic<size_t> job_index = 0;
     vector<thread> threads;
 
-    threads.reserve(n_threads);
+    threads.reserve(config.n_threads);
 
     vector<string> tags_to_fetch = {};
 
     // Launch threads
-    for (uint64_t n=0; n<n_threads; n++){
+    for (uint64_t n=0; n<config.n_threads; n++){
         try {
             cerr << "launching: " << n << '\n';
             threads.emplace_back(extract_subsequences_from_sample_thread_fn,
@@ -1044,13 +1008,8 @@ void get_reads_for_each_bam_subregion(
                     std::ref(sample_to_region_reads),                            // sample_region_read_map_t& sample_to_region_reads,
                     std::cref(sample_bams),                                      // const vector <pair <string,path> >& sample_bams,
                     std::cref(regions),                                          // const vector<Region>& regions,
-                    std::ref(require_spanning),                                  // bool require_spanning,
-                    std::ref(force_forward),                                     // bool force_forward,
-                    std::ref(get_qualities),                                     // bool get_qualities,
-                    std::ref(job_index),                                         // atomic<size_t>& job_index,
-                    std::cref(tags_to_fetch),                                     // const vector<string>& tags_to_fetch,
-                    false,                                                          // bool allow_unused_tags,
-                    max_clip_fetch                                                   // int32_t max_clip_fetch
+                    std::ref(config),                                     // bool get_qualities,
+                    std::ref(job_index)                                         // atomic<size_t>& job_index,
             );
         } catch (const exception& e) {
             throw e;
@@ -1071,10 +1030,7 @@ void get_read_coords_for_each_bam_subregion(
         Authenticator& authenticator,
         sample_region_flanked_coord_map_t& sample_to_region_coords,
         path bam_csv,
-        int64_t n_threads,
-        int32_t flank_length,
-        bool require_spanning,
-        bool get_flank_query_coords
+        const FetchConfig& config
 ){
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
@@ -1103,10 +1059,10 @@ void get_read_coords_for_each_bam_subregion(
     atomic<size_t> job_index = 0;
     vector<thread> threads;
 
-    threads.reserve(n_threads);
+    threads.reserve(config.n_threads);
 
     // Launch threads
-    for (uint64_t n=0; n<n_threads; n++){
+    for (uint64_t n=0; n<config.n_threads; n++){
         try {
             cerr << "launching: " << n << '\n';
             threads.emplace_back(
@@ -1115,9 +1071,7 @@ void get_read_coords_for_each_bam_subregion(
                     std::ref(sample_to_region_coords),
                     std::cref(sample_bams),
                     std::cref(regions),
-                    std::ref(require_spanning),
-                    std::ref(get_flank_query_coords),
-                    flank_length,
+                    std::cref(config),
                     std::ref(job_index)
             );
         } catch (const exception& e) {
@@ -1136,13 +1090,8 @@ void fetch_reads(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
-        int64_t n_threads,
-        unordered_map<Region,TransMap>& region_transmaps,
-        bool require_spanning,
-        bool append_sample_to_read,
-        bool force_forward,
-        bool get_qualities,
-        int32_t max_clip_fetch
+        const FetchConfig& config,
+        unordered_map<Region,TransMap>& region_transmaps
 ){
     Authenticator authenticator;
     TransMap template_transmap;
@@ -1157,11 +1106,7 @@ void fetch_reads(
             authenticator,
             sample_to_region_reads,
             bam_csv,
-            n_threads,
-            require_spanning,
-            force_forward,
-            get_qualities,
-            max_clip_fetch
+            config
     );
 
     // Construct template transmap with only samples
@@ -1202,7 +1147,7 @@ void fetch_reads(
                 }
 
                 // If the user wants, we append sample name to the read name to prevent intersample collisions
-                if (append_sample_to_read) {
+                if (config.append_sample_to_read) {
                     s.name += + "_" + sample_name;
                 }
 
@@ -1310,19 +1255,15 @@ void fetch_reads_from_clipped_bam(
         Timer& t,
         vector<Region>& regions,
         path bam_csv,
-        int64_t n_threads,
-        int32_t max_length,
-        int32_t flank_length,
-        unordered_map<Region,TransMap>& region_transmaps,
-        bool require_spanning,
-        bool get_flank_query_coords,
-        bool first_only,
-        bool append_sample_to_read,
-        bool force_forward,
-        int32_t max_clip_fetch
+        const FetchConfig& config,
+        unordered_map<Region,TransMap>& region_transmaps
 ){
     Authenticator authenticator;
     TransMap template_transmap;
+
+    // For brevity in following lines, break out params
+    const auto max_length = config.max_length;
+    const auto max_clip_fetch = config.max_clip_fetch;
 
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_flanked_coord_map_t sample_to_region_coords;
@@ -1334,10 +1275,7 @@ void fetch_reads_from_clipped_bam(
             authenticator,
             sample_to_region_coords,
             bam_csv,
-            n_threads,
-            flank_length,
-            require_spanning,
-            get_flank_query_coords
+            config
     );
 
     // Construct template transmap with only samples
@@ -1360,7 +1298,7 @@ void fetch_reads_from_clipped_bam(
 
     fetch_query_seqs_for_each_sample(
             bam_csv,
-            n_threads,
+            config.n_threads,
             authenticator,
             sample_queries
     );
@@ -1404,7 +1342,7 @@ void fetch_reads_from_clipped_bam(
                 auto l_left = int32_t(inner_coord.query_start - outer_coord.query_start);
                 auto l_right = int32_t(outer_coord.query_stop - outer_coord.query_start);
 
-                if (get_flank_query_coords) {
+                if (config.get_flank_query_coords) {
                     if (l_inner > max_length or l_left > max_length or l_right > max_length or l > max_length) {
                         cerr << "Warning: skipping FRAGMENTED/DUPLICATED reference haplotype " + name +
                                 " longer than " + to_string(max_length) + " in window " + region.to_string() << '\n';
@@ -1448,7 +1386,7 @@ void fetch_reads_from_clipped_bam(
                 inner_coord.query_start -= outer_coord.query_start;
                 inner_coord.query_stop -= outer_coord.query_start;
 
-                if (outer_coord.is_reverse and force_forward) {
+                if (outer_coord.is_reverse and config.force_forward) {
                     s.reverse_complement();
 
                     // Reorient inner coordinates also
@@ -1458,7 +1396,7 @@ void fetch_reads_from_clipped_bam(
                 }
 
                 // If the user wants, we append sample name to the read name to prevent intersample collisions
-                if (append_sample_to_read) {
+                if (config.append_sample_to_read) {
                     name += + "_" + sample_name;
                 }
 
@@ -1468,7 +1406,7 @@ void fetch_reads_from_clipped_bam(
                 transmap.add_flank_coord(name, inner_coord.query_start, inner_coord.query_stop);
 
                 // If there are multiple sequences, only choose the first sequence arbitrarily
-                if (first_only) {
+                if (config.first_only) {
                     break;
                 }
             }

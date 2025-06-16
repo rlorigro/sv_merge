@@ -732,19 +732,27 @@ void annotate(
 
     auto max_length = size_t(float(interval_max_length) * 2.5);
 
+    FetchConfig fetch_config;
+    fetch_config.n_threads = n_threads;
+    fetch_config.flank_length = flank_length;
+    fetch_config.max_length = max_length;
+    fetch_config.append_sample_to_read = force_unique_reads;
+    fetch_config.require_spanning = false;
+    fetch_config.force_forward = false;
+    fetch_config.get_qualities = false;
+    fetch_config.get_flank_query_coords = false;
+    fetch_config.first_only = false;
+    fetch_config.max_clip_fetch = flank_length;
+
     if (bam_not_hardclipped){
         cerr << "Fetching from NON-hardclipped BAMs" << '\n';
+
         fetch_reads(
                 t,
                 regions,
                 bam_csv,
-                n_threads,
-                region_transmaps,
-                false,
-                force_unique_reads,
-                false,
-                false,
-                flank_length
+                fetch_config,
+                region_transmaps
         );
     }
     else{
@@ -753,16 +761,8 @@ void annotate(
                 t,
                 regions,
                 bam_csv,
-                n_threads,
-                max_length,
-                flank_length,
-                region_transmaps,
-                false,
-                false,
-                false,
-                force_unique_reads,
-                false,
-                flank_length
+                fetch_config,
+                region_transmaps
         );
     }
 

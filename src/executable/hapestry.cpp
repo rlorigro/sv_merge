@@ -1721,37 +1721,39 @@ void hapestry(
 
         auto max_length = size_t(float(hapestry_config.interval_max_length) * 2.5);
 
+        FetchConfig fetch_config;
+        fetch_config.n_threads = n_threads;
+        fetch_config.flank_length = hapestry_config.flank_length;
+        fetch_config.max_length = max_length;
+        fetch_config.append_sample_to_read = hapestry_config.force_unique_reads;
+        fetch_config.require_spanning = true;
+        fetch_config.force_forward = true;
+        fetch_config.get_qualities = false;
+        fetch_config.get_flank_query_coords = false;
+        fetch_config.first_only = false;
+        fetch_config.max_clip_fetch = hapestry_config.flank_length;
+
         if (hapestry_config.bam_not_hardclipped){
             cerr << "Fetching from NON-hardclipped BAMs" << '\n';
+
             fetch_reads(
                     t,
                     regions,
                     bam_csv,
-                    n_threads,
-                    region_transmaps,
-                    true,
-                    hapestry_config.force_unique_reads,
-                    true,
-                    false,
-                    hapestry_config.flank_length
+                    fetch_config,
+                    region_transmaps
             );
+
         }
         else{
             cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+
             fetch_reads_from_clipped_bam(
                     t,
                     regions,
                     bam_csv,
-                    n_threads,
-                    max_length,
-                    hapestry_config.flank_length,
-                    region_transmaps,
-                    true,
-                    false,
-                    false,
-                    hapestry_config.force_unique_reads,
-                    true,
-                    hapestry_config.flank_length
+                    fetch_config,
+                    region_transmaps
             );
         }
 

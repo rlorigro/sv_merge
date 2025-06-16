@@ -157,7 +157,7 @@ RUN git clone https://github.com/rlorigro/sv_merge.git
 
 WORKDIR /hapestry/sv_merge
 
-ARG HAPESTRY_COMMIT=d7cbe6793c8925e2eb6412cb9d9bc0550b83a19b
+ARG HAPESTRY_COMMIT=542478695021a57f846e401ee6cbff6f865dc41a
 RUN git fetch
 RUN git checkout ${HAPESTRY_COMMIT}
 RUN mkdir build

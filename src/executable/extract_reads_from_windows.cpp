@@ -37,12 +37,7 @@ void extract(
         path output_dir,
         path bam_path,
         path bed_path,
-        int32_t flank_length,
-        bool require_spanning,
-        bool force_forward,
-        bool get_qualities,
-        const vector<string>& tags_to_fetch,
-        size_t n_threads
+        const FetchConfig& config
         ){
 
     if (std::filesystem::exists(output_dir)){
@@ -66,8 +61,8 @@ void extract(
 
     // Add flanks, place the regions in the interval tree, and log the windows
     for (auto& r: regions) {
-        r.start = max(1,r.start-flank_length);
-        r.stop += flank_length;
+        r.start = max(1,r.start-config.flank_length);
+        r.stop += config.flank_length;
 
         contig_interval_trees[r.name].insert({r.start, r.stop});
     }
@@ -85,15 +80,12 @@ void extract(
 
     // Intermediate objects
     vector <pair <string, path> > sample_bams;
-    TransMap sample_only_transmap;
 
     cerr << t << "Loading CSV" << '\n';
 
     string sample_name = "sample";
 
     sample_region_read_map_t sample_to_region_reads;
-
-    sample_only_transmap.add_sample(sample_name);
     sample_bams.emplace_back(sample_name, bam_path);
 
     // Initialize every combo of sample,region with an empty vector
@@ -107,10 +99,10 @@ void extract(
     atomic<size_t> job_index = 0;
     vector<thread> threads;
 
-    threads.reserve(n_threads);
+    threads.reserve(config.n_threads);
 
     // Launch threads
-    for (uint64_t n=0; n<n_threads; n++){
+    for (uint64_t n=0; n<config.n_threads; n++){
         try {
             cerr << "launching: " << n << '\n';
             threads.emplace_back(extract_subsequences_from_sample_thread_fn,
@@ -118,13 +110,8 @@ void extract(
                     std::ref(sample_to_region_reads),
                     std::cref(sample_bams),
                     std::cref(regions),
-                    std::ref(require_spanning),
-                    force_forward,
-                    get_qualities,
-                    std::ref(job_index),
-                    std::cref(tags_to_fetch),
-                    true,
-                    0
+                    std::cref(config),
+                    std::ref(job_index)
             );
         } catch (const exception& e) {
             throw e;
@@ -143,7 +130,7 @@ void extract(
         for (const auto& [region, reads]: sample_reads.second){
             path output_path;
 
-            if (get_qualities) {
+            if (config.get_qualities) {
                 output_path = output_dir / (region.to_string('_') + ".fastq");
             }
             else {
@@ -156,7 +143,7 @@ void extract(
                 throw runtime_error("ERROR: could not write to file: " + output_path.string());
             }
 
-            if (get_qualities) {
+            if (config.get_qualities) {
                 for (const auto& read: reads){
                     read.sequence.to_string(sequence);
                     output_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
@@ -211,13 +198,8 @@ int main (int argc, char* argv[]){
     path bam_path;
     path bed_path;
     path ref;
-    int32_t flank_length = 200;
-    size_t n_threads = 1;
-    bool require_spanning = false;
-    bool force_forward = false;
-    bool get_qualities = false;
-    vector<string> tags_to_fetch;
     string tags_arg;
+    FetchConfig config;
 
     CLI::App app{"App description"};
 
@@ -241,28 +223,23 @@ int main (int argc, char* argv[]){
 
     app.add_option(
             "--flank_length",
-            flank_length,
+            config.flank_length,
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
-    app.add_option(
-            "--n_threads",
-            n_threads,
-            "Maximum number of threads to use for fetching reads");
-
     app.add_flag(
             "--require_spanning",
-            require_spanning,
+            config.require_spanning,
             "If this flag is invoked, then only reads that span the entire window will be fetched");
 
     app.add_flag(
             "--force_forward",
-            force_forward,
+            config.force_forward,
             "If this flag is invoked, reverse complement any reads that are on the reverse strand");
 
     app.add_flag(
             "--get_qualities",
-            get_qualities,
+            config.get_qualities,
             "If this flag is invoked, also fetch the qualities of the reads as a fastq");
 
     app.add_option(
@@ -273,18 +250,13 @@ int main (int argc, char* argv[]){
 
     CLI11_PARSE(app, argc, argv);
 
-    parse_comma_separated_string(tags_arg, tags_to_fetch);
+    parse_comma_separated_string(tags_arg, config.tags_to_fetch);
 
     extract(
         output_dir,
         bam_path,
         bed_path,
-        flank_length,
-        require_spanning,
-        force_forward,
-        get_qualities,
-        tags_to_fetch,
-        n_threads
+        config
     );
 
     return 0;

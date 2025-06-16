@@ -156,13 +156,16 @@ void test_bam_prefetched_subsequence_extraction(path data_directory) {
         sample_to_region_coords[sample_name][region] = {};
     }
 
+    FetchConfig config;
+    config.require_spanning = true;
+    config.unclip_coords = true;
+
     extract_subregion_coords_from_sample(
             authenticator,
             sample_to_region_coords,
             sample_name,
             subregions,
-            true,
-            true,
+            config,
             bam_path
     );
 
@@ -311,16 +314,19 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
 
     unordered_map<Region,TransMap> region_transmaps;
 
+    FetchConfig config;
+    config.n_threads = n_threads;
+    config.max_length = 100'000;
+    config.flank_length = 0;
+    config.require_spanning = true;
+
     fetch_reads_from_clipped_bam(
             t,
             regions,
             bam_csv,
-            n_threads,
-            100'000,
-            0,
-            region_transmaps,
-            true
-            );
+            config,
+            region_transmaps
+    );
 
     cerr << '\n';
 
