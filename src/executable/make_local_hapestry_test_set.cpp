@@ -378,8 +378,6 @@ int main (int argc, char* argv[]){
             "How much flanking sequence to use when fetching and aligning reads")
             ->required();
 
-    app.add_flag("--debug", debug, "Invoke this to add more logging and output");
-
     app.add_flag("--force_unique_reads", force_unique_reads, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
 
     app.add_flag("--bam_not_hardclipped", bam_not_hardclipped, "Invoke this if you expect your BAMs NOT to contain ANY hardclips. Saves time on iterating.");

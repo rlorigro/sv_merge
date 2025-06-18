@@ -39,6 +39,21 @@ void TransMap::reserve_sequences(size_t n){
 }
 
 
+void TransMap::reserve_qualities(size_t n){
+    sequence_qualities.reserve(n);
+}
+
+
+void TransMap::reserve_reversals(size_t n){
+    sequence_reversals.reserve(n);
+}
+
+
+void TransMap::reserve_tags(size_t n){
+    sequence_tags.reserve(n);
+}
+
+
 bool TransMap::empty() const{
     // In the context of a TransMap, empty means that the graph has only the source/sink nodes
     return graph.get_node_count() == 4 and
@@ -116,6 +131,31 @@ void TransMap::get_sequence(const string& name, string& result) const{
 
 void TransMap::get_sequence(int64_t id, string& result) const{
     sequences.at(id).to_string(result);
+}
+
+
+void TransMap::get_sequence_tags(int64_t id, string& result) const{
+    result = sequence_tags.at(id);
+}
+
+
+const string& TransMap::get_sequence_tags(int64_t id) const{
+    return sequence_tags.at(id);
+}
+
+
+bool TransMap::get_sequence_reversal(int64_t id) const{
+    return sequence_reversals.at(id);
+}
+
+
+void TransMap::get_sequence_qualities(int64_t id, vector<uint8_t>& result) const{
+    result = sequence_qualities.at(id);
+}
+
+
+const vector<uint8_t>& TransMap::get_sequence_qualities(int64_t id) const{
+    return sequence_qualities.at(id);
 }
 
 
@@ -205,6 +245,68 @@ void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequen
     auto id = graph.name_to_id(name);
     sequences.emplace(id, std::move(sequence));
     sequence_reversals.emplace(id, is_reverse);
+}
+
+
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities, bool is_reverse){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    auto id = graph.name_to_id(name);
+    sequences.emplace(id, std::move(sequence));
+    sequence_reversals.emplace(id, is_reverse);
+    sequence_qualities.emplace(id, std::move(qualities));
+}
+
+
+
+
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, bool is_reverse, string& tags){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    auto id = graph.name_to_id(name);
+    sequences.emplace(id, std::move(sequence));
+    sequence_reversals.emplace(id, is_reverse);
+    sequence_tags.emplace(id, std::move(tags));
+}
+
+
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities, bool is_reverse, string& tags){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    auto id = graph.name_to_id(name);
+    sequences.emplace(id, std::move(sequence));
+    sequence_reversals.emplace(id, is_reverse);
+    sequence_qualities.emplace(id, std::move(qualities));
+    sequence_tags.emplace(id, std::move(tags));
+}
+
+
+void TransMap::add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities){
+    if (name == read_node_name or name == sample_node_name or name == path_node_name or name == variant_node_name){
+        throw runtime_error("ERROR: cannot add node with preset node name: " + name);
+    }
+
+    graph.add_node(name, 'R');
+    graph.add_edge(read_node_name, name, 0);
+
+    auto id = graph.name_to_id(name);
+    sequences.emplace(id, std::move(sequence));
+    sequence_qualities.emplace(id, std::move(qualities));
 }
 
 

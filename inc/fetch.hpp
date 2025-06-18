@@ -53,42 +53,42 @@ public:
     vector<string> tags_to_fetch;
 
     // how many threads to use (parallelized by BAM, not region)
-    int64_t n_threads;
+    int64_t n_threads = 1;
 
     // skip excessively long reads, greater than this threshold (useful for supplementaries, fragmented alignments)
-    int32_t max_length;
+    int32_t max_length  = 3'000'000'000;
 
     // length of sequence that is considered flanking, and to be tracked in Transmaps as additional data. The query coordinates corresponding to the inner flank bounds are stored.
-    int32_t flank_length;
+    int32_t flank_length = 0;
 
     // if non-zero, attempt to fetch this many clipped bases beyond the end of non-spanning sequences
-    int32_t max_clip_fetch;
+    int32_t max_clip_fetch = 0;
 
     // for any read to be fetched it must, among all its alignments, cover the left and right bounds
-    bool require_spanning;
+    bool require_spanning = false;
 
     // Retain information about where the query crosses the flank bounds, for any read to be fetched it must, among all its alignments, cover the left and right bounds AND inner flank bounds.
-    bool get_flank_query_coords;
+    bool get_flank_query_coords = false;
 
     // only consider the first read observed for each window in the BAM (for omitting misassemblies in asm-to-ref BAMs)
-    bool first_only;
+    bool first_only = false;
 
     // if true, attempt to force unique read names by using their sample name as a suffix
-    bool append_sample_to_read;
+    bool append_sample_to_read = false;
 
     // if true, complement reverse sequences so they are given in ref forward orientation
-    bool force_forward;
+    bool force_forward = false;
 
-    // if true, re-write clipped subseqences coordinates as though they are in the original unclipped sequence coordinate space
-    bool unclip_coords;
+    // if true, re-write clipped subseqences coordinates as though they are in the original unclipped sequence
+    // coordinate space. In practice, this should be TRUE for all cases where the BAM is harclipped.
+    bool unclip_coords = false;
 
     // if true, also fetch qualities of equal length to the sequence fetched
-    bool get_qualities;
+    bool get_qualities = false;
 
     // do not throw error if tags are not found in the sequences
-    bool allow_unused_tags;
+    bool allow_unused_tags = true;
 
-    FetchConfig();
 };
 
 

@@ -33,15 +33,15 @@ class TransMap {
     unordered_map <int64_t, BinarySequence<uint64_t> > sequences;
 
     // Sequence quality scores, if requested, stored here, for each Read node
-    unordered_map <int64_t, vector<uint8_t> > qualities;
+    unordered_map <int64_t, vector<uint8_t> > sequence_qualities;
 
-    // Sequence quality scores, if requested, stored here, for each Read node
-    unordered_map <int64_t, string> tags;
+    // Sequence BAM tags, if requested, stored here, for each Read node
+    unordered_map <int64_t, string> sequence_tags;
 
     // Sequence flanks, if requested, stored here, for each Read node
     unordered_map<int64_t,coord_t> sequence_flanks;
 
-    // Sequence orientations
+    // Sequence orientations in ORIGINAL alignment. Reverse reads will still indicate 'true' even after using force_forward
     unordered_map<int64_t,bool> sequence_reversals;
 
     /**
@@ -75,12 +75,19 @@ public:
     void reserve_nodes(size_t n);
     void reserve_edges(size_t n);
     void reserve_sequences(size_t n);
+    void reserve_reversals(size_t n);
+    void reserve_qualities(size_t n);
+    void reserve_tags(size_t n);
     void add_sample(const string& name);
     void add_read(const string& name);
     void add_flank_coord(const string& name, int32_t start, int32_t stop);
     void add_read(const string& name, const string& sequence);
     void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence);
     void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, bool reversal);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, bool reversal, string& tags);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities, bool reversal);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities, bool reversal, string& tags);
+    void add_read_with_move(string& name, BinarySequence<uint64_t>& sequence, vector<uint8_t>& qualities);
     void add_path(const string& name);
     void add_variant(const string& name);
     void add_edge(const string& a, const string& b);
@@ -116,6 +123,12 @@ public:
     const HeteroNode& get_node(const string& name) const;
     void get_sequence(const string& name, string& result) const;
     void get_sequence(int64_t id, string& result) const;
+    void get_sequence_tags(int64_t id, string& result) const;
+    void get_sequence_qualities(int64_t id, vector<uint8_t>& result) const;
+    const string& get_sequence(int64_t id) const;
+    const string& get_sequence_tags(int64_t id) const;
+    const vector<uint8_t>& get_sequence_qualities(int64_t id) const;
+    bool get_sequence_reversal(int64_t id) const;
     size_t get_sequence_size(int64_t id) const;
     size_t get_sequence_size(const string& name) const;
 

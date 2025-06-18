@@ -24,22 +24,6 @@ void for_each_sample_bam_path(path bam_csv, const function<void(const string& sa
 // This is used when only one half of the ref/query dual iterator `for_alignment_in_bam_region` is desired
 void null_fn(const CigarInterval &intersection, const interval_t &interval){}
 
-FetchConfig::FetchConfig():
-    tags_to_fetch(),
-    n_threads(1),
-    max_length(3'000'000'000),
-    flank_length(0),
-    max_clip_fetch(0),
-    require_spanning(false),
-    get_flank_query_coords(false),
-    first_only(false),
-    append_sample_to_read(false),
-    force_forward(false),
-    unclip_coords(false),
-    get_qualities(false),
-    allow_unused_tags(true)
-{}
-
 
 void update_coord(
         const CigarInterval& cigar,
@@ -581,7 +565,6 @@ void extract_subregion_coords_from_sample(
                 alignment.get_query_name(name);
 
                 // The region of interest is defined in reference coordinate space
-                // TODO: stop using dumb for loop for this step, switch to range query
                 vector<interval_t> ref_intervals;
                 for (auto& r: overlapping_regions){
                     ref_intervals.emplace_back(r.start, r.stop);
@@ -979,6 +962,7 @@ void get_reads_for_each_bam_subregion(
         sample_only_transmap.add_sample(sample_name);
         sample_bams.emplace_back(sample_name, bam_path);
 
+        // This must be set if we want to load the GCS OAUTH token ENV variable, which is required for any cloud files
         if (bam_path.string().starts_with("gs://")){
             authenticator.is_gcs = true;
         }
@@ -1130,6 +1114,15 @@ void fetch_reads(
 
         // Number of reads is known exactly
         item.reserve_sequences(n_reads + 2);
+        item.reserve_reversals(n_reads + 2);
+
+        if (config.get_qualities) {
+            item.reserve_qualities(n_reads + 2);
+        }
+
+        if (not config.tags_to_fetch.empty()) {
+            item.reserve_tags(n_reads + 2);
+        }
     }
 
     // Move the downloaded data into a transmap, construct edges for sample->read
@@ -1151,7 +1144,23 @@ void fetch_reads(
                     s.name += + "_" + sample_name;
                 }
 
-                transmap.add_read_with_move(s.name, s.sequence);
+                if (config.get_qualities) {
+                    if (not config.tags_to_fetch.empty()){
+                        transmap.add_read_with_move(s.name, s.sequence, s.qualities, s.is_reverse, s.tags);
+                    }
+                    else{
+                        transmap.add_read_with_move(s.name, s.sequence, s.qualities, s.is_reverse);
+                    }
+                }
+                else {
+                    if (not config.tags_to_fetch.empty()){
+                        transmap.add_read_with_move(s.name, s.sequence, s.is_reverse, s.tags);
+                    }
+                    else{
+                        transmap.add_read_with_move(s.name, s.sequence, s.is_reverse);
+                    }
+                }
+
                 transmap.add_edge(sample_id, transmap.get_id(s.name), 0);
             }
         }
@@ -1193,6 +1202,7 @@ void fetch_query_seqs_for_each_sample_thread_fn(
 
                 // Fetch the sequence, filling it in directly to the `queries` result object which has been pre-allocated for
                 // thread safety
+                // TODO: pass through FetchConfig arg and conditionally add get_qualities/get_tags, switch BinarySequence to StrandedQSequence
                 alignment.get_query_sequence(result->second);
             });
         });
@@ -1373,6 +1383,8 @@ void fetch_reads_from_clipped_bam(
 
                 auto s = seq.substr(i, l);
 
+                // TODO: add quality slice/view here
+
                 // Don't add empty sequences to the transmap. Empty sequences were skipped for some criteria, eg. non-
                 // spanning, etc.
                 if (s.empty()) {
@@ -1388,6 +1400,7 @@ void fetch_reads_from_clipped_bam(
 
                 if (outer_coord.is_reverse and config.force_forward) {
                     s.reverse_complement();
+                    // TODO: reverse quality vector here
 
                     // Reorient inner coordinates also
                     inner_coord.query_start = int32_t(l) - inner_coord.query_start;
@@ -1401,7 +1414,7 @@ void fetch_reads_from_clipped_bam(
                 }
 
                 // Finally update the transmap
-                transmap.add_read_with_move(name, s);
+                transmap.add_read_with_move(name, s, outer_coord.is_reverse);
                 transmap.add_edge(sample_id, transmap.get_id(name), 0);
                 transmap.add_flank_coord(name, inner_coord.query_start, inner_coord.query_stop);
 

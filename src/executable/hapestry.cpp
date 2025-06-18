@@ -1324,7 +1324,7 @@ void merge_thread_fn(
                 }
             } CPPTRACE_CATCH(const std::exception& e) {
                 cerr << "ERROR caught at " << region.to_unflanked_string(':',flank_length) << '\n';
-                std::cerr<<"Exception: "<<e.what()<<std::endl;
+                cerr << "Exception: " << e.what() << '\n';
                 cpptrace::from_current_exception().print_with_snippets();
             }
         }
@@ -1719,7 +1719,7 @@ void hapestry(
         // The container to store all fetched reads and their relationships to samples/paths
         unordered_map<Region,TransMap> region_transmaps;
 
-        auto max_length = size_t(float(hapestry_config.interval_max_length) * 2.5);
+        auto max_length = int32_t(float(hapestry_config.interval_max_length) * 2.5);
 
         FetchConfig fetch_config;
         fetch_config.n_threads = n_threads;
@@ -1743,10 +1743,10 @@ void hapestry(
                     fetch_config,
                     region_transmaps
             );
-
         }
         else{
             cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+            fetch_config.unclip_coords = true;
 
             fetch_reads_from_clipped_bam(
                     t,
@@ -1828,14 +1828,12 @@ void hapestry(
 
         if (hapestry_config.skip_nonessential_logs) {
             // Delete all the intermediate VCFs (this should really be done with a proper DB but for now we just remove them after concatenating them)
-            for (size_t i = 0; i < regions.size(); i++) {
-                const auto &region = regions[i];
+            for (const auto& region: regions) {
                 path sub_vcf = output_dir / region.to_unflanked_string('_', hapestry_config.flank_length) / (vcf_prefix + ".vcf");
 
                 // Remove if the VCF was generated
                 if (exists(sub_vcf)) {
                     std::filesystem::remove(sub_vcf);
-                    continue;
                 }
             }
         }
@@ -1854,7 +1852,7 @@ int main (int argc, char* argv[]){
     path output_dir;
     path windows_bed;
     path tandem_bed;
-    string bam_csv;
+    path bam_csv;
     path ref_fasta;
     path vcf;
     int32_t n_threads = 1;

@@ -29,15 +29,153 @@ using std::max;
 using std::cref;
 using std::ref;
 
+#include "cpptrace/from_current.hpp"
+
 
 using namespace sv_merge;
 
 
+void write_region_subsequences_to_fasta(const TransMap& t, const FetchConfig& config, const path& output_fasta) {
+    string s;
+
+    ofstream file(output_fasta);
+
+    vector<pair<string,int64_t>> ids;
+    ids.reserve(t.get_read_count());
+
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        ids.emplace_back(name,id);
+    });
+
+    // Reads will be accessed from an unordered_map<int,...>, but not guaranteed to be shuffled so we enforce shuffling
+    std::ranges::shuffle(ids, std::mt19937(1337));
+
+    bool is_reverse;
+    string tags;
+    for (auto& [name,id]: ids) {
+        tags.clear();
+        if (not config.tags_to_fetch.empty()) {
+            t.get_sequence_tags(id, tags);
+        }
+
+        // Sequences are compressed so they cant be fetched as string refs directly
+        t.get_sequence(id,s);
+
+        is_reverse = t.get_sequence_reversal(id);
+
+        file << ">" << name << ' ' << (is_reverse ? 'R' : 'F') << (tags.empty() ? "" : " ") << tags << '\n';
+        file << s << '\n';
+    }
+}
+
+
+void write_region_subsequences_to_fastq(const TransMap& t, const FetchConfig& config, const path& output_fastq) {
+    string s;
+
+    ofstream file(output_fastq);
+
+    vector<pair<string,int64_t>> ids;
+    ids.reserve(t.get_read_count());
+
+    t.for_each_read([&](const string& name, int64_t id){
+        t.get_sequence(id,s);
+
+        if (s.empty()){
+            return;
+        }
+
+        ids.emplace_back(name,id);
+    });
+
+    // Reads will be accessed from an unordered_map<int,...>, but not guaranteed to be shuffled so we enforce shuffling
+    std::ranges::shuffle(ids, std::mt19937(1337));
+
+    bool is_reverse;
+        string tags;
+
+    for (auto& [name,id]: ids) {
+        tags.clear();
+        if (not config.tags_to_fetch.empty()) {
+            t.get_sequence_tags(id, tags);
+        }
+
+        // Sequences are compressed so they cant be fetched as string refs directly
+        t.get_sequence(id,s);
+
+        const auto& qualities = t.get_sequence_qualities(id);
+        is_reverse = t.get_sequence_reversal(id);
+
+        file << "@" << name << ' ' << (is_reverse ? 'R' : 'F') << (tags.empty() ? "" : " ") << tags << '\n';
+        file << s << '\n';
+        file << "+" << '\n';
+        for (const auto& q: qualities){
+            if (q+33 < 33 or q+33 > 126){
+                throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + name + " in region: " + output_fastq.string() + " at position: " + std::to_string(q));
+            }
+
+            file << char(q+33);
+        }
+        file << '\n';
+    }
+}
+
+
+void write_region_subsequences_to_file_thread_fn(
+        const unordered_map<Region,TransMap>& region_transmaps,
+        const vector<Region>& regions,
+        const path& output_dir,
+        const path& filename,
+        const FetchConfig& config,
+        mutex& err_mutex,
+        atomic<size_t>& job_index
+){
+    size_t i = job_index.fetch_add(1);
+
+    while (i < regions.size()){
+        const auto& region = regions.at(i);
+        const auto& t = region_transmaps.at(region);
+
+        path output_subdir = output_dir / region.to_unflanked_string('_', config.flank_length);
+
+        create_directories(output_subdir);
+
+        path output_fasta = output_subdir / filename;
+
+        CPPTRACE_TRY {
+            if (config.get_qualities) {
+                write_region_subsequences_to_fastq(t, config, output_fasta);
+            }
+            else {
+                write_region_subsequences_to_fasta(t, config, output_fasta);
+            }
+        } CPPTRACE_CATCH(const std::exception& e) {
+            err_mutex.lock();
+
+            cerr << "ERROR in thread job " << i << " caught in writing sequence for file: " << filename << '\n';
+            cerr << "Exception: " << e.what() << '\n';
+            cpptrace::from_current_exception().print_with_snippets();
+
+            err_mutex.unlock();
+        }
+
+        i = job_index.fetch_add(1);
+    }
+}
+
+
 void extract(
         path output_dir,
-        path bam_path,
+        size_t n_threads,
+        path bam_csv,
         path bed_path,
-        const FetchConfig& config
+        bool bam_not_hardclipped,
+        FetchConfig& config
         ){
 
     if (std::filesystem::exists(output_dir)){
@@ -45,6 +183,12 @@ void extract(
     }
     else{
         std::filesystem::create_directories(output_dir);
+    }
+
+    if (not bam_not_hardclipped and (config.get_qualities or not config.tags_to_fetch.empty())) {
+        throw runtime_error("ERROR: tag and quality fetching not implemented for hardclipped BAMs, use a non-"
+                            "hardclipped BAM and --bam_not_hardclipped or remove tag and quality parameters."
+                            " This feature could be supported in the future. Open an issue if needed.");
     }
 
     Timer t;
@@ -71,10 +215,6 @@ void extract(
 
     Authenticator authenticator;
 
-    if (bam_path.string().starts_with("gs://")){
-        authenticator.is_gcs = true;
-    }
-
     // Intermediate object to store results of multithreaded sample read fetching
     sample_region_flanked_coord_map_t sample_to_region_coords;
 
@@ -83,89 +223,82 @@ void extract(
 
     cerr << t << "Loading CSV" << '\n';
 
-    string sample_name = "sample";
-
-    sample_region_read_map_t sample_to_region_reads;
-    sample_bams.emplace_back(sample_name, bam_path);
-
-    // Initialize every combo of sample,region with an empty vector
-    for (const auto& region: regions){
-        sample_to_region_reads[sample_name][region] = {};
-    }
-
     cerr << t << "Processing windows" << '\n';
+    // The container to store all fetched reads and their relationships to samples/paths
+    unordered_map<Region,TransMap> region_transmaps;
 
-    // Thread-related variables
-    atomic<size_t> job_index = 0;
-    vector<thread> threads;
+    config.n_threads = n_threads;
 
-    threads.reserve(config.n_threads);
+    if (bam_not_hardclipped){
+        cerr << "Fetching from NON-hardclipped BAMs" << '\n';
 
-    // Launch threads
-    for (uint64_t n=0; n<config.n_threads; n++){
-        try {
-            cerr << "launching: " << n << '\n';
-            threads.emplace_back(extract_subsequences_from_sample_thread_fn,
-                    std::ref(authenticator),
-                    std::ref(sample_to_region_reads),
-                    std::cref(sample_bams),
-                    std::cref(regions),
-                    std::cref(config),
-                    std::ref(job_index)
-            );
-        } catch (const exception& e) {
-            throw e;
-        }
+        fetch_reads(
+                t,
+                regions,
+                bam_csv,
+                config,
+                region_transmaps
+        );
+
+    }
+    else{
+        cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+
+        config.unclip_coords = true;
+
+        fetch_reads_from_clipped_bam(
+                t,
+                regions,
+                bam_csv,
+                config,
+                region_transmaps
+        );
     }
 
-    // Wait for threads to finish
-    for (auto& n: threads){
-        n.join();
-    }
+    cerr << t << "Peak memory usage: " << get_peak_memory_usage() << '\n';
+    cerr << t << "Writing sequences to disk" << '\n';
     cerr << t << "Writing sequences" << '\n';
 
-    string sequence;
+    path output_filename;
 
-    for (const auto& sample_reads: sample_to_region_reads){
-        for (const auto& [region, reads]: sample_reads.second){
-            path output_path;
+    if (config.get_qualities) {
+        output_filename = "sequences.fastq";
+    }
+    else {
+        output_filename = "sequences.fasta";
+    }
 
-            if (config.get_qualities) {
-                output_path = output_dir / (region.to_string('_') + ".fastq");
+    // Dump sequences into each region directory
+    {
+        // Thread-related variables
+        atomic<size_t> job_index = 0;
+        vector<thread> threads;
+
+        threads.reserve(n_threads);
+
+        mutex err_mutex;
+
+        // Launch threads
+        for (size_t n=0; n<n_threads; n++) {
+            try {
+                cerr << "launching: " << n << '\n';
+                threads.emplace_back(write_region_subsequences_to_file_thread_fn,
+                                     std::cref(region_transmaps),
+                                     std::cref(regions),
+                                     std::cref(output_dir),
+                                     std::cref(output_filename),
+                                     std::cref(config),
+                                     std::ref(err_mutex),
+                                     std::ref(job_index)
+                );
+            } catch (const exception &e) {
+                throw e;
             }
-            else {
-                output_path = output_dir / (region.to_string('_') + ".fasta");
-            }
+        }
 
-            ofstream output_file(output_path);
-
-            if ((not output_file.is_open()) or (not output_file.good())){
-                throw runtime_error("ERROR: could not write to file: " + output_path.string());
-            }
-
-            if (config.get_qualities) {
-                for (const auto& read: reads){
-                    read.sequence.to_string(sequence);
-                    output_file << "@" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
-                    output_file << sequence << '\n';
-                    output_file << "+" << '\n';
-                    for (const auto& q: read.qualities){
-                        if (q+33 < 33 or q+33 > 126){
-                            throw runtime_error("ERROR: quality score out of range: " + std::to_string(q+33) + " for read: " + read.name + " in region: " + region.to_string() + " at position: " + std::to_string(q));
-                        }
-
-                        output_file << char(q+33);
-                    }
-                    output_file << '\n';
-                }
-            }
-            else {
-                for (const auto& read: reads){
-                    read.sequence.to_string(sequence);
-                    output_file << ">" << read.name << ' ' << (read.is_reverse ? 'R' : 'F') << (read.tags.empty() ? "" : " ") << read.tags << '\n';
-                    output_file << sequence << '\n';
-                }
-            }
+        // Wait for threads to finish
+        for (auto &n: threads) {
+            n.join();
         }
     }
 
@@ -193,9 +326,11 @@ void parse_comma_separated_string(const string& s, vector<string>& result){
 
 
 int main (int argc, char* argv[]){
+    bool bam_not_hardclipped;
+    size_t n_threads;
     path output_dir;
     path windows_bed;
-    path bam_path;
+    path bam_csv;
     path bed_path;
     path ref;
     string tags_arg;
@@ -210,13 +345,19 @@ int main (int argc, char* argv[]){
             ->required();
 
     app.add_option(
-            "--bam",
-            bam_path,
-            "Path to BAM file containing reads to be extracted")
+            "--n_threads",
+            n_threads,
+            "Maximum number of threads to use for fetching. To avoid being throttled by cloud providers.")
             ->required();
 
     app.add_option(
-            "--bed",
+            "--bam_csv",
+            bam_csv,
+            "Simple headerless CSV file with the format [sample_name],[bam_path]")
+            ->required();
+
+    app.add_option(
+            "--windows",
             bed_path,
             "Path to BED file containing windows to extract reads from")
             ->required();
@@ -230,6 +371,17 @@ int main (int argc, char* argv[]){
     app.add_flag(
             "--require_spanning",
             config.require_spanning,
+            "If this flag is invoked, then only reads that span the entire window will be fetched");
+
+    app.add_option(
+            "--fetch_max_length",
+            config.max_length,
+            "How long a sequence within a window can be in bp before it is skipped (important for large contigs with clipping, may be millions bp)")
+            ->required();
+
+    app.add_flag(
+            "--bam_not_hardclipped",
+            bam_not_hardclipped,
             "If this flag is invoked, then only reads that span the entire window will be fetched");
 
     app.add_flag(
@@ -248,16 +400,21 @@ int main (int argc, char* argv[]){
             "A comma separated list of tags to fetch from the BAM file (e.g. NM,PS,HP) and append to the "
             "fastq name as space-separated fields");
 
+    app.add_flag("--force_unique_reads", config.append_sample_to_read, "Invoke this to add append each read name with the sample name so that inter-sample read collisions cannot occur");
+
     CLI11_PARSE(app, argc, argv);
 
     parse_comma_separated_string(tags_arg, config.tags_to_fetch);
 
     extract(
         output_dir,
-        bam_path,
+        n_threads,
+        bam_csv,
         bed_path,
+        bam_not_hardclipped,
         config
     );
+
 
     return 0;
 }
