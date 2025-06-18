@@ -122,7 +122,7 @@ void test_fetch(path data_directory){
 
 int main(){
     CPPTRACE_TRY {
-        HAPESTRY_DEBUG = true;
+        HAPESTRY_DEBUG = false;
 
         path project_directory = path(__FILE__).parent_path().parent_path().parent_path();
         path data_directory = project_directory / "data";
