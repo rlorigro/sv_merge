@@ -757,6 +757,8 @@ void annotate(
     }
     else{
         cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+        fetch_config.unclip_coords = true;
+
         fetch_reads_from_clipped_bam(
                 t,
                 regions,

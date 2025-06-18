@@ -46,6 +46,7 @@ void get_reads_of_region(vector<Region>& regions, path csv_path, int32_t flank_l
     config.append_sample_to_read = false;
     config.force_forward = false;
     config.max_clip_fetch = flank_length;
+    config.unclip_coords = true;
 
     fetch_reads_from_clipped_bam(
         t,

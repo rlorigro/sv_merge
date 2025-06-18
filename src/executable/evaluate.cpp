@@ -607,6 +607,8 @@ void evaluate(
     config.force_forward = true;
     config.max_clip_fetch = flank_length;
 
+    config.unclip_coords = true;
+
     fetch_reads_from_clipped_bam(
             t,
             regions,

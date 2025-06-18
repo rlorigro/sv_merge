@@ -254,6 +254,8 @@ void make_local_test_set(
         }
         else{
             cerr << "Fetching from HARDCLIPPED BAMs" << '\n';
+            config.unclip_coords = true;
+
             fetch_reads_from_clipped_bam(
                     t,
                     regions,

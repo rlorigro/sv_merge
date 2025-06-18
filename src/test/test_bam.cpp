@@ -319,6 +319,7 @@ void test_clipped_bam_subsequence_extraction(path data_directory){
     config.max_length = 100'000;
     config.flank_length = 0;
     config.require_spanning = true;
+    config.unclip_coords = true;
 
     fetch_reads_from_clipped_bam(
             t,
