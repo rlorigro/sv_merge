@@ -109,7 +109,7 @@ task EvaluateChromosome {
     }
 
     String docker_dir = "/hapestry"
-    String work_dir = "/cromwell_root/hapestry"
+    String work_dir = "/mnt/disks/cromwell_root/hapestry"
 
     command <<<
         git --no-pager --git-dir ~{docker_dir}/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1
