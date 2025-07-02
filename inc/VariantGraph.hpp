@@ -118,6 +118,51 @@ public:
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
 
     /**
+     * Constructing a bidirected graph by considering each VCF record in isolation has the shortcoming that e.g. two
+     * consecutive DELs, or two consecutive replacements, or two INS at the same position, cannot be both taken by a
+     * valid path. The same applies to e.g. an INS and a DEL that start (or end) at the same position, a configuration
+     * that might be used by a caller to represent a replacement. This is particularly problematic for SNPs, since they
+     * often occur consecutively. The procedure..............
+     */
+    void build_graph_closure();
+
+    /**
+     * Let `(from,to)` be a non-reference edge of `vcf_record` where `to` is a reference node. The procedure creates an
+     * edge `(from,y)` for every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
+     *
+     * Remark: the procedure does not create edges between INS's that occur at the same position, since this would give
+     * a quadratic number of new edges. Closure is not applied to the only edge of a DUP, since that edge means that the
+     * duplicated interval must be traversed again.
+     *
+     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
+     * creates;
+     * @return TRUE iff a new edge was created.
+     */
+    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t ins_pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new);
+
+    /**
+     * @param old_edge in canonical form;
+     * @param new_edge in canonical form;
+     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
+     * creates.
+     */
+    void build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new);
+
+    /**
+     * @param node_handle a reference node;
+     * @return the node (in forward orientation) that immediately precedes `node_handle` in its chromosome and that is
+     * connected to it with an edge, if one exists; `node_handle` otherwise.
+     */
+    handle_t& get_previous_reference_node(const handle_t& node_handle) const;
+
+    /**
+     * @param node_handle a reference node;
+     * @return the node (in forward orientation) that immediately follows `node_handle` in its chromosome and that is
+     * connected to it with an edge, if one exists; `node_handle` otherwise.
+     */
+    handle_t& get_next_reference_node(const handle_t& node_handle) const;
+
+    /**
      * Two VCF records are equivalent iff they have the same elements in `vcf_record_to_edge`, and if such elements
      * appear in the same order or in reverse order. For each maximal set of equivalent records, the procedure sets
      * `is_redundant=true` for all records except one (chosen arbitrarily).
