@@ -343,6 +343,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     edge_to_vcf_record.clear(); if (n_vcf_records!=0) edge_to_vcf_record.reserve(n_vcf_records);
     if (n_vcf_records==0) { vcf_record_to_edge.clear(); return; }
     if (acyclic) interval_to_insertion_handle.clear();
+    null_edge.first=
 
     main_chromosome=vcf_records.at(0).chrom;
     main_chromosome_length=(int32_t)chromosomes.at(main_chromosome).length();
@@ -566,33 +567,43 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
             s=find_closest(main_chromosome,tmp_pair.first);
             t=find_closest(main_chromosome,tmp_pair.second);
             if (record.sv_type==VcfReader::TYPE_DELETION) {
-                if (s!=0 && tmp_pair.second!=main_chromosome_length) add_nonreference_edge(handles.at(s-1), handles.at(t), assign_record);
+                if (s!=0 && tmp_pair.second!=main_chromosome_length) {
+                    add_nonreference_edge(handles.at(s-1),handles.at(t),assign_record);
+                    if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
+                }
             }
             else if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) {
                 if (acyclic) {
                     const handle_t& insertion_handle = insertion_handles.at(j);
                     if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
                     if (tmp_pair.first!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(s),assign_record);
+                    if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                     j++;
                 }
-                else add_nonreference_edge(handles.at(t-1),handles.at(s),assign_record);
+                else {
+                    add_nonreference_edge(handles.at(t-1),handles.at(s),assign_record);
+                    if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
+                }
             }
             else if (record.sv_type==VcfReader::TYPE_INVERSION) {
                 if (acyclic) {
                     const handle_t& insertion_handle = insertion_handles.at(j);
                     if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
                     if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(t),assign_record);
+                    if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                     j++;
                 }
                 else {
-                    if (s!=0) add_nonreference_edge(handles.at(s-1), graph.flip(handles.at(t-1)), assign_record);
+                    if (s!=0) add_nonreference_edge(handles.at(s-1),graph.flip(handles.at(t-1)),assign_record);
                     if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(graph.flip(handles.at(s)),handles.at(t),assign_record);
+                    if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                 }
             }
             else if (record.sv_type==VcfReader::TYPE_REPLACEMENT || record.sv_type==VcfReader::TYPE_SNP) {
                 const handle_t& insertion_handle = insertion_handles.at(j);
                 if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
                 if (tmp_pair.second!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(t),assign_record);
+                if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                 j++;
             }
         }
@@ -602,6 +613,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                 const handle_t& insertion_handle = insertion_handles.at(j);
                 if (s!=0) add_nonreference_edge(handles.at(s-1),insertion_handle,assign_record);
                 if (tmp_pair.first!=main_chromosome_length) add_nonreference_edge(insertion_handle,handles.at(s),assign_record);
+                if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                 j++;
             }
             else if (!acyclic) {
@@ -626,11 +638,13 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                             record.get_breakend_inserted_sequence(tmp_buffer);
                             if (tmp_buffer.empty()) {
                                 add_nonreference_edge(handle_from,handle_to,assign_record);
+                                if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                             }
                             else {
                                 const handle_t& insertion_handle = orientation_cis==1?insertion_handles.at(j):graph.flip(insertion_handles.at(j));
                                 add_nonreference_edge(handle_from,insertion_handle,assign_record);
                                 add_nonreference_edge(insertion_handle,handle_to,assign_record);
+                                if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                                 j++;
                             }
                         }
@@ -638,6 +652,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
                             record.get_breakend_inserted_sequence(tmp_buffer);
                             const handle_t& insertion_handle = orientation_cis==1?insertion_handles.at(j):graph.flip(insertion_handles.at(j));
                             add_nonreference_edge(handle_from,insertion_handle,assign_record);
+                            if (assign_record!=SIZE_MAX) vcf_record_to_edge.at(assign_record).emplace_back(null_edge);
                             j++;
                         }
                     }
@@ -684,23 +699,22 @@ void VariantGraph::build_graph_closure() {
     uint8_t sv_type;
     size_t i, j;
     size_t n_nonref_edges;
-    int32_t ins_pos;
+    int32_t pos;
     vector<edge_t> vcf_record_to_edge_new;
-
-    // Forbid INS nodes to connect to other INS nodes at the same position............
 
     while (true) {
         changed=false;
         for (i=0; i<n_vcf_records; i++) {
             sv_type=vcf_records.at(i).sv_type;
-            ins_pos=vcf_records.at(i).pos;
+            if (sv_type==VcfReader::TYPE_DUPLICATION) continue;
+            pos=vcf_records.at(i).pos;
             vcf_record_to_edge_new.clear();
             n_nonref_edges=vcf_record_to_edge.at(i).size();
             for (j=0; j<n_nonref_edges; j++) {
                 edge_t& edge = vcf_record_to_edge.at(i).at(j);
                 if (edge==NULL_EDGE) continue;
-                if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,ins_pos,edge,edge.first,edge.second,vcf_record_to_edge_new);
-                if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,ins_pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new);
+                if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,edge.first,edge.second,vcf_record_to_edge_new);
+                if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new);
             }
             vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),std::make_move_iterator(vcf_record_to_edge_new.begin()),std::make_move_iterator(vcf_record_to_edge_new.end()));
         }
@@ -709,7 +723,7 @@ void VariantGraph::build_graph_closure() {
 }
 
 
-bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t ins_pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new) {
+bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new) {
     bool create_edge;
 
     if (!graph.get_is_reverse(to)) {
@@ -719,7 +733,7 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
                 create_edge=true;
                 if (sv_type==VcfReader::TYPE_INSERTION) {
                     for (auto& record: edge_to_vcf_record.at(graph.edge_handle(source,new_neighbor))) {
-                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==ins_pos) { create_edge=false; break; }
+                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==pos) { create_edge=false; break; }
                     }
                 }
                 else if (sv_type==VcfReader::TYPE_DUPLICATION) create_edge=false;
@@ -738,7 +752,7 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
                 create_edge=true;
                 if (sv_type==VcfReader::TYPE_INSERTION) {
                     for (auto& record: edge_to_vcf_record.at(graph.edge_handle(graph.flip(source),new_neighbor))) {
-                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==ins_pos) { create_edge=false; break; }
+                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==pos) { create_edge=false; break; }
                     }
                 }
                 else if (sv_type==VcfReader::TYPE_DUPLICATION) create_edge=false;
@@ -870,32 +884,60 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
 
 
 /**
- * Implemented as a naive quadratic scan. Should be made faster.
+ * Implemented with naive quadratic scans. Should be made faster.
  */
 void VariantGraph::mark_redundant_records() {
-    bool redundant;
     int32_t i, j, k;
-    size_t size;
+    size_t n_edges, n_sequences_i, n_sequences_j;
 
     for (auto& record: vcf_records) record.is_redundant=false;
     for (i=0; i<n_vcf_records; i++) {
         if (vcf_records.at(i).is_redundant) continue;
-        size=vcf_record_to_edge.at(i).size();
+        n_edges=vcf_record_to_edge.at(i).size();
+        n_sequences_i=0;
+        for (k=0; k<n_edges; k++) {
+            if (vcf_record_to_edge.at(i).at(k)==null_edge) n_sequences_i++;
+        }
         for (j=i+1; j<n_vcf_records; j++) {
-            if (vcf_records.at(j).is_redundant || size!=vcf_record_to_edge.at(j).size()) continue;
-            redundant=true;
-            for (k=0; k<size; k++) {
-                if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(k)) { redundant=false; break; }
+            if (vcf_records.at(j).is_redundant || n_edges!=vcf_record_to_edge.at(j).size()) continue;
+            n_sequences_j=0;
+            for (k=0; k<n_edges; k++) {
+                if (vcf_record_to_edge.at(j).at(k)==null_edge) n_sequences_j++;
             }
-            if (!redundant) {
-                redundant=true;
-                for (k=0; k<size; k++) {
-                    if (vcf_record_to_edge.at(i).at(k)!=vcf_record_to_edge.at(j).at(size-1-k)) { redundant=false; break; }
-                }
-            }
-            if (redundant) vcf_records.at(j).is_redundant=true;
+            if (n_sequences_j!=n_sequences_i) continue;
+            if (mark_redundant_records_impl(i,j,n_edges,n_sequences_i) && mark_redundant_records_impl(j,i,n_edges,n_sequences_i)) vcf_records.at(j).is_redundant=true;
         }
     }
+}
+
+
+bool VariantGraph::mark_redundant_records_impl(int32_t i, int32_t j, size_t n_edges, size_t n_sequences) {
+    bool match;
+    int32_t k, h, m;
+    int32_t first_i, first_j, n_sequences_matched;
+
+    first_i=0; first_j=0; n_sequences_matched=0;
+    for (k=1; k<n_edges; k++) {
+        if (vcf_record_to_edge.at(i).at(k)!=null_edge) continue;
+        for (h=1; h<n_edges; h++) {
+            if (vcf_record_to_edge.at(j).at(h)!=null_edge) continue;
+            if (h-first_j!=k-first_i) continue;
+            match=true;
+            for (m=0; m<k-first_i; m++) {
+                if (vcf_record_to_edge.at(i).at(first_i+m)!=vcf_record_to_edge.at(j).at(first_j+m)) { match=false; break; }
+            }
+            if (!match) {
+                match=true;
+                for (m=0; m<k-first_i; m++) {
+                    if (vcf_record_to_edge.at(i).at(first_i+m)!=vcf_record_to_edge.at(j).at(h-1-m)) { match=false; break; }
+                }
+            }
+            if (match) n_sequences_matched++;
+            first_j=h+1;
+        }
+        first_i=k+1;
+    }
+    return n_sequences_matched==n_sequences;
 }
 
 
@@ -1835,15 +1877,18 @@ void VariantGraph::print_signature_impl(const handle_t& handle, const string& pa
 
 
 void VariantGraph::load_edge_record_map(const vector<pair<edge_t,size_t>>& map, size_t n_vcf_records) {
+    size_t i;
+
     edge_to_vcf_record.clear(); vcf_record_to_edge.clear();
     vcf_record_to_edge.reserve(n_vcf_records);
-    for (size_t i=0; i<n_vcf_records; i++) vcf_record_to_edge.emplace_back();
+    for (i=0; i<n_vcf_records; i++) vcf_record_to_edge.emplace_back();
     for (const auto& pair: map) {
         const edge_t canonized_edge = graph.edge_handle(pair.first.first,pair.first.second);
         if (edge_to_vcf_record.contains(canonized_edge)) edge_to_vcf_record.at(canonized_edge).emplace_back(pair.second);
         else edge_to_vcf_record[canonized_edge]={pair.second};
         vcf_record_to_edge.at(pair.second).emplace_back(canonized_edge);
     }
+    for (i=0; i<n_vcf_records; i++) vcf_record_to_edge.at(i).emplace_back(null_edge);
 }
 
 

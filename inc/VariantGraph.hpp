@@ -119,26 +119,28 @@ public:
 
     /**
      * Constructing a bidirected graph by considering each VCF record in isolation has the shortcoming that e.g. two
-     * consecutive DELs, or two consecutive replacements, or two INS at the same position, cannot be both taken by a
-     * valid path. The same applies to e.g. an INS and a DEL that start (or end) at the same position, a configuration
-     * that might be used by a caller to represent a replacement. This is particularly problematic for SNPs, since they
-     * often occur consecutively. The procedure..............
+     * consecutive DELs, or two consecutive replacements, or an INS and a DEL that start (or end) at the same position,
+     * cannot be both taken by a valid path (the latter is a configuration that might be used by a caller to represent a
+     * replacement). This is particularly problematic for SNPs, since they often occur consecutively.
+     *
+     * The procedure relaxes the graph built from each VCF record in isolation, as follows. Let `(from,to)` be a non-
+     * reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge `(from,y)` for
+     * every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
+     *
+     * Remark: this procedure allows to take an INS that precedes a position, after taking a BND to that position.
+     *
+     * Remark: the procedure does not create edges between INS's that occur at the same position, since this would give
+     * a quadratic number of new edges. Closure is not applied to the only edge of a DUP, since that edge means that the
+     * duplicated interval must be traversed again, i.e. its meaning is stronger than a new adjacency.
      */
     void build_graph_closure();
 
     /**
-     * Let `(from,to)` be a non-reference edge of `vcf_record` where `to` is a reference node. The procedure creates an
-     * edge `(from,y)` for every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
-     *
-     * Remark: the procedure does not create edges between INS's that occur at the same position, since this would give
-     * a quadratic number of new edges. Closure is not applied to the only edge of a DUP, since that edge means that the
-     * duplicated interval must be traversed again.
-     *
      * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
      * creates;
      * @return TRUE iff a new edge was created.
      */
-    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t ins_pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new);
+    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new);
 
     /**
      * @param old_edge in canonical form;
@@ -163,11 +165,19 @@ public:
     handle_t& get_next_reference_node(const handle_t& node_handle) const;
 
     /**
-     * Two VCF records are equivalent iff they have the same elements in `vcf_record_to_edge`, and if such elements
-     * appear in the same order or in reverse order. For each maximal set of equivalent records, the procedure sets
+     * Two sequences of edges in `vcf_record_to_edge` are equivalent iff they have the same elements, and if such
+     * elements appear in the same order or in reverse order. Two VCF records are equivalent iff there is a bijection
+     * between their sequences of edges. For each maximal set of equivalent records, the procedure sets
      * `is_redundant=true` for all records except one (chosen arbitrarily).
      */
     void mark_redundant_records();
+
+    /**
+     * @param n_edges number of elements in `vcf_record_to_edge` at rows `i` and `j` (assumed to be the same);
+     * @param n_sequences number of edge sequences in `vcf_record_to_edge` at rows `i` and `j` (assumed to be the same);
+     * @return TRUE iff every sequence at row `i` matches a sequence at row `j`.
+     */
+    bool mark_redundant_records_impl(int32_t i, int32_t j, size_t n_edges, size_t n_sequences);
 
     /**
      * Adds a new handle to `graph`. Just a simple wrapper of `HashGraph.create_handle()`.
@@ -203,10 +213,10 @@ public:
     void add_gaf_path_to_graph(const string& alignment_name, const vector <pair<string,bool> >& path);
 
     /**
-     * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a
-     * sequence of non-reference edges. The procedure writes to a file every R such that there is a (possibly circular)
-     * path P in `graph` that traverses the entire sequence of non-reference edges of R, or its reverse. The procedure
-     * writes to another file every R for which this does not hold.
+     * Consider the set of VCF records that were used for building `graph`. Every such VCF record R corresponds to a set
+     * of sequences of non-reference edges. The procedure writes to a file every R such that there is a (possibly
+     * circular) path P in `graph` that traverses an entire sequence of non-reference edges of R, or its reverse. The
+     * procedure writes to another file every R for which this does not hold.
      *
      * Remark: in the current implementation, DELs that remove a prefix or suffix of a chromosome create no edge in the
      * graph, so they cannot be supported by a path and they are not printed in output. This could be solved by creating
@@ -313,8 +323,9 @@ public:
     bool is_reference_edge(const edge_t& edge);
 
     /**
-     * Every VCF record corresponds to a sequence of non-reference edges. The procedure makes `out` the set of all the
-     * VCF records whose sequence of non-reference edges coincides with the given sequence of edges or its reverse.
+     * Every VCF record corresponds to a set of sequences of non-reference edges. The procedure makes `out` the set of
+     * all the VCF records that have a sequence of non-reference edges that coincides with the given sequence of edges
+     * or its reverse.
      *
      * @param edges each edge can be represented in any orientation;
      * @param out VCF records are in the order in which they appear in `vcf_records`.
@@ -322,7 +333,7 @@ public:
     void get_vcf_records_with_edges(const vector<edge_t>& edges, vector<VcfRecord>& out);
 
     /**
-     * Iterates over every VCF record and its sequence of non-reference edges. VCF records that do not contribute any
+     * Iterates over every VCF record and its sequences of non-reference edges. VCF records that do not contribute any
      * non-reference edge to `graph` are not iterated.
      *
      * @param id unique integer identifier of `record`.
@@ -331,7 +342,7 @@ public:
 
     /**
      * Given a path P, the procedure iterates over every VCF record R (and its non-reference edges) that is supported by
-     * P, i.e. such that P traverses the sequence of non-reference edges of R, or its reverse.
+     * P, i.e. such that P traverses a sequence of non-reference edges of R, or its reverse.
      *
      * @param path a sequence of pairs `(node_id, is_reverse)`; node IDs are assumed to come from the set of node IDs in
      * `graph`;
@@ -484,9 +495,11 @@ private:
     unordered_map<edge_t,vector<size_t>> edge_to_vcf_record;
 
     /**
-     * For every VCF record: its sequence of non-reference edges in `graph` (in canonical form).
+     * For every VCF record: a set of sequences of non-reference edges in `graph` (in canonical form) that support the
+     * record. A record may be supported by more than one sequence of edges after `build_graph_closure()`.
      */
     vector<vector<edge_t>> vcf_record_to_edge;
+    edge_t null_edge;  // Terminates a sequence in `vcf_record_to_edge`.
 
     /**
      * Reused temporary space
