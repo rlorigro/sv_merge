@@ -256,8 +256,8 @@ void VariantGraph::vcf_record_to_path_intervals(const vector<pair<string,bool>>&
     if (PATH_LENGTH<2) { out.clear(); return; }
     const auto N_EDGES = (int32_t)edges_of_the_record.size();
     bool found, rev;
-    int32_t i, j, p, x, y;
-    int32_t length, path_length_bps;
+    int32_t i, j, k, p, x, y;
+    int32_t length, path_length_bps, first;
     nid_t id;
     handle_t handle1, handle2;
 
@@ -286,33 +286,39 @@ void VariantGraph::vcf_record_to_path_intervals(const vector<pair<string,bool>>&
     out.clear(); x=0;
     for (i=0; i<PATH_LENGTH-1; i++) {
         x+=node_lengths_buffer.at(i);
-        found=false;
-        if (tmp_edges.at(i)==edges_of_the_record.at(0)) {
-            // Forward match
-            j=i; p=1; y=x;
-            while (j<(PATH_LENGTH-1)-1 && p<N_EDGES) {
-                j++;
-                y+=node_lengths_buffer.at(j);
-                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p++;
+        first=0;
+        for (k=0; k<N_EDGES; k++) {
+            if (edges_of_the_record.at(k)!=null_edge) continue;
+            found=false;
+            if (tmp_edges.at(i)==edges_of_the_record.at(first)) {
+                // Forward match
+                j=i; p=first+1; y=x;
+                while (j<(PATH_LENGTH-1)-1 && p<k) {
+                    j++;
+                    y+=node_lengths_buffer.at(j);
+                    if (tmp_edges.at(j)==edges_of_the_record.at(p)) p++;
+                }
+                if (p==k) found=true;
             }
-            if (p==N_EDGES) found=true;
-        }
-        if (!found && tmp_edges.at(i)==edges_of_the_record.at(N_EDGES-1)) {
-            // Reverse match
-            j=i; p=N_EDGES-2; y=x;
-            while (j<(PATH_LENGTH-1)-1 && p>=0) {
-                j++;
-                y+=node_lengths_buffer.at(j);
-                if (tmp_edges.at(j)==edges_of_the_record.at(p)) p--;
+            if (!found && tmp_edges.at(i)==edges_of_the_record.at(k-1)) {
+                // Reverse match
+                j=i; p=k-2; y=x;
+                while (j<(PATH_LENGTH-1)-1 && p>=first) {
+                    j++;
+                    y+=node_lengths_buffer.at(j);
+                    if (tmp_edges.at(j)==edges_of_the_record.at(p)) p--;
+                }
+                if (p==first-1) found=true;
             }
-            if (p==-1) found=true;
-        }
-        if (found) {
-            int32_t left = get_flank_boundary_left_impl(x,intervals_buffer,flank_length);
-            if (left==INT32_MAX) left=0;
-            int32_t right = get_flank_boundary_right_impl(y,path_length_bps,intervals_buffer,flank_length);
-            if (right==INT32_MAX) right=path_length_bps-1;
-            out.emplace_back(left,right);
+            if (found) {
+                int32_t left = get_flank_boundary_left_impl(x,intervals_buffer,flank_length);
+                if (left==INT32_MAX) left=0;
+                int32_t right = get_flank_boundary_right_impl(y,path_length_bps,intervals_buffer,flank_length);
+                if (right==INT32_MAX) right=path_length_bps-1;
+                out.emplace_back(left,right);
+                break;
+            }
+            first=k+1;
         }
     }
 }
@@ -693,8 +699,8 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     for (i=0; i<n_vcf_records; i++) flags.at(i).reserve(vcf_record_to_edge.at(i).size());
 }
 
-// ------> Make a mode for the normal graph and a mode for the acyclic graph
-void VariantGraph::build_graph_closure() {
+
+void VariantGraph::build_graph_closure(bool acyclic) {
     bool changed;
     uint8_t sv_type;
     size_t i, j;
@@ -706,15 +712,15 @@ void VariantGraph::build_graph_closure() {
         changed=false;
         for (i=0; i<n_vcf_records; i++) {
             sv_type=vcf_records.at(i).sv_type;
-            if (sv_type==VcfReader::TYPE_DUPLICATION) continue;
+            if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) continue;
             pos=vcf_records.at(i).pos;
             vcf_record_to_edge_new.clear();
             n_nonref_edges=vcf_record_to_edge.at(i).size();
             for (j=0; j<n_nonref_edges; j++) {
                 edge_t& edge = vcf_record_to_edge.at(i).at(j);
                 if (edge==NULL_EDGE) continue;
-                if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,edge.first,edge.second,vcf_record_to_edge_new);
-                if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new);
+                if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,edge.first,edge.second,vcf_record_to_edge_new,acyclic);
+                if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new,acyclic);
             }
             vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),std::make_move_iterator(vcf_record_to_edge_new.begin()),std::make_move_iterator(vcf_record_to_edge_new.end()));
         }
@@ -723,7 +729,7 @@ void VariantGraph::build_graph_closure() {
 }
 
 
-bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new) {
+bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic) {
     bool create_edge;
 
     if (!graph.get_is_reverse(to)) {
@@ -731,12 +737,12 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
         if (source!=to) {
             graph.follow_edges(source,false,[&](handle_t new_neighbor) {
                 create_edge=true;
-                if (sv_type==VcfReader::TYPE_INSERTION) {
+                if (sv_type==VcfReader::TYPE_INSERTION || (acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV))) {
                     for (auto& record: edge_to_vcf_record.at(graph.edge_handle(source,new_neighbor))) {
-                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==pos) { create_edge=false; break; }
+                        if (record.pos==pos && (record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && sv_type==VcfReader::TYPE_DUPLICATION))) { create_edge=false; break; }
                     }
                 }
-                else if (sv_type==VcfReader::TYPE_DUPLICATION) create_edge=false;
+                else if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) create_edge=false;
                 if (create_edge && !graph.has_edge(from,new_neighbor)) {
                     graph.create_edge(from,new_neighbor);
                     build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
@@ -750,12 +756,12 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
         if (source!=to) {
             graph.follow_edges(source,true,[&](handle_t new_neighbor) {
                 create_edge=true;
-                if (sv_type==VcfReader::TYPE_INSERTION) {
+                if (sv_type==VcfReader::TYPE_INSERTION || (acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV))) {
                     for (auto& record: edge_to_vcf_record.at(graph.edge_handle(graph.flip(source),new_neighbor))) {
-                        if (record.sv_type==VcfReader::TYPE_INSERTION && record.pos==pos) { create_edge=false; break; }
+                        if (record.pos==pos && (record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && sv_type==VcfReader::TYPE_DUPLICATION))) { create_edge=false; break; }
                     }
                 }
-                else if (sv_type==VcfReader::TYPE_DUPLICATION) create_edge=false;
+                else if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) create_edge=false;
                 if (create_edge && !graph.has_edge(from,new_neighbor)) {
                     graph.create_edge(from,new_neighbor);
                     build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
@@ -767,7 +773,7 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
     return false;
 }
 
-// -----> add a NULL_EDGE terminator to every path in vcf_record_to_edge and adapt the entire code throughout.
+
 void VariantGraph::build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new) {
     bool found;
     size_t i, j;
@@ -1103,10 +1109,7 @@ void VariantGraph::mark_edge(const edge_t& query, size_t rank, const vector<edge
     const size_t N_EDGES = edges.size();
 
     for (size_t i=0; i<N_EDGES; i++) {
-        if (edges.at(i)==canonized_query) {
-            flags.at(i)=rank;
-            return;
-        }
+        if (edges.at(i)==canonized_query) flags.at(i)=rank;
     }
 }
 
@@ -1114,7 +1117,7 @@ void VariantGraph::mark_edge(const edge_t& query, size_t rank, const vector<edge
 void VariantGraph::for_each_vcf_record_with_supporting_paths(const function<void(size_t id, const VcfRecord& record, const vector<string>& supporting_paths)>& callback) {
     bool all_present, is_increasing, is_decreasing;
     size_t i, j;
-    size_t rank, n_edges;
+    size_t rank, n_edges, first;
 
     for (i=0; i<n_vcf_records; i++) printed.at(i)=false;
     for (i=0; i<n_vcf_records; i++) path_names.at(i).clear();
@@ -1168,20 +1171,26 @@ void VariantGraph::for_each_vcf_record_with_supporting_paths(const function<void
             for (const size_t& r: edge_to_vcf_record.at(canonized_edge)) {
                 if (printed.at(r)) continue;
                 n_edges=vcf_record_to_edge.at(r).size();
-                all_present=true;
-                for (j=0; j<n_edges; j++) {
-                    if (flags.at(r).at(j)==0) { all_present=false; break; }
-                }
-                if (all_present) {
-                    is_increasing=true; is_decreasing=true;
-                    for (j=1; j<n_edges; j++) {
-                        if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
-                        if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
+                first=0;
+                for (i=0; i<n_edges; i++) {
+                    if (vcf_record_to_edge.at(r).at(i)!=null_edge) continue;
+                    all_present=true;
+                    for (j=first; j<i; j++) {
+                        if (flags.at(r).at(j)==0) { all_present=false; break; }
                     }
-                    if (is_increasing || is_decreasing) {
-                        printed.at(r)=true;
-                        path_names.at(r).emplace_back(graph.get_path_name(path));
+                    if (all_present) {
+                        is_increasing=true; is_decreasing=true;
+                        for (j=first+1; j<i; j++) {
+                            if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
+                            if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
+                        }
+                        if (is_increasing || is_decreasing) {
+                            printed.at(r)=true;
+                            path_names.at(r).emplace_back(graph.get_path_name(path));
+                            break;
+                        }
                     }
+                    first=i+1;
                 }
             }
             from=to;
@@ -1543,7 +1552,7 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
     const size_t N_QUERY_EDGES = edges.size();
     bool all_present, is_increasing, is_decreasing;
     size_t i, j;
-    size_t n_edges, rank;
+    size_t n_edges, rank, first;
 
     out.clear();
 
@@ -1567,6 +1576,7 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
             n_edges=vcf_record_to_edge.at(r).size();
             flags.at(r).clear();
             for (i=0; i<n_edges; i++) flags.at(r).emplace_back(0);
+            initialized.at(r)=true;
         }
     }
 
@@ -1584,19 +1594,28 @@ void VariantGraph::get_vcf_records_with_edges_impl(const vector<edge_t>& edges, 
         for (const size_t& r: edge_to_vcf_record.at(edge)) {
             if (printed.at(r)) continue;
             n_edges=vcf_record_to_edge.at(r).size();
-            if (!identical || n_edges==N_QUERY_EDGES) {
-                all_present=true;
-                for (j=0; j<n_edges; j++) {
-                    if (flags.at(r).at(j)==0) { all_present=false; break; }
-                }
-                if (all_present) {
-                    is_increasing=true; is_decreasing=true;
-                    for (j=1; j<n_edges; j++) {
-                        if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
-                        if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
+            first=0;
+            for (i=0; i<n_edges; i++) {
+                if (vcf_record_to_edge.at(r).at(i)!=null_edge) continue;
+                if (!identical || i-first==N_QUERY_EDGES) {
+                    all_present=true;
+                    for (j=first; j<i; j++) {
+                        if (flags.at(r).at(j)==0) { all_present=false; break; }
                     }
-                    if (is_increasing || is_decreasing) { out.emplace_back(r); printed.at(r)=true; }
+                    if (all_present) {
+                        is_increasing=true; is_decreasing=true;
+                        for (j=first+1; j<i; j++) {
+                            if (flags.at(r).at(j)>flags.at(r).at(j-1)) is_decreasing=false;
+                            if (flags.at(r).at(j)<flags.at(r).at(j-1)) is_increasing=false;
+                        }
+                        if (is_increasing || is_decreasing) {
+                            out.emplace_back(r);
+                            printed.at(r)=true;
+                            break;
+                        }
+                    }
                 }
+                first=i+1;
             }
         }
     }

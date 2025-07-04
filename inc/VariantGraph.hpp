@@ -130,17 +130,19 @@ public:
      * Remark: this procedure allows to take an INS that precedes a position, after taking a BND to that position.
      *
      * Remark: the procedure does not create edges between INS's that occur at the same position, since this would give
-     * a quadratic number of new edges. Closure is not applied to the only edge of a DUP, since that edge means that the
-     * duplicated interval must be traversed again, i.e. its meaning is stronger than a new adjacency.
+     * a quadratic number of new edges.
+     *
+     * Remark: closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
+     * be traversed again, i.e. its meaning is stronger than a new adjacency.
      */
-    void build_graph_closure();
+    void build_graph_closure(bool acyclic);
 
     /**
      * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
      * creates;
      * @return TRUE iff a new edge was created.
      */
-    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new);
+    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic);
 
     /**
      * @param old_edge in canonical form;
@@ -333,16 +335,16 @@ public:
     void get_vcf_records_with_edges(const vector<edge_t>& edges, vector<VcfRecord>& out);
 
     /**
-     * Iterates over every VCF record and its sequences of non-reference edges. VCF records that do not contribute any
-     * non-reference edge to `graph` are not iterated.
+     * Iterates over every VCF record and all its sequences of non-reference edges. VCF records that do not contribute
+     * any non-reference edge to `graph` are not iterated.
      *
      * @param id unique integer identifier of `record`.
      */
     void for_each_vcf_record(const function<void(size_t id, const vector<edge_t>& edges_of_the_record, const VcfRecord& record)>& callback);
 
     /**
-     * Given a path P, the procedure iterates over every VCF record R (and its non-reference edges) that is supported by
-     * P, i.e. such that P traverses a sequence of non-reference edges of R, or its reverse.
+     * Given a path P, the procedure iterates over every VCF record R (and all its non-reference edges) that is
+     * supported by P, i.e. such that P traverses a sequence of non-reference edges of R, or its reverse.
      *
      * @param path a sequence of pairs `(node_id, is_reverse)`; node IDs are assumed to come from the set of node IDs in
      * `graph`;
@@ -424,14 +426,15 @@ public:
     int32_t get_flank_boundary_right(const string& chromosome_id, int32_t pos, int32_t flank_length);
 
     /**
-     * A VCF record that is covered by `path` corresponds to a (not necessarily consecutive) sequence of non-reference
-     * edges in `path`. If `path` uses the VCF record multiple times, the same sequence of edges occurs multiple times
-     * in `path` (possibly in different orientations). Every such occurrence corresponds to an interval in the string
-     * that corresponds to `path`. The procedure pads every such interval to the left and to the right by `flank_length`
-     * positions, as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
+     * A VCF record that is covered by `path` can correspond to multiple sequences of (not necessarily consecutive) non-
+     * reference edges in `path`. If `path` uses the VCF record multiple times, the same sequence of edges may occur
+     * multiple times in `path` (possibly in different orientations). Every such occurrence corresponds to an interval
+     * in the string that corresponds to `path`. The procedure pads every such interval to the left and to the right by
+     * `flank_length` positions, as in procedures `get_flank_boundary_*()`. Padded intervals might overlap.
      *
-     * @param edges_of_the_record sequence of edges that represents the VCF record; assumed to be canonized and all
-     * distinct;
+     * @param edges_of_the_record a set of sequences of edges that corresponds to the VCF record, each terminated by
+     * `null_edge` like the rows of `vcf_record_to_edge`; the edges in each sequence are assumed to be canonized and
+     * all distinct;
      * @param out the procedure sets this array to the sorted list of padded intervals.
      */
     void vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<pair<int32_t, int32_t>>& out);
@@ -570,9 +573,9 @@ private:
     void mark_edge(const edge_t& query, size_t rank, const vector<edge_t>& edges, vector<size_t>& flags) const;
 
     /**
-     * Every VCF record corresponds to a sequence of non-reference edges. The procedure makes `out` the set of all
-     * VCF records whose sequence of non-reference edges (or its reverse) is identical to (if `identical=true`) or
-     * contained in (if `identical=false`) the given sequence of edges.
+     * Every VCF record corresponds to a set of sequences of non-reference edges. The procedure makes `out` the set of
+     * all VCF records such that a sequence of non-reference edges (or its reverse) is identical to (if
+     * `identical=true`) or contained in (if `identical=false`) the given sequence of edges.
      *
      * @param edges each edge can be represented in any orientation;
      * @param out positions in `vcf_records`, sorted.
