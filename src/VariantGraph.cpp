@@ -718,7 +718,7 @@ void VariantGraph::build_graph_closure(bool acyclic) {
             n_nonref_edges=vcf_record_to_edge.at(i).size();
             for (j=0; j<n_nonref_edges; j++) {
                 edge_t& edge = vcf_record_to_edge.at(i).at(j);
-                if (edge==NULL_EDGE) continue;
+                if (edge==null_edge) continue;
                 if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,edge.first,edge.second,vcf_record_to_edge_new,acyclic);
                 if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new,acyclic);
             }
@@ -785,7 +785,7 @@ void VariantGraph::build_graph_closure_update_edges_records(size_t vcf_record, c
     n_edges=old_edges.size();
     first=0;
     for (i=0; i<n_edges; i++) {
-        if (old_edges.at(i)!=NULL_EDGE) continue;
+        if (old_edges.at(i)!=null_edge) continue;
         found=false;
         for (j=first; j<i; j++) {
             if (old_edges.at(i)==old_edge) { found=true; break; }
