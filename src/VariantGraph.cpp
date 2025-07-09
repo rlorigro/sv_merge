@@ -770,16 +770,18 @@ bool VariantGraph::build_graph_closure_impl_create_edge(bool is_insertion, bool 
 
     create_edge=true;
     if (is_insertion) {
-        for (auto& record: edge_to_vcf_record.at(edge)) {
-            is_duplication_prime=record->sv_type==VcfReader::TYPE_DUPLICATION||record->sv_type==VcfReader::TYPE_CNV;
-            is_insertion_prime=record->sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
-            if (is_insertion_prime && record->pos==pos) { create_edge=false; break; }
+        for (auto& record_id: edge_to_vcf_record.at(edge)) {
+            VcfRecord& record = vcf_records.at(record_id);
+            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
+            is_insertion_prime=record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
+            if (is_insertion_prime && record.pos==pos) { create_edge=false; break; }
         }
     }
     if (!acyclic) {
         if (is_duplication) create_edge=false;
-        for (auto& record: edge_to_vcf_record.at(edge)) {
-            is_duplication_prime=record->sv_type==VcfReader::TYPE_DUPLICATION||record->sv_type==VcfReader::TYPE_CNV;
+        for (auto& record_id: edge_to_vcf_record.at(edge)) {
+            VcfRecord& record = vcf_records.at(record_id);
+            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
             if (is_duplication_prime) { create_edge=false; break; }
         }
     }
