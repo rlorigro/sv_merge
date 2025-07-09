@@ -518,7 +518,7 @@ private:
     /**
      * @return TRUE iff a new edge should be created by graph closure.
      */
-    bool build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t& edge, bool acyclic, int32_t pos);
+    bool build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t edge, bool acyclic, int32_t pos);
 
     /**
      * @param old_edge in canonical form;

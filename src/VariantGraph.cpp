@@ -349,7 +349,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     edge_to_vcf_record.clear(); if (n_vcf_records!=0) edge_to_vcf_record.reserve(n_vcf_records);
     if (n_vcf_records==0) { vcf_record_to_edge.clear(); return; }
     if (acyclic) interval_to_insertion_handle.clear();
-    null_edge.first=
+    null_edge.first={0}; null_edge.second={0};
 
     main_chromosome=vcf_records.at(0).chrom;
     main_chromosome_length=(int32_t)chromosomes.at(main_chromosome).length();
@@ -765,21 +765,21 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
 }
 
 
-bool VariantGraph::build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t& edge, bool acyclic, int32_t pos) {
+bool VariantGraph::build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t edge, bool acyclic, int32_t pos) {
     bool is_duplication_prime, is_insertion_prime, create_edge;
 
     create_edge=true;
     if (is_insertion) {
         for (auto& record: edge_to_vcf_record.at(edge)) {
-            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
-            is_insertion_prime=record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
-            if (is_insertion_prime && record.pos==pos) { create_edge=false; break; }
+            is_duplication_prime=record->sv_type==VcfReader::TYPE_DUPLICATION||record->sv_type==VcfReader::TYPE_CNV;
+            is_insertion_prime=record->sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
+            if (is_insertion_prime && record->pos==pos) { create_edge=false; break; }
         }
     }
     if (!acyclic) {
         if (is_duplication) create_edge=false;
         for (auto& record: edge_to_vcf_record.at(edge)) {
-            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
+            is_duplication_prime=record->sv_type==VcfReader::TYPE_DUPLICATION||record->sv_type==VcfReader::TYPE_CNV;
             if (is_duplication_prime) { create_edge=false; break; }
         }
     }
