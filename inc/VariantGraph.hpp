@@ -533,14 +533,14 @@ private:
      * @return the node (in forward orientation) that immediately precedes `node_handle` in its chromosome and that is
      * connected to it with an edge, if one exists; `node_handle` otherwise.
      */
-    handle_t& get_previous_reference_node(const handle_t& node_handle) const;
+    handle_t get_previous_reference_node(const handle_t& node_handle) const;
 
     /**
      * @param node_handle a reference node;
      * @return the node (in forward orientation) that immediately follows `node_handle` in its chromosome and that is
      * connected to it with an edge, if one exists; `node_handle` otherwise.
      */
-    handle_t& get_next_reference_node(const handle_t& node_handle) const;
+    handle_t get_next_reference_node(const handle_t& node_handle) const;
 
     /**
      * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.

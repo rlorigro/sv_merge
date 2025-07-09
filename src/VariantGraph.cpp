@@ -814,7 +814,7 @@ void VariantGraph::build_graph_closure_update_edges_records(size_t vcf_record, c
 }
 
 
-handle_t& VariantGraph::get_previous_reference_node(const handle_t& node_handle) const {
+handle_t VariantGraph::get_previous_reference_node(const handle_t& node_handle) const {
     const nid_t node_id = graph.get_id(node_handle);
     const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.find(node_id)->second.first);
     const size_t n_handles = handles_of_chromosome.size();
@@ -827,7 +827,7 @@ handle_t& VariantGraph::get_previous_reference_node(const handle_t& node_handle)
 }
 
 
-handle_t& VariantGraph::get_next_reference_node(const handle_t& node_handle) const {
+handle_t VariantGraph::get_next_reference_node(const handle_t& node_handle) const {
     const nid_t node_id = graph.get_id(node_handle);
     const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.find(node_id)->second.first);
     const size_t n_handles = handles_of_chromosome.size();
