@@ -105,7 +105,7 @@ public:
      * INV calls like replacements, and by not including any BND call; DUP/CNV calls (respectively, INV calls) with
      * identical intervals do not create duplicated nodes/edges.
      */
-    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {}, bool acyclic = false);
+    void build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length = INT32_MAX, int32_t x = INT32_MAX, int32_t y = INT32_MAX, bool deallocate_ref_alt = false, const vector<string>& callers = {}, bool acyclic = false, bool graph_closure = true);
 
     /**
      * If `p<q` (zero-based), the procedure builds a trivial graph that contains one node for string `chromosome[p..q)`
@@ -116,55 +116,6 @@ public:
      * before `p` and at or after `q`.
      */
     void build(const string& chromosome, int32_t p, int32_t q, int32_t flank_length);
-
-    /**
-     * Constructing a bidirected graph by considering each VCF record in isolation has the shortcoming that e.g. two
-     * consecutive DELs, or two consecutive replacements, or an INS and a DEL that start (or end) at the same position,
-     * cannot be both taken by a valid path (the latter is a configuration that might be used by a caller to represent a
-     * replacement). This is particularly problematic for SNPs, since they often occur consecutively.
-     *
-     * The procedure relaxes the graph built from each VCF record in isolation, as follows. Let `(from,to)` be a non-
-     * reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge `(from,y)` for
-     * every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
-     *
-     * Remark: this procedure allows to take an INS that precedes a position, after taking a BND to that position.
-     *
-     * Remark: the procedure does not create edges between INS's that occur at the same position, since this would give
-     * a quadratic number of new edges.
-     *
-     * Remark: closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
-     * be traversed again, i.e. its meaning is stronger than a new adjacency.
-     */
-    void build_graph_closure(bool acyclic);
-
-    /**
-     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
-     * creates;
-     * @return TRUE iff a new edge was created.
-     */
-    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic);
-
-    /**
-     * @param old_edge in canonical form;
-     * @param new_edge in canonical form;
-     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
-     * creates.
-     */
-    void build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new);
-
-    /**
-     * @param node_handle a reference node;
-     * @return the node (in forward orientation) that immediately precedes `node_handle` in its chromosome and that is
-     * connected to it with an edge, if one exists; `node_handle` otherwise.
-     */
-    handle_t& get_previous_reference_node(const handle_t& node_handle) const;
-
-    /**
-     * @param node_handle a reference node;
-     * @return the node (in forward orientation) that immediately follows `node_handle` in its chromosome and that is
-     * connected to it with an edge, if one exists; `node_handle` otherwise.
-     */
-    handle_t& get_next_reference_node(const handle_t& node_handle) const;
 
     /**
      * Two sequences of edges in `vcf_record_to_edge` are equivalent iff they have the same elements, and if such
@@ -534,6 +485,62 @@ private:
      * Removes duplicated positions from a list.
      */
     static inline void sort_and_compact_positions(vector<int32_t>& positions);
+
+    /**
+     * Constructing a bidirected graph by considering each VCF record in isolation has the shortcoming that e.g. two
+     * consecutive DELs, or two consecutive replacements, or an INS and a DEL that start (or end) at the same position,
+     * cannot be both taken by a valid path (the latter is a configuration that might be used by a caller to represent a
+     * replacement). This is particularly problematic for SNPs and short INDELs, since they often occur consecutively.
+     *
+     * The procedure relaxes the graph built from each VCF record in isolation, as follows. Let `(from,to)` be a non-
+     * reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge `(from,y)` for
+     * every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
+     *
+     * Remark: this procedure allows taking an INS that precedes a position, after taking a BND to that position.
+     *
+     * Remark: the procedure does not create edges between different INS nodes that occur at the same position, since
+     * this would give a quadratic number of new edges. The procedure does not create self-loops over the same INS node.
+     *
+     * Remark: closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
+     * be traversed again, i.e. its meaning is stronger than a new adjacency.
+     */
+    void build_graph_closure(bool acyclic);
+
+    /**
+     * The closure operation.
+     *
+     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
+     * creates;
+     * @return TRUE iff a new edge was created.
+     */
+    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic);
+
+    /**
+     * @return TRUE iff a new edge should be created by graph closure.
+     */
+    bool build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t& edge, bool acyclic, int32_t pos);
+
+    /**
+     * @param old_edge in canonical form;
+     * @param new_edge in canonical form;
+     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
+     * creates.
+     */
+    void build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new);
+
+    /**
+     * @param node_handle a reference node;
+     * @return the node (in forward orientation) that immediately precedes `node_handle` in its chromosome and that is
+     * connected to it with an edge, if one exists; `node_handle` otherwise.
+     */
+    handle_t& get_previous_reference_node(const handle_t& node_handle) const;
+
+    /**
+     * @param node_handle a reference node;
+     * @return the node (in forward orientation) that immediately follows `node_handle` in its chromosome and that is
+     * connected to it with an edge, if one exists; `node_handle` otherwise.
+     */
+    handle_t& get_next_reference_node(const handle_t& node_handle) const;
 
     /**
      * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.

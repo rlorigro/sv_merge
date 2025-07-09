@@ -336,7 +336,7 @@ handle_t VariantGraph::sequence2handle(const string& sequence, string& tmp_buffe
 }
 
 
-void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers, bool acyclic) {
+void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32_t interior_flank_length, int32_t x, int32_t y, bool deallocate_ref_alt, const vector<string>& callers, bool acyclic, bool graph_closure) {
     graph.clear();
     n_vcf_records=records.size();
     if (n_vcf_records!=0) this->vcf_records=std::move(records);
@@ -686,6 +686,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         for (auto& record: vcf_records) { record.ref.clear(); record.alt.clear(); }
     }
 
+    // Graph closure
+    if (graph_closure) build_graph_closure(acyclic);
+
     // Allocating temporary space: `printed`, `initialized`, `flags`.
     mark_redundant_records();
     printed.clear(); printed.reserve(n_vcf_records);
@@ -701,7 +704,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 void VariantGraph::build_graph_closure(bool acyclic) {
-    bool changed;
+    bool is_duplication, changed;
     uint8_t sv_type;
     size_t i, j;
     size_t n_nonref_edges;
@@ -712,7 +715,8 @@ void VariantGraph::build_graph_closure(bool acyclic) {
         changed=false;
         for (i=0; i<n_vcf_records; i++) {
             sv_type=vcf_records.at(i).sv_type;
-            if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) continue;
+            is_duplication=sv_type==VcfReader::TYPE_DUPLICATION||sv_type==VcfReader::TYPE_CNV;
+            if (!acyclic && is_duplication) continue;
             pos=vcf_records.at(i).pos;
             vcf_record_to_edge_new.clear();
             n_nonref_edges=vcf_record_to_edge.at(i).size();
@@ -730,20 +734,14 @@ void VariantGraph::build_graph_closure(bool acyclic) {
 
 
 bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic) {
-    bool create_edge;
+    const bool is_duplication = sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV;
+    const bool is_insertion = sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication);
 
     if (!graph.get_is_reverse(to)) {
         const handle_t& source = get_previous_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,false,[&](handle_t new_neighbor) {
-                create_edge=true;
-                if (sv_type==VcfReader::TYPE_INSERTION || (acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV))) {
-                    for (auto& record: edge_to_vcf_record.at(graph.edge_handle(source,new_neighbor))) {
-                        if (record.pos==pos && (record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && sv_type==VcfReader::TYPE_DUPLICATION))) { create_edge=false; break; }
-                    }
-                }
-                else if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) create_edge=false;
-                if (create_edge && !graph.has_edge(from,new_neighbor)) {
+                if (build_graph_closure_impl_create_edge(is_insertion,is_duplication,graph.edge_handle(source,new_neighbor),acyclic,pos) && !graph.has_edge(from,new_neighbor)) {
                     graph.create_edge(from,new_neighbor);
                     build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
                     return true;
@@ -755,14 +753,7 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
         const handle_t& source = get_next_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,true,[&](handle_t new_neighbor) {
-                create_edge=true;
-                if (sv_type==VcfReader::TYPE_INSERTION || (acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV))) {
-                    for (auto& record: edge_to_vcf_record.at(graph.edge_handle(graph.flip(source),new_neighbor))) {
-                        if (record.pos==pos && (record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && sv_type==VcfReader::TYPE_DUPLICATION))) { create_edge=false; break; }
-                    }
-                }
-                else if (!acyclic && (sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV)) create_edge=false;
-                if (create_edge && !graph.has_edge(from,new_neighbor)) {
+                if (build_graph_closure_impl_create_edge(is_insertion,is_duplication,graph.edge_handle(graph.flip(source),new_neighbor),acyclic,pos) && !graph.has_edge(from,new_neighbor)) {
                     graph.create_edge(from,new_neighbor);
                     build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
                     return true;
@@ -771,6 +762,28 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
         }
     }
     return false;
+}
+
+
+bool VariantGraph::build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t& edge, bool acyclic, int32_t pos) {
+    bool is_duplication_prime, is_insertion_prime, create_edge;
+
+    create_edge=true;
+    if (is_insertion) {
+        for (auto& record: edge_to_vcf_record.at(edge)) {
+            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
+            is_insertion_prime=record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
+            if (is_insertion_prime && record.pos==pos) { create_edge=false; break; }
+        }
+    }
+    if (!acyclic) {
+        if (is_duplication) create_edge=false;
+        for (auto& record: edge_to_vcf_record.at(edge)) {
+            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
+            if (is_duplication_prime) { create_edge=false; break; }
+        }
+    }
+    return create_edge;
 }
 
 
