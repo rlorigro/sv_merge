@@ -11,6 +11,9 @@ using bdsg::path_handle_t;
 using std::min;
 using std::max;
 using std::sort;
+using std::binary_search;
+using std::move;
+using std::make_move_iterator;
 using std::unique;
 using std::find;
 using std::distance;
@@ -687,6 +690,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     }
 
     // Graph closure
+    // --------------> sort edge_to_vcf_records and ensure that it remains sorted after every iteration of closure.
     if (graph_closure) build_graph_closure(acyclic);
 
     // Allocating temporary space: `printed`, `initialized`, `flags`.
@@ -704,47 +708,58 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 void VariantGraph::build_graph_closure(bool acyclic) {
-    bool is_duplication, changed;
-    uint8_t sv_type;
-    size_t i, j;
-    size_t n_nonref_edges;
-    int32_t pos;
-    vector<edge_t> vcf_record_to_edge_new;
+    size_t i;
+    vector<int32_t> tmp_vector;
+    vector<tuple<handle_t,handle_t,egde_t,edge_t>> new_edges;
+    vector<vector<edge_t>> vcf_record_to_edge_next;
 
+    vcf_record_to_edge_next.reserve(n_vcf_records);
+    for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.emplace_back();
     while (true) {
-        changed=false;
-        for (i=0; i<n_vcf_records; i++) {
-            sv_type=vcf_records.at(i).sv_type;
-            is_duplication=sv_type==VcfReader::TYPE_DUPLICATION||sv_type==VcfReader::TYPE_CNV;
-            if (!acyclic && is_duplication) continue;
-            pos=vcf_records.at(i).pos;
-            vcf_record_to_edge_new.clear();
-            n_nonref_edges=vcf_record_to_edge.at(i).size();
-            for (j=0; j<n_nonref_edges; j++) {
-                edge_t& edge = vcf_record_to_edge.at(i).at(j);
-                if (edge==null_edge) continue;
-                if (is_reference_node(edge.second)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,edge.first,edge.second,vcf_record_to_edge_new,acyclic);
-                if (is_reference_node(edge.first)) changed|=build_graph_closure_impl(i,sv_type,pos,edge,graph.flip(edge.second),graph.flip(edge.first),vcf_record_to_edge_new,acyclic);
-            }
-            vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),std::make_move_iterator(vcf_record_to_edge_new.begin()),std::make_move_iterator(vcf_record_to_edge_new.end()));
+        for (auto& pair: edge_to_vcf_record) {  // Non-reference edges
+            const edge_t& e1 = pair.first;
+            if (is_reference_node(e1.second)) build_graph_closure_impl(e1,true,acyclic,new_edges,tmp_vector);
+            if (is_reference_node(e1.first)) build_graph_closure_impl(e1,false,acyclic,new_edges,tmp_vector);
         }
-        if (!changed) break;
+        if (new_edges.empty()) break;
+        for (auto& t: new_edges) {
+            if (graph.has_edge(std::get<0>(t),std::get<1>(t))) continue;
+            graph.create_edge(std::get<0>(t),std::get<1>(t));
+            edge_t& e1 = std::get<2>(t);
+            edge_t& e2 = std::get<3>(t);
+            egde_t& new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
+            for (auto& record_id: edge_to_vcf_record[e1]) {
+                if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={record_id};
+                else edge_to_vcf_record.at(new_edge).emplace_back(record_id);
+                build_graph_closure_update_vcf_record_to_edge(record_id,e1,new_edge,vcf_record_to_edge_next);
+            }
+            for (auto& record_id: edge_to_vcf_record[e2]) {
+                if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={record_id};
+                else edge_to_vcf_record.at(new_edge).emplace_back(record_id);
+                build_graph_closure_update_vcf_record_to_edge(record_id,e2,new_edge,vcf_record_to_edge_next);
+            }
+        }
+        for (i=0; i<n_vcf_records; i++) {
+            if (!vcf_record_to_edge_next.at(i).empty()) vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),make_move_iterator(vcf_record_to_edge_next.at(i).begin()),make_move_iterator(vcf_record_to_edge_next.at(i).end()));
+        }
+        new_edges.clear();
+        for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.at(i).clear();
     }
 }
 
 
-bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic) {
-    const bool is_duplication = sv_type==VcfReader::TYPE_DUPLICATION || sv_type==VcfReader::TYPE_CNV;
-    const bool is_insertion = sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication);
+void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos) {
+    const handle_t& from = orientation?e1.first:e1.second;
+    const handle_t& to = orientation?graph.flip(e1.second):graph.flip(e1.first);
 
     if (!graph.get_is_reverse(to)) {
         const handle_t& source = get_previous_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,false,[&](handle_t new_neighbor) {
-                if (build_graph_closure_impl_create_edge(is_insertion,is_duplication,graph.edge_handle(source,new_neighbor),acyclic,pos) && !graph.has_edge(from,new_neighbor)) {
-                    graph.create_edge(from,new_neighbor);
-                    build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
-                    return true;
+                const edge_t& e2 = graph.edge_handle(source,new_neighbor);
+                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
+                    new_edges.emplace_back(from,new_neighbor,e1,e2);
+                    return;
                 }
             });
         }
@@ -753,50 +768,56 @@ bool VariantGraph::build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, 
         const handle_t& source = get_next_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,true,[&](handle_t new_neighbor) {
-                if (build_graph_closure_impl_create_edge(is_insertion,is_duplication,graph.edge_handle(graph.flip(source),new_neighbor),acyclic,pos) && !graph.has_edge(from,new_neighbor)) {
-                    graph.create_edge(from,new_neighbor);
-                    build_graph_closure_update_edges_records(vcf_record,old_edge,graph.edge_handle(from,new_neighbor),vcf_record_to_edge_new);
-                    return true;
+                const edge_t& e2 = graph.edge_handle(graph.flip(source),new_neighbor);
+                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
+                    new_edges.emplace_back(from,new_neighbor,e1,e2);
+                    return;
                 }
             });
         }
     }
-    return false;
 }
 
 
-bool VariantGraph::build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t edge, bool acyclic, int32_t pos) {
-    bool is_duplication_prime, is_insertion_prime, create_edge;
+bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos) {
+    bool i1, i2, d1, d2;
+    bool is_insertion_1, is_insertion_2, is_duplication_1, is_duplication_2;
 
-    create_edge=true;
-    if (is_insertion) {
-        for (auto& record_id: edge_to_vcf_record.at(edge)) {
-            VcfRecord& record = vcf_records.at(record_id);
-            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
-            is_insertion_prime=record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_prime);
-            if (is_insertion_prime && record.pos==pos) { create_edge=false; break; }
-        }
+    is_insertion_1=false; is_duplication_1=false; tmp_pos.clear();
+    for (auto& record_id: edge_to_vcf_record.at(e1)) {
+        VcfRecord& record = vcf_records.at(record_id);
+        d1 = record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV;
+        i1 = record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && d1);
+        if (i1) { is_insertion_1=true; tmp_pos.emplace_back(record.pos); }
+        if (d1) is_duplication_1=true;
     }
+    sort_and_compact_positions(tmp_pos);
     if (!acyclic) {
-        if (is_duplication) create_edge=false;
-        for (auto& record_id: edge_to_vcf_record.at(edge)) {
+        if (is_duplication_1) return false;
+        for (auto& record_id: edge_to_vcf_record.at(e2)) {
             VcfRecord& record = vcf_records.at(record_id);
-            is_duplication_prime=record.sv_type==VcfReader::TYPE_DUPLICATION||record.sv_type==VcfReader::TYPE_CNV;
-            if (is_duplication_prime) { create_edge=false; break; }
+            if (record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV) return false;
         }
     }
-    return create_edge;
+    if (is_insertion_1) {
+        for (auto& record_id: edge_to_vcf_record.at(e2)) {
+            VcfRecord& record = vcf_records.at(record_id);
+            is_duplication_2 = record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_CNV;
+            is_insertion_2 = record.sv_type==VcfReader::TYPE_INSERTION || (acyclic && is_duplication_2);
+            if (is_insertion_2 && binary_search(tmp_pos.begin(),tmp_pos.end(),record.pos)) return false;
+        }
+    }
+    return true;
 }
 
 
-void VariantGraph::build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new) {
+void VariantGraph::build_graph_closure_update_vcf_record_to_edge(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next) {
     bool found;
     size_t i, j;
     size_t first, n_edges;
 
-    if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={vcf_record};
-    else edge_to_vcf_record.at(new_edge).emplace_back(vcf_record);
     const vector<edge_t>& old_edges = vcf_record_to_edge.at(vcf_record);
+    vector<edge_t>& new_edges = vcf_record_to_edge_next.at(vcf_record);
     n_edges=old_edges.size();
     first=0;
     for (i=0; i<n_edges; i++) {
@@ -807,8 +828,8 @@ void VariantGraph::build_graph_closure_update_edges_records(size_t vcf_record, c
         }
         if (found) {
             for (j=first; j<=i; j++) {
-                if (old_edges.at(i)==old_edge) vcf_record_to_edge_new.emplace_back(new_edge);
-                else vcf_record_to_edge_new.emplace_back(old_edge);
+                if (old_edges.at(i)==old_edge) new_edges.emplace_back(new_edge);
+                else new_edges.emplace_back(old_edge);
             }
         }
         first=i+1;

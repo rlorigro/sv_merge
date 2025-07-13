@@ -492,41 +492,41 @@ private:
      * cannot be both taken by a valid path (the latter is a configuration that might be used by a caller to represent a
      * replacement). This is particularly problematic for SNPs and short INDELs, since they often occur consecutively.
      *
-     * The procedure relaxes the graph built from each VCF record in isolation, as follows. Let `(from,to)` be a non-
-     * reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge `(from,y)` for
-     * every `(x,y)` such that `x` is the reference node that precedes `to` in its chromosome.
+     * The procedure adds more edges to the graph built from each VCF record in isolation, as follows. Let `e1=(from,
+     * to)` be a non-reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge
+     * `(from,y)` for every `e2=(x,y)` such that `x` is the reference node that precedes `to` in its chromosome, if any.
      *
      * Remark: this procedure allows taking an INS that precedes a position, after taking a BND to that position.
-     *
-     * Remark: the procedure does not create edges between different INS nodes that occur at the same position, since
-     * this would give a quadratic number of new edges. The procedure does not create self-loops over the same INS node.
-     *
-     * Remark: closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
-     * be traversed again, i.e. its meaning is stronger than a new adjacency.
      */
     void build_graph_closure(bool acyclic);
 
     /**
-     * The closure operation.
+     * The closure operation applied to edge `e1` taken in the forward (`orientation=TRUE`) or reverse orientation.
+     * The procedure does not create new edges: it just appends instructions to `new_edges`.
      *
-     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
-     * creates;
-     * @return TRUE iff a new edge was created.
+     * @param e1 in canonical form;
+     * @param tmp_pos temporary space.
      */
-    bool build_graph_closure_impl(size_t vcf_record, uint8_t sv_type, int32_t pos, const edge_t& old_edge, const handle_t& from, const handle_t& to, vector<edge_t>& vcf_record_to_edge_new, bool acyclic);
+    void build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos);
 
     /**
+     * - No new edges are created that connect different INS nodes that occur at the same position, since this would
+     *   give a quadratic number of new edges.
+     * - Self-loops over the same INS node are not created.
+     * - Closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
+     *   be traversed again, i.e. its meaning is stronger than a new adjacency.
+     * - Closure cannot involve two edges that belong to the same VCF record.
+     *
+     * @param e1, e2 in canonical form;
+     * @param tmp_pos temporary space;
      * @return TRUE iff a new edge should be created by graph closure.
      */
-    bool build_graph_closure_impl_create_edge(bool is_insertion, bool is_duplication, edge_t edge, bool acyclic, int32_t pos);
+    bool build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos);
 
     /**
-     * @param old_edge in canonical form;
-     * @param new_edge in canonical form;
-     * @param vcf_record_to_edge_new the procedure appends to this list every new sequence of edges of `vcf_record` it
-     * creates.
+     * @param old_edge, new_edge in canonical form.
      */
-    void build_graph_closure_update_edges_records(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<edge_t>& vcf_record_to_edge_new);
+    void build_graph_closure_update_vcf_record_to_edge(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
 
     /**
      * @param node_handle a reference node;
