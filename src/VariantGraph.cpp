@@ -718,7 +718,7 @@ void VariantGraph::build_graph_closure(bool acyclic) {
     vector<int32_t> tmp_vector;
     vector<tuple<handle_t,handle_t,edge_t,edge_t>> edge_instructions;
     vector<vector<edge_t>> vcf_record_to_edge_next;
-    set<edge_t> new_edges;
+    unordered_set<edge_t> new_edges;
 
     for (auto& pair: edge_to_vcf_record) {
         if (pair.second.size()>1) sort(pair.second.begin(),pair.second.end());
