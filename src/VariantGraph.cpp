@@ -793,7 +793,7 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
 }
 
 
-bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos) {
+bool VariantGraph::build_graph_closure_should_create_edge(const edge_t& e1, const edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos) {
     bool i1, i2, d1, d2;
     bool is_insertion_1, is_insertion_2, is_duplication_1, is_duplication_2;
     int32_t p, q;
