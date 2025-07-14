@@ -526,7 +526,7 @@ private:
      * @param tmp_pos temporary space;
      * @return TRUE iff a new edge should be created by graph closure.
      */
-    bool build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos);
+    bool build_graph_closure_should_create_edge(const edge_t& e1, const edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos);
 
     /**
      * For every sequence of edges of `vcf_record` that contains `old_edge`, the procedure creates a new sequence of
