@@ -496,13 +496,15 @@ private:
      * to)` be a non-reference edge of a VCF record, where `to` is a reference node. The procedure creates an edge
      * `(from,y)` for every `e2=(x,y)` such that `x` is the reference node that precedes `to` in its chromosome, if any.
      *
-     * Remark: this procedure allows taking an INS that precedes a position, after taking a BND to that position.
+     * Remark: the procedure allows taking an INS that precedes a position, after taking a BND to that position.
+     *
+     * @param acyclic same as in `build()`.
      */
     void build_graph_closure(bool acyclic);
 
     /**
      * The closure operation applied to edge `e1` taken in the forward (`orientation=TRUE`) or reverse orientation.
-     * The procedure does not create new edges: it just appends instructions to `new_edges`.
+     * The procedure does not create new edges: it just appends instructions to `new_edges` as tuples `(from,to,e1,e2)`.
      *
      * @param e1 in canonical form;
      * @param tmp_pos temporary space.
@@ -510,12 +512,15 @@ private:
     void build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos);
 
     /**
-     * - No new edges are created that connect different INS nodes that occur at the same position, since this would
-     *   give a quadratic number of new edges.
-     * - Self-loops over the same INS node are not created.
+     * Decides if closure should be applied to `e1,e2`:
+     * - Closure cannot involve two edges that are assigned to the same VCF record.
+     * - Closure does not create new edges that connect different INS nodes that occur at the same position, since this
+     *   would give a quadratic number of new edges at that position.
+     * - Closure does not create self-loops over the same INS node.
      * - Closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
      *   be traversed again, i.e. its meaning is stronger than a new adjacency.
-     * - Closure cannot involve two edges that belong to the same VCF record.
+     *
+     * Remark: the procedure assumes that the `edge_to_vcf_record` arrays are sorted.
      *
      * @param e1, e2 in canonical form;
      * @param tmp_pos temporary space;
@@ -524,9 +529,12 @@ private:
     bool build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos);
 
     /**
+     * For every sequence of edges of `vcf_record` that contains `old_edge`, the procedure creates a new sequence of
+     * edges that contains `new_edge`.
+     *
      * @param old_edge, new_edge in canonical form.
      */
-    void build_graph_closure_update_vcf_record_to_edge(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
+    void build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
 
     /**
      * @param node_handle a reference node;

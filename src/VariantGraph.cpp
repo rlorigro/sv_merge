@@ -20,6 +20,7 @@ using std::distance;
 using std::to_string;
 using std::streamsize;
 using std::toupper;
+using std::set;
 
 
 namespace sv_merge {
@@ -690,7 +691,6 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     }
 
     // Graph closure
-    // --------------> sort edge_to_vcf_records and ensure that it remains sorted after every iteration of closure.
     if (graph_closure) build_graph_closure(acyclic);
 
     // Allocating temporary space: `printed`, `initialized`, `flags`.
@@ -707,27 +707,38 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 }
 
 
+/**
+ * Closure is applied in phases, until no new edge is created.
+ *
+ * Remark: if an edge is relaxed in one iteration of closure, it is not skipped in the following iterations, since it
+ * might get connected to new nodes.
+ */
 void VariantGraph::build_graph_closure(bool acyclic) {
     size_t i;
     vector<int32_t> tmp_vector;
-    vector<tuple<handle_t,handle_t,egde_t,edge_t>> new_edges;
+    vector<tuple<handle_t,handle_t,egde_t,edge_t>> edge_instructions;
     vector<vector<edge_t>> vcf_record_to_edge_next;
+    set<edge_t> new_edges;
 
+    for (auto& pair: edge_to_vcf_record) {
+        if (pair.second.size()>1) sort(pair.second.begin(),pair.second.end());
+    }
     vcf_record_to_edge_next.reserve(n_vcf_records);
     for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.emplace_back();
     while (true) {
-        for (auto& pair: edge_to_vcf_record) {  // Non-reference edges
+        for (auto& pair: edge_to_vcf_record) {  // Every non-reference edge
             const edge_t& e1 = pair.first;
-            if (is_reference_node(e1.second)) build_graph_closure_impl(e1,true,acyclic,new_edges,tmp_vector);
-            if (is_reference_node(e1.first)) build_graph_closure_impl(e1,false,acyclic,new_edges,tmp_vector);
+            if (is_reference_node(e1.second)) build_graph_closure_impl(e1,true,acyclic,edge_instructions,tmp_vector);
+            if (is_reference_node(e1.first)) build_graph_closure_impl(e1,false,acyclic,edge_instructions,tmp_vector);
         }
-        if (new_edges.empty()) break;
-        for (auto& t: new_edges) {
-            if (graph.has_edge(std::get<0>(t),std::get<1>(t))) continue;
+        if (edge_instructions.empty()) break;
+        for (auto& t: edge_instructions) {
+            // `edge_instructions` is guaranteed to contain edges that are not in `graph`.
             graph.create_edge(std::get<0>(t),std::get<1>(t));
+            egde_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
+            new_edges.insert(new_edge);
             edge_t& e1 = std::get<2>(t);
             edge_t& e2 = std::get<3>(t);
-            egde_t& new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
             for (auto& record_id: edge_to_vcf_record[e1]) {
                 if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={record_id};
                 else edge_to_vcf_record.at(new_edge).emplace_back(record_id);
@@ -739,24 +750,27 @@ void VariantGraph::build_graph_closure(bool acyclic) {
                 build_graph_closure_update_vcf_record_to_edge(record_id,e2,new_edge,vcf_record_to_edge_next);
             }
         }
+        for (auto& edge: new_edges) {
+            if (edge_to_vcf_record.at(edge).size()>1) sort(edge_to_vcf_record.at(edge).begin(),edge_to_vcf_record.at(edge).end());
+        }
+        new_edges.clear(); edge_instructions.clear();
         for (i=0; i<n_vcf_records; i++) {
             if (!vcf_record_to_edge_next.at(i).empty()) vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),make_move_iterator(vcf_record_to_edge_next.at(i).begin()),make_move_iterator(vcf_record_to_edge_next.at(i).end()));
         }
-        new_edges.clear();
         for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.at(i).clear();
     }
 }
 
 
 void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos) {
-    const handle_t& from = orientation?e1.first:e1.second;
-    const handle_t& to = orientation?graph.flip(e1.second):graph.flip(e1.first);
+    const handle_t& from = orientation?e1.first:graph.flip(e1.second);
+    const handle_t& to = orientation?e1.second:graph.flip(e1.first);
 
     if (!graph.get_is_reverse(to)) {
         const handle_t& source = get_previous_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,false,[&](handle_t new_neighbor) {
-                const edge_t& e2 = graph.edge_handle(source,new_neighbor);
+                const edge_t e2 = graph.edge_handle(source,new_neighbor);
                 if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
                     new_edges.emplace_back(from,new_neighbor,e1,e2);
                     return;
@@ -768,7 +782,7 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
         const handle_t& source = get_next_reference_node(to);
         if (source!=to) {
             graph.follow_edges(source,true,[&](handle_t new_neighbor) {
-                const edge_t& e2 = graph.edge_handle(graph.flip(source),new_neighbor);
+                const edge_t e2 = graph.edge_handle(graph.flip(source),new_neighbor);
                 if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
                     new_edges.emplace_back(from,new_neighbor,e1,e2);
                     return;
@@ -782,7 +796,19 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
 bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos) {
     bool i1, i2, d1, d2;
     bool is_insertion_1, is_insertion_2, is_duplication_1, is_duplication_2;
+    int32_t p, q;
 
+    // Checking if e1 and e1 share a VCF record
+    vector<int32_t>& v1 = edge_to_vcf_record.at(e1);
+    vector<int32_t>& v2 = edge_to_vcf_record.at(e2);
+    p=0; q=0;
+    while (p<v1.size() && q<v2.size()) {
+        if (v1.at(p)<v2.at(q)) p++;
+        else if (v1.at(p)>v2.at(q)) q++;
+        else return false;
+    }
+
+    // Collecting info on e1
     is_insertion_1=false; is_duplication_1=false; tmp_pos.clear();
     for (auto& record_id: edge_to_vcf_record.at(e1)) {
         VcfRecord& record = vcf_records.at(record_id);
@@ -792,6 +818,8 @@ bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2
         if (d1) is_duplication_1=true;
     }
     sort_and_compact_positions(tmp_pos);
+
+    // INS/DUP logic
     if (!acyclic) {
         if (is_duplication_1) return false;
         for (auto& record_id: edge_to_vcf_record.at(e2)) {
@@ -811,10 +839,11 @@ bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2
 }
 
 
-void VariantGraph::build_graph_closure_update_vcf_record_to_edge(size_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next) {
+void VariantGraph::build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next) {
     bool found;
-    size_t i, j;
-    size_t first, n_edges;
+    int32_t i, j;
+    int32_t first;
+    size_t n_edges;
 
     const vector<edge_t>& old_edges = vcf_record_to_edge.at(vcf_record);
     vector<edge_t>& new_edges = vcf_record_to_edge_next.at(vcf_record);
@@ -839,9 +868,9 @@ void VariantGraph::build_graph_closure_update_vcf_record_to_edge(size_t vcf_reco
 
 handle_t VariantGraph::get_previous_reference_node(const handle_t& node_handle) const {
     const nid_t node_id = graph.get_id(node_handle);
-    const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.find(node_id)->second.first);
+    const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.at(node_id).first);
     const size_t n_handles = handles_of_chromosome.size();
-    size_t i;
+    int32_t i;
 
     for (i=1; i<n_handles; i++) {
         if (graph.get_id(handles_of_chromosome.at(i))==node_id && graph.has_edge(handles_of_chromosome.at(i-1),handles_of_chromosome.at(i))) return handles_of_chromosome.at(i-1);
@@ -852,9 +881,9 @@ handle_t VariantGraph::get_previous_reference_node(const handle_t& node_handle) 
 
 handle_t VariantGraph::get_next_reference_node(const handle_t& node_handle) const {
     const nid_t node_id = graph.get_id(node_handle);
-    const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.find(node_id)->second.first);
+    const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.at(node_id).first);
     const size_t n_handles = handles_of_chromosome.size();
-    size_t i;
+    int32_t i;
 
     for (i=n_handles-2; i>=0; i--) {
         if (graph.get_id(handles_of_chromosome.at(i))==node_id && graph.has_edge(handles_of_chromosome.at(i),handles_of_chromosome.at(i+1))) return handles_of_chromosome.at(i+1);
