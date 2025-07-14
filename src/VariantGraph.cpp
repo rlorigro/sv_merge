@@ -716,7 +716,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 void VariantGraph::build_graph_closure(bool acyclic) {
     size_t i;
     vector<int32_t> tmp_vector;
-    vector<tuple<handle_t,handle_t,egde_t,edge_t>> edge_instructions;
+    vector<tuple<handle_t,handle_t,edge_t,edge_t>> edge_instructions;
     vector<vector<edge_t>> vcf_record_to_edge_next;
     set<edge_t> new_edges;
 
@@ -735,7 +735,7 @@ void VariantGraph::build_graph_closure(bool acyclic) {
         for (auto& t: edge_instructions) {
             // `edge_instructions` is guaranteed to contain edges that are not in `graph`.
             graph.create_edge(std::get<0>(t),std::get<1>(t));
-            egde_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
+            edge_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
             new_edges.insert(new_edge);
             edge_t& e1 = std::get<2>(t);
             edge_t& e2 = std::get<3>(t);
@@ -762,7 +762,7 @@ void VariantGraph::build_graph_closure(bool acyclic) {
 }
 
 
-void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos) {
+void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,edge_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos) {
     const handle_t& from = orientation?e1.first:graph.flip(e1.second);
     const handle_t& to = orientation?e1.second:graph.flip(e1.first);
 
@@ -799,8 +799,8 @@ bool VariantGraph::build_graph_closure_should_create_edge(edge_t& e1, edge_t& e2
     int32_t p, q;
 
     // Checking if e1 and e1 share a VCF record
-    vector<int32_t>& v1 = edge_to_vcf_record.at(e1);
-    vector<int32_t>& v2 = edge_to_vcf_record.at(e2);
+    vector<size_t>& v1 = edge_to_vcf_record.at(e1);
+    vector<size_t>& v2 = edge_to_vcf_record.at(e2);
     p=0; q=0;
     while (p<v1.size() && q<v2.size()) {
         if (v1.at(p)<v2.at(q)) p++;

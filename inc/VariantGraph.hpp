@@ -509,7 +509,7 @@ private:
      * @param e1 in canonical form;
      * @param tmp_pos temporary space.
      */
-    void build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,egde_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos);
+    void build_graph_closure_impl(const edge_t& e1, bool orientation, bool acyclic, vector<tuple<handle_t,handle_t,edge_t,edge_t>>& new_edges, vector<int32_t>& tmp_pos);
 
     /**
      * Decides if closure should be applied to `e1,e2`:
