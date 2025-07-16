@@ -455,6 +455,20 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
 }
 
 
+void print_gfa_colors(ofstream& out) {
+    const string COLOR_REF = "gray";
+    const string COLOR_INS = "red";
+    const string COLOR_REP = "green";
+
+    int32_t i;
+
+    out << "Name,Colour\n";
+    for (i=1; i<=49; i++) out << to_string(i) << "," << COLOR_REF << "\n";
+    for (i=1; i<=8; i++) out << "ins" << to_string(i) << "," << COLOR_INS << "\n";
+    for (i=1; i<=12; i++) out << "rep" << to_string(i) << "," << COLOR_REP << "\n";
+}
+
+
 unordered_map<string,string> get_chromosomes() {
     unordered_map<string,string> out;
     out.emplace("chr1","AAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
@@ -653,6 +667,7 @@ int main(int argc, char* argv[]) {
 
     const path INPUT_VCF = ROOT_DIR/"input.vcf";
     const path TRUTH_GFA = ROOT_DIR/"truth.gfa";
+    const path TRUTH_GFA_COLORS = ROOT_DIR/"truth.csv";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t FLANK_LENGTH = INT32_MAX;
     const int32_t INTERIOR_FLANK_LENGTH = INT32_MAX;
@@ -665,6 +680,10 @@ int main(int argc, char* argv[]) {
     ofstream truth_gfa(TRUTH_GFA.string());
     print_truth_gfa(truth_gfa,CLOSURE_1==1,CLOSURE_2==1);
     truth_gfa.close();
+    ofstream truth_gfa_colors(TRUTH_GFA_COLORS.string());
+    print_gfa_colors(truth_gfa_colors);
+    truth_gfa_colors.close();
+
 
 //    const unordered_map<string,string> chromosomes = get_chromosomes();
 //    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
