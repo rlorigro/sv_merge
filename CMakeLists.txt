@@ -632,6 +632,7 @@ set(TESTS
         test_variantgraph
         test_variantgraph_snp
         test_variantgraph_acyclic
+        test_variantgraph_closure
         )
 
 
