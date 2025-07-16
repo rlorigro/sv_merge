@@ -447,6 +447,7 @@ if (dev)
     # Download or update library as an external project
     ExternalProject_Add(project_bdsg
             GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            GIT_TAG 35ed743efdb0ac96e0c139085a7c16b8d3885850
             DOWNLOAD_COMMAND ""
             UPDATE_COMMAND ""
             PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
@@ -459,6 +460,7 @@ else()
     # Download or update library as an external project
     ExternalProject_Add(project_bdsg
             GIT_REPOSITORY https://github.com/vgteam/libbdsg.git
+            GIT_TAG 35ed743efdb0ac96e0c139085a7c16b8d3885850
             PREFIX ${CMAKE_SOURCE_DIR}/external/bdsg/
             CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_SOURCE_DIR}/external/bdsg/ -DRUN_DOXYGEN=OFF -DBUILD_PYTHON_BINDINGS=OFF
             BUILD_IN_SOURCE True

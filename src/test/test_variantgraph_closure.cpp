@@ -2,6 +2,7 @@
 #include "VariantGraph.hpp"
 #include "misc.hpp"
 
+using std::stoi;
 using sv_merge::interval_t;
 using sv_merge::run_command;
 using sv_merge::VcfReader;
@@ -12,6 +13,7 @@ using bdsg::HashGraph;
 #include <iostream>
 #include <algorithm>
 #include <random>
+
 
 using std::ofstream;
 
@@ -636,8 +638,8 @@ unordered_map<string,vector<interval_t>> get_tandem_track() {
 
 int main(int argc, char* argv[]) {
     const path ROOT_DIR = path(argv[1]);
-    const bool CLOSURE_1 = bool(argv[2]);
-    const bool CLOSURE_2 = bool(argv[3]);
+    const int32_t CLOSURE_1 = stoi(argv[2]);
+    const int32_t CLOSURE_2 = stoi(argv[3]);
 
     const path INPUT_VCF = ROOT_DIR/"input.vcf";
     const path TRUTH_GFA = ROOT_DIR/"truth.gfa";
@@ -651,7 +653,7 @@ int main(int argc, char* argv[]) {
     print_truth_vcf(input_vcf);
     input_vcf.close();
     ofstream truth_gfa(TRUTH_GFA.string());
-    print_truth_gfa(truth_gfa,CLOSURE_1,CLOSURE_2);
+    print_truth_gfa(truth_gfa,CLOSURE_1==1,CLOSURE_2==1);
     truth_gfa.close();
 
 //    const unordered_map<string,string> chromosomes = get_chromosomes();
