@@ -196,6 +196,8 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
     out << "L\t8\t+\t8\t+\t*\n";
     out << "L\t8\t+\tins5\t+\t*\n";
     out << "L\t8\t+\tins6\t+\t*\n";
+    out << "L\tins5\t+\t9\t+\t*\n";
+    out << "L\tins6\t+\t9\t+\t*\n";
     out << "L\t9\t+\t9\t+\t*\n";
     if (closure1) {
         // NOP
@@ -259,8 +261,12 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
 
     // Block 2
     out << "S\t18\tCCCCC\n";
+    out << "S\trep5\tAAAAA\n";
+    out << "S\trep6\tGGGGG\n";
     out << "S\t19\tCCCCC\n";
     out << "S\t20\tCCCCC\n";
+    out << "S\trep7\tAAAAA\n";
+    out << "S\trep8\tGGGGG\n";
     out << "S\t21\tCCCCCGGGGG\n";
     // Before closure
     out << "L\t17\t+\t18\t+\t*\n";
@@ -332,6 +338,8 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
     // REP section
     // Block 1
     out << "S\t30\tAAAAA\n";
+    out << "S\trep9\tCCCCC\n";
+    out << "S\trep10\tGGGGG\n";
     out << "S\t31\tAAAAA\n";
     out << "S\t32\tAAAAA\n";
     out << "S\t33\tAAAAACCCCC\n";
@@ -361,6 +369,8 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
     // Block 2
     out << "S\t34\tCCCCC\n";
     out << "S\t35\tCCCCC\n";
+    out << "S\trep11\tAAAAA\n";
+    out << "S\trep12\tCCCCC\n";
     out << "S\t36\tCCCCC\n";
     out << "S\t37\tCCCCCGGGGG\n";
     // Before closure
