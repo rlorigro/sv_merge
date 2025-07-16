@@ -169,11 +169,11 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
         out << "L\trep1\t+\tins3\t+\t*\n";
         out << "L\trep1\t+\tins4\t+\t*\n";
         out << "L\trep1\t+\trep3\t+\t*\n";
-        out << "L\trep1\t+\tins4\t+\t*\n";
+        out << "L\trep1\t+\trep4\t+\t*\n";
         out << "L\trep2\t+\tins3\t+\t*\n";
         out << "L\trep2\t+\tins4\t+\t*\n";
         out << "L\trep2\t+\trep3\t+\t*\n";
-        out << "L\trep2\t+\tins4\t+\t*\n";
+        out << "L\trep2\t+\trep4\t+\t*\n";
         out << "L\tins3\t+\trep3\t+\t*\n";
         out << "L\tins3\t+\trep4\t+\t*\n";
         out << "L\tins4\t+\trep3\t+\t*\n";
