@@ -498,6 +498,8 @@ private:
      *
      * Remark: the procedure allows taking an INS that precedes a position, after taking a BND to that position.
      *
+     * Remark: two consecutive INV give rise to a DEL. This is an artefact of closure but we don't explicitly forbid it.
+     *
      * @param acyclic same as in `build()`.
      */
     void build_graph_closure(bool acyclic);
