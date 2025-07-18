@@ -670,6 +670,8 @@ int main(int argc, char* argv[]) {
     const path TRUTH_GFA_COLORS = ROOT_DIR/"truth.csv";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t SIGNATURE_N_STEPS = 10;
+    const int32_t FLANK_LENGTH = 5;
+    const int32_t INTERIOR_FLANK_LENGTH = 5;
 
     // Printing truth files
     ofstream input_vcf(INPUT_VCF.string());
@@ -697,6 +699,7 @@ int main(int argc, char* argv[]) {
     });
     const size_t n_records = records.size();
     VariantGraph graph(chromosomes,tandem_track);
+    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH);
 
     cerr << "Testing to_gfa(): node sequences...\n";
     graph.to_gfa(TEST_GFA);
