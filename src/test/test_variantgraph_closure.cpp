@@ -669,10 +669,9 @@ int main(int argc, char* argv[]) {
     const path TRUTH_GFA = ROOT_DIR/"truth.gfa";
     const path TRUTH_GFA_COLORS = ROOT_DIR/"truth.csv";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
-    const int32_t FLANK_LENGTH = INT32_MAX;
-    const int32_t INTERIOR_FLANK_LENGTH = INT32_MAX;
     const int32_t SIGNATURE_N_STEPS = 10;
 
+    // Printing truth files
     ofstream input_vcf(INPUT_VCF.string());
     print_truth_vcf_header(input_vcf);
     print_truth_vcf(input_vcf);
@@ -684,44 +683,57 @@ int main(int argc, char* argv[]) {
     print_gfa_colors(truth_gfa_colors);
     truth_gfa_colors.close();
 
+    const unordered_map<string,string> chromosomes = get_chromosomes();
+    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
+    string command;
 
-//    const unordered_map<string,string> chromosomes = get_chromosomes();
-//    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
-//    string command;
-//
-//    vector<VcfRecord> records;
-//    VcfReader reader(INPUT_VCF);
-//    reader.for_record_in_vcf([&](VcfRecord& record) {
-//        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
-//             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
-//           ) return;
-//        records.push_back(record);
-//    });
-//    const size_t n_records = records.size();
-//    VariantGraph graph(chromosomes,tandem_track);
-//
-//    cerr << "Testing acyclic GFA...\n";
-//    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH,INT32_MAX,INT32_MAX,false,{},true);
-//    ofstream test_gfa(TEST_GFA.string());
-//    graph.to_gfa(TEST_GFA);
-//    test_gfa.close();
-//
-//    cerr << "Testing nodes...\n";
-//    command.clear(); command.append("grep ^S "+TRUTH_GFA.string()+" | cut -f 1,3 | sort > tmp1.txt"); run_command(command);
-//    command.clear(); command.append("grep ^S "+TEST_GFA.string()+" | cut -f 1,3 | sort > tmp2.txt"); run_command(command);
-//    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-//
-//    cerr << "Testing n. edges...\n";
-//    command.clear(); command.append("grep ^L "+TRUTH_GFA.string()+" | wc -l > tmp1.txt"); run_command(command);
-//    command.clear(); command.append("grep ^L "+TEST_GFA.string()+" | wc -l > tmp2.txt"); run_command(command);
-//    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-//
-//    cerr << "Testing local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
-//    graph.print_graph_signature(SIGNATURE_N_STEPS,"tmp1.txt");
-//    graph.load_gfa(TRUTH_GFA);
-//    graph.print_graph_signature(SIGNATURE_N_STEPS,"tmp2.txt");
-//    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
-//
+    vector<VcfRecord> records;
+    VcfReader reader(INPUT_VCF);
+    reader.for_record_in_vcf([&](VcfRecord& record) {
+        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
+           ) return;
+        records.push_back(record);
+    });
+    const size_t n_records = records.size();
+    VariantGraph graph(chromosomes,tandem_track);
+
+    cerr << "Testing to_gfa(): node sequences...\n";
+    graph.to_gfa(TEST_GFA);
+    command.clear();
+    command.append("grep ^S " + TRUTH_GFA.string() + " | cut -f 1,3 | sort > tmp1.txt");
+    run_command(command);
+    command.clear();
+    command.append("grep ^S " + TEST_GFA.string() + " | cut -f 1,3 | sort > tmp2.txt");
+    run_command(command);
+    command.clear();
+    command.append("diff --brief tmp1.txt tmp2.txt");
+    run_command(command);
+
+    cerr << "Testing to_gfa(): n. edges...\n";
+    command.clear();
+    command.append("grep ^L " + TRUTH_GFA.string() + " | wc -l > tmp1.txt");
+    run_command(command);
+    command.clear();
+    command.append("grep ^L " + TEST_GFA.string() + " | wc -l > tmp2.txt");
+    run_command(command);
+    command.clear();
+    command.append("diff --brief tmp1.txt tmp2.txt");
+    run_command(command);
+
+    cerr << "Testing to_gfa(): local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
+    graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp1.txt");
+    graph.load_gfa(TRUTH_GFA);
+    graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp2.txt");
+    command.clear();
+    command.append("diff --brief tmp1.txt tmp2.txt");
+    run_command(command);
+
+
+
+
+
+
 //    cerr << "Testing edge-record map (1/2)...\n";
 //    unordered_map<edge_t,vector<size_t>> map1 = graph.get_edge_record_map();
 //    vector<string> node_labels=graph.load_gfa(TRUTH_GFA.string());
