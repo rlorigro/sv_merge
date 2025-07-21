@@ -681,14 +681,16 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         print_edge_histograms();
     }
 
-    // Graph closure
-    if (graph_closure) build_graph_closure(acyclic);
-
-    // Deallocating temporary space. Transforming `insertion_handles` into `insertion_handles_set`.
-    chunk_first.clear(); node_handles.clear(); bnd_ids.clear();
+    // Transforming `insertion_handles` into `insertion_handles_set`.
     insertion_handles_set.clear(); insertion_handles_set.reserve(insertion_handles.size());
     insertion_handles_set.insert(insertion_handles.begin(),insertion_handles.end());
     insertion_handles.clear();
+
+    // Graph closure
+    if (graph_closure) build_graph_closure(acyclic);
+
+    // Deallocating temporary space.
+    chunk_first.clear(); node_handles.clear(); bnd_ids.clear();
     if (deallocate_ref_alt) {  // Deallocating REF and ALT
         for (auto& record: vcf_records) { record.ref.clear(); record.alt.clear(); }
     }
@@ -708,7 +710,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 /**
- * Closure is applied in phases, until no new edge is created.
+ * Closure is applied over multiple iterations, until no new edge is created.
  *
  * Remark: if an edge is relaxed in one iteration of closure, it is not skipped in the following iterations, since it
  * might get connected to new nodes.

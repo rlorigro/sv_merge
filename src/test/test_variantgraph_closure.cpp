@@ -46,12 +46,12 @@ void print_truth_vcf(ofstream& out) {
     out << "chr1\t15\tins1\tA\tACCCCC\t" << INFIX << "\tSVTYPE=INS;SVLEN=5;\t" << SUFFIX;
     out << "chr1\t15\tins2\tA\tAGGGGG\t" << INFIX << "\tSVTYPE=INS;SVLEN=5;\t" << SUFFIX;
 
-    out << "chr1\t30\trep1\tCCCCCC\tCAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t30\trep2\tCCCCCC\tCGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t31\trep1\tCCCCC\tAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t31\trep2\tCCCCC\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
     out << "chr1\t35\tins3\tC\tCAAAAA\t" << INFIX << "\tSVTYPE=INS;SVLEN=5;\t" << SUFFIX;
     out << "chr1\t35\tins4\tC\tCGGGGG\t" << INFIX << "\tSVTYPE=INS;SVLEN=5;\t" << SUFFIX;
-    out << "chr1\t35\trep3\tCCCCCC\tCAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t35\trep4\tCCCCCC\tCGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t36\trep3\tCCCCC\tAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t36\trep4\tCCCCC\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
 
     out << "chr1\t50\tdup1\tG\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=5;\t" << SUFFIX;
     out << "chr1\t55\tins5\tG\tGAAAAA\t" << INFIX << "\tSVTYPE=INS;SVLEN=5;\t" << SUFFIX;
@@ -68,11 +68,11 @@ void print_truth_vcf(ofstream& out) {
     out << "chr1\t95\tdel4\tAAAAAA\tA\t" << INFIX << "\tSVTYPE=DEL;SVLEN=5;\t" << SUFFIX;
     out << "chr1\t100\tdel5\tAAAAAA\tA\t" << INFIX << "\tSVTYPE=DEL;SVLEN=5;\t" << SUFFIX;
 
-    out << "chr1\t115\trep5\tCCCCCC\tCAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t115\trep6\tCCCCCC\tCGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t116\trep5\tCCCCC\tAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t116\trep6\tCCCCC\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
     out << "chr1\t120\tdel6\tCCCCCC\tC\t" << INFIX << "\tSVTYPE=DEL;SVLEN=5;\t" << SUFFIX;
-    out << "chr1\t120\trep7\tCCCCCC\tCAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t120\trep8\tCCCCCC\tCGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t126\trep7\tCCCCC\tAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t126\trep8\tCCCCC\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
 
     out << "chr1\t140\tdup3\tG\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=5;\t" << SUFFIX;
     out << "chr1\t145\tdel7\tGGGGGG\tG\t" << INFIX << "\tSVTYPE=DEL;SVLEN=5;\t" << SUFFIX;
@@ -84,13 +84,13 @@ void print_truth_vcf(ofstream& out) {
 
     // REP section
     out << "chr1\t190\tinv5\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=5;\t" << SUFFIX;
-    out << "chr1\t195\trep9\tAAAAAA\tACCCCC\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t195\trep10\tAAAAAA\tAGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t196\trep9\tAAAAA\tCCCCC\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t196\trep10\tAAAAA\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
     out << "chr1\t200\tinv6\tA\t<INV>\t" << INFIX << "\tSVTYPE=INV;SVLEN=5;\t" << SUFFIX;
 
     out << "chr1\t215\tdup5\tC\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=5;\t" << SUFFIX;
-    out << "chr1\t220\trep11\tCCCCCC\tCAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
-    out << "chr1\t220\trep12\tCCCCCC\tCGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t221\trep11\tCCCCC\tAAAAA\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
+    out << "chr1\t221\trep12\tCCCCC\tGGGGG\t" << INFIX << "\tSVLEN=5;\t" << SUFFIX;
     out << "chr1\t225\tdup6\tC\t<DUP>\t" << INFIX << "\tSVTYPE=DUP;SVLEN=5;\t" << SUFFIX;
 
     // DUP section
@@ -370,7 +370,7 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
     out << "S\t34\tCCCCC\n";
     out << "S\t35\tCCCCC\n";
     out << "S\trep11\tAAAAA\n";
-    out << "S\trep12\tCCCCC\n";
+    out << "S\trep12\tGGGGG\n";
     out << "S\t36\tCCCCC\n";
     out << "S\t37\tCCCCCGGGGG\n";
     // Before closure
@@ -471,7 +471,7 @@ void print_gfa_colors(ofstream& out) {
 
 unordered_map<string,string> get_chromosomes() {
     unordered_map<string,string> out;
-    out.emplace("chr1","AAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
+    out.emplace("chr1","AAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
     return out;
 }
 
@@ -670,8 +670,8 @@ int main(int argc, char* argv[]) {
     const path TRUTH_GFA_COLORS = ROOT_DIR/"truth.csv";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t SIGNATURE_N_STEPS = 10;
-    const int32_t FLANK_LENGTH = 5;
-    const int32_t INTERIOR_FLANK_LENGTH = 5;
+    const int32_t FLANK_LENGTH = 10;
+    const int32_t INTERIOR_FLANK_LENGTH = 10;
 
     // Printing truth files
     ofstream input_vcf(INPUT_VCF.string());
