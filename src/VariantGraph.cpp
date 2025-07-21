@@ -681,6 +681,9 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
         print_edge_histograms();
     }
 
+    // Graph closure
+    if (graph_closure) build_graph_closure(acyclic);
+
     // Deallocating temporary space. Transforming `insertion_handles` into `insertion_handles_set`.
     chunk_first.clear(); node_handles.clear(); bnd_ids.clear();
     insertion_handles_set.clear(); insertion_handles_set.reserve(insertion_handles.size());
@@ -689,9 +692,6 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
     if (deallocate_ref_alt) {  // Deallocating REF and ALT
         for (auto& record: vcf_records) { record.ref.clear(); record.alt.clear(); }
     }
-
-    // Graph closure
-    if (graph_closure) build_graph_closure(acyclic);
 
     // Allocating temporary space: `printed`, `initialized`, `flags`.
     mark_redundant_records();
@@ -798,7 +798,10 @@ bool VariantGraph::build_graph_closure_should_create_edge(const edge_t& e1, cons
     bool is_insertion_1, is_insertion_2, is_duplication_1, is_duplication_2;
     int32_t p, q;
 
-    // Checking if e1 and e1 share a VCF record
+    // e2 must be non-ref
+    if (!edge_to_vcf_record.contains(e2)) return false;
+
+    // e1 and e2 cannot share a VCF record
     vector<size_t>& v1 = edge_to_vcf_record.at(e1);
     vector<size_t>& v2 = edge_to_vcf_record.at(e2);
     p=0; q=0;
