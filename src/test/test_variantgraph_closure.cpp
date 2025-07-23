@@ -114,7 +114,7 @@ void print_truth_vcf(ofstream& out) {
  * @param supported_records the procedure sets this to the IDs of the VCF records supported by `path_id`, in arbitrary
  * order.
  */
-void print_truth_gfa(ofstream& out, bool closure1, bool closure2, int32_t path_id, vector<string>& supported_records) {
+void print_truth_gfa(ofstream& out, bool closure1, bool closure2, size_t path_id, vector<string>& supported_records) {
     supported_records.clear();
 
     // INS section
@@ -952,8 +952,8 @@ int main(int argc, char* argv[]) {
         ofstream supported_truth_vcf("supported_truth.vcf");
         for (auto& id: supported_records) {
             for (j=0; j<n_records; j++) {
-                if (records.at(j).id==id) {
-                    records.at(j).print(supported_truth_vcf);
+                if (graph.vcf_records.at(j).id==id) {
+                    graph.vcf_records.at(j).print(supported_truth_vcf);
                     supported_truth_vcf << '\n';
                     break;
                 }
