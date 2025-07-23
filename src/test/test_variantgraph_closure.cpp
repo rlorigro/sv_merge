@@ -881,6 +881,7 @@ int main(int argc, char* argv[]) {
 
     const unordered_map<string,string> chromosomes = get_chromosomes();
     const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
+    size_t i, j;
     size_t n_records;
     string command;
     vector<string> supported_records;
@@ -940,7 +941,7 @@ int main(int argc, char* argv[]) {
     command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
     cerr << "Testing edge-record correspondence...\n";
-    for (int32_t i=1; i<=35; i++) {
+    for (i=1; i<=35; i++) {
         ofstream tmp_gfa("tmp.gfa");
         print_truth_gfa(tmp_gfa,true,true,i,supported_records);
         tmp_gfa.close();
@@ -950,7 +951,7 @@ int main(int argc, char* argv[]) {
         supported_test_vcf.close(); unsupported_test_vcf.close();
         ofstream supported_truth_vcf("supported_truth.vcf");
         for (auto& id: supported_records) {
-            for (int32_t j=0; j<n_records; j++) {
+            for (j=0; j<n_records; j++) {
                 if (records.at(j).id==id) {
                     records.at(j).print(supported_truth_vcf);
                     supported_truth_vcf << '\n';

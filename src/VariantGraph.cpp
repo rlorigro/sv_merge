@@ -796,9 +796,9 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
 
 
 bool VariantGraph::build_graph_closure_should_create_edge(const edge_t& e1, const edge_t& e2, bool acyclic, vector<int32_t>& tmp_pos) {
-    bool i1, i2, d1, d2;
+    bool i1, d1;
     bool is_insertion_1, is_insertion_2, is_duplication_1, is_duplication_2;
-    int32_t p, q;
+    size_t p, q;
 
     // e2 must be non-ref
     if (!edge_to_vcf_record.contains(e2)) return false;
@@ -846,9 +846,8 @@ bool VariantGraph::build_graph_closure_should_create_edge(const edge_t& e1, cons
 
 void VariantGraph::build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next) {
     bool found;
-    int32_t i, j;
-    int32_t first;
-    size_t n_edges;
+    size_t i, j;
+    size_t first, n_edges;
 
     const vector<edge_t>& old_edges = vcf_record_to_edge.at(vcf_record);
     vector<edge_t>& new_edges = vcf_record_to_edge_next.at(vcf_record);
@@ -875,7 +874,7 @@ handle_t VariantGraph::get_previous_reference_node(const handle_t& node_handle) 
     const nid_t node_id = graph.get_id(node_handle);
     const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.at(node_id).first);
     const size_t n_handles = handles_of_chromosome.size();
-    int32_t i;
+    size_t i;
 
     for (i=1; i<n_handles; i++) {
         if (graph.get_id(handles_of_chromosome.at(i))==node_id && graph.has_edge(handles_of_chromosome.at(i-1),handles_of_chromosome.at(i))) return handles_of_chromosome.at(i-1);
@@ -887,7 +886,7 @@ handle_t VariantGraph::get_previous_reference_node(const handle_t& node_handle) 
 handle_t VariantGraph::get_next_reference_node(const handle_t& node_handle) const {
     const nid_t node_id = graph.get_id(node_handle);
     const vector<handle_t>& handles_of_chromosome = node_handles.at(node_to_chromosome.at(node_id).first);
-    const size_t n_handles = handles_of_chromosome.size();
+    const auto n_handles = (int32_t)handles_of_chromosome.size();
     int32_t i;
 
     for (i=n_handles-2; i>=0; i--) {
@@ -963,7 +962,7 @@ void VariantGraph::build(const string& chromosome, int32_t p, int32_t q, int32_t
  * Implemented with naive quadratic scans. Should be made faster.
  */
 void VariantGraph::mark_redundant_records() {
-    int32_t i, j, k;
+    size_t i, j, k;
     size_t n_edges, n_sequences_i, n_sequences_j;
 
     for (auto& record: vcf_records) record.is_redundant=false;
@@ -989,8 +988,9 @@ void VariantGraph::mark_redundant_records() {
 
 bool VariantGraph::mark_redundant_records_impl(int32_t i, int32_t j, size_t n_edges, size_t n_sequences) {
     bool match;
-    int32_t k, h, m;
-    int32_t first_i, first_j, n_sequences_matched;
+    size_t k, h, m;
+    size_t first_i, first_j;
+    size_t n_sequences_matched;
 
     first_i=0; first_j=0; n_sequences_matched=0;
     for (k=1; k<n_edges; k++) {
