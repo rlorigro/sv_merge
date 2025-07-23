@@ -109,7 +109,14 @@ void print_truth_vcf(ofstream& out) {
 }
 
 
-void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
+/**
+ * @param path_id >0; prints a selected path;
+ * @param supported_records the procedure sets this to the IDs of the VCF records supported by `path_id`, in arbitrary
+ * order.
+ */
+void print_truth_gfa(ofstream& out, bool closure1, bool closure2, int32_t path_id, vector<string>& supported_records) {
+    supported_records.clear();
+
     // INS section
     // Block 1
     out << "S\t1\tAAAAAAAAAA\n";
@@ -137,6 +144,33 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
         if (closure2) {
             // NOP
         }
+    }
+    if (path_id==1) {
+        out << "P\t" << to_string(path_id) << "\t1+,ins1+,3+\t*\n";
+        supported_records.emplace_back("del1");
+        supported_records.emplace_back("ins1");
+    }
+    if (path_id==2) {
+        out << "P\t" << to_string(path_id) << "\t1+,ins1+,4+\t*\n";
+        supported_records.emplace_back("del1");
+        supported_records.emplace_back("ins1");
+        supported_records.emplace_back("del2");
+    }
+    if (path_id==3) {
+        out << "P\t" << to_string(path_id) << "\t1+,ins2+,3+\t*\n";
+        supported_records.emplace_back("del1");
+        supported_records.emplace_back("ins2");
+    }
+    if (path_id==4) {
+        out << "P\t" << to_string(path_id) << "\t1+,ins2+,4+\t*\n";
+        supported_records.emplace_back("del1");
+        supported_records.emplace_back("ins2");
+        supported_records.emplace_back("del2");
+    }
+    if (path_id==5) {
+        out << "P\t" << to_string(path_id) << "\t1+,4+\t*\n";
+        supported_records.emplace_back("del1");
+        supported_records.emplace_back("del2");
     }
 
     // Block 2
@@ -181,6 +215,45 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
         if (closure2) {
             // NOP
         }
+    }
+    string left_rep_id = "rep1";
+    string right_rep_id = "rep2";
+    string ins_id = "ins3";  // ins3 or ins4
+    if (path_id==6) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+,6+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+    }
+    if (path_id==7) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << ins_id << "+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(ins_id);
+    }
+    if (path_id==8) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << ins_id << "+,6+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(ins_id);
+    }
+    if (path_id==9) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << ins_id << "+," << right_rep_id << "+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(ins_id);
+        supported_records.emplace_back(right_rep_id);
+    }
+    if (path_id==10) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << ins_id << "+," << right_rep_id << "+,7+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(ins_id);
+        supported_records.emplace_back(right_rep_id);
+    }
+    if (path_id==11) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << right_rep_id << "+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(right_rep_id);
+    }
+    if (path_id==12) {
+        out << "P\t" << to_string(path_id) << "\t4+," << left_rep_id << "+," << right_rep_id << "+,7+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back(right_rep_id);
     }
 
     // Block 3
@@ -236,6 +309,39 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
             // NOP
         }
     }
+    ins_id="ins7";
+    if (path_id==13) {
+        out << "P\t" << to_string(path_id) << "\t10+,11-,12-,13+\t*\n";
+        supported_records.emplace_back("inv1");
+        supported_records.emplace_back("inv2");
+    }
+    if (path_id==14) {
+        out << "P\t" << to_string(path_id) << "\t10+,13+\t*\n";
+        supported_records.emplace_back("inv1");
+        supported_records.emplace_back("inv2");
+    }
+    if (path_id==15) {
+        out << "P\t" << to_string(path_id) << "\t10+,11-," << ins_id << "+,12-,13+\t*\n";
+        supported_records.emplace_back("inv1");
+        supported_records.emplace_back("inv2");
+        supported_records.emplace_back(ins_id);
+    }
+    if (path_id==16) {
+        out << "P\t" << to_string(path_id) << "\t10+," << ins_id << "-,13+\t*\n";
+        supported_records.emplace_back("inv1");
+        supported_records.emplace_back("inv2");
+        supported_records.emplace_back(ins_id);
+    }
+    if (path_id==17) {
+        out << "P\t" << to_string(path_id) << "\t10+,11-," << ins_id << "+,12+,13+\t*\n";
+        supported_records.emplace_back("inv1");
+        supported_records.emplace_back(ins_id);
+    }
+    if (path_id==18) {
+        out << "P\t" << to_string(path_id) << "\t10+,11+," << ins_id << "+,12-,13+\t*\n";
+        supported_records.emplace_back("inv2");
+        supported_records.emplace_back(ins_id);
+    }
 
     // DEL section
     // Block 1
@@ -257,6 +363,22 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
         if (closure2) {
             out << "L\t13\t+\t17\t+\t*\n";
         }
+    }
+    if (path_id==19) {
+        out << "P\t" << to_string(path_id) << "\t13+,16+\t*\n";
+        supported_records.emplace_back("del3");
+        supported_records.emplace_back("del4");
+    }
+    if (path_id==20) {
+        out << "P\t" << to_string(path_id) << "\t14+,17+\t*\n";
+        supported_records.emplace_back("del4");
+        supported_records.emplace_back("del5");
+    }
+    if (path_id==21) {
+        out << "P\t" << to_string(path_id) << "\t13+,17+\t*\n";
+        supported_records.emplace_back("del3");
+        supported_records.emplace_back("del4");
+        supported_records.emplace_back("del5");
     }
 
     // Block 2
@@ -293,6 +415,24 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
             out << "L\trep6\t+\trep7\t+\t*\n";
             out << "L\trep6\t+\trep8\t+\t*\n";
         }
+    }
+    left_rep_id="rep5";
+    right_rep_id="rep7";
+    if (path_id==22) {
+        out << "P\t" << to_string(path_id) << "\t17+," << left_rep_id << "+,20+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back("del6");
+    }
+    if (path_id==23) {
+        out << "P\t" << to_string(path_id) << "\t18+," << right_rep_id << "+,21+\t*\n";
+        supported_records.emplace_back("del6");
+        supported_records.emplace_back(right_rep_id);
+    }
+    if (path_id==24) {
+        out << "P\t" << to_string(path_id) << "\t17+," << left_rep_id << "+," << right_rep_id << "+,21+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back("del6");
+        supported_records.emplace_back(right_rep_id);
     }
 
     // Block 3
@@ -334,6 +474,22 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
             out << "L\t26\t-\t28\t-\t*\n";
         }
     }
+    if (path_id==25) {
+        out << "P\t" << to_string(path_id) << "\t25+,26-,28+,29+\t*\n";
+        supported_records.emplace_back("inv3");
+        supported_records.emplace_back("del8");
+    }
+    if (path_id==26) {
+        out << "P\t" << to_string(path_id) << "\t25+,26+,28-,29+\t*\n";
+        supported_records.emplace_back("del8");
+        supported_records.emplace_back("inv4");
+    }
+    if (path_id==27) {
+        out << "P\t" << to_string(path_id) << "\t25+,26-,28-,29+\t*\n";
+        supported_records.emplace_back("inv3");
+        supported_records.emplace_back("del8");
+        supported_records.emplace_back("inv4");
+    }
 
     // REP section
     // Block 1
@@ -364,6 +520,23 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
         if (closure2) {
             // NOP
         }
+    }
+    left_rep_id="rep9";
+    if (path_id==28) {
+        out << "P\t" << to_string(path_id) << "\t29+,30-," << left_rep_id << "+,32+\t*\n";
+        supported_records.emplace_back("inv5");
+        supported_records.emplace_back(left_rep_id);
+    }
+    if (path_id==29) {
+        out << "P\t" << to_string(path_id) << "\t30+," << left_rep_id << "+,32-,33+\t*\n";
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back("inv6");
+    }
+    if (path_id==30) {
+        out << "P\t" << to_string(path_id) << "\t29+,30-," << left_rep_id << "+,32-,33+\t*\n";
+        supported_records.emplace_back("inv5");
+        supported_records.emplace_back(left_rep_id);
+        supported_records.emplace_back("inv6");
     }
 
     // Block 2
@@ -452,6 +625,34 @@ void print_truth_gfa(ofstream& out, bool closure1, bool closure2) {
             out << "L\t46\t-\t49\t+\t*\n";
         }
     }
+    if (path_id==31) {
+        out << "P\t" << to_string(path_id) << "\t45+,46-,47-,48+\t*\n";
+        supported_records.emplace_back("inv9");
+        supported_records.emplace_back("inv10");
+    }
+    if (path_id==32) {
+        out << "P\t" << to_string(path_id) << "\t46+,47-,48-,49+\t*\n";
+        supported_records.emplace_back("inv10");
+        supported_records.emplace_back("inv11");
+    }
+    if (path_id==33) {
+        out << "P\t" << to_string(path_id) << "\t45+,46-,47-,48-,49+\t*\n";
+        supported_records.emplace_back("inv9");
+        supported_records.emplace_back("inv10");
+        supported_records.emplace_back("inv11");
+    }
+    if (path_id==34) {
+        out << "P\t" << to_string(path_id) << "\t45+,46-,49+\t*\n";
+        supported_records.emplace_back("inv9");
+        supported_records.emplace_back("inv10");
+        supported_records.emplace_back("inv11");
+    }
+    if (path_id==35) {
+        out << "P\t" << to_string(path_id) << "\t45+,48-,49+\t*\n";
+        supported_records.emplace_back("inv9");
+        supported_records.emplace_back("inv10");
+        supported_records.emplace_back("inv11");
+    }
 }
 
 
@@ -483,6 +684,11 @@ unordered_map<string,vector<interval_t>> get_tandem_track() {
     unordered_map<string,vector<interval_t>> out;
     return out;
 }
+
+
+
+
+
 
 
 //void get_edge_record_map(const HashGraph& graph, const vector<string>& node_ids, vector<pair<edge_t,size_t>>& out) {
@@ -673,23 +879,26 @@ int main(int argc, char* argv[]) {
     const int32_t FLANK_LENGTH = 10;
     const int32_t INTERIOR_FLANK_LENGTH = 10;
 
+    const unordered_map<string,string> chromosomes = get_chromosomes();
+    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
+    size_t n_records;
+    string command;
+    vector<string> supported_records;
+    vector<VcfRecord> records;
+
     // Printing truth files
     ofstream input_vcf(INPUT_VCF.string());
     print_truth_vcf_header(input_vcf);
     print_truth_vcf(input_vcf);
     input_vcf.close();
     ofstream truth_gfa(TRUTH_GFA.string());
-    print_truth_gfa(truth_gfa,CLOSURE_1==1,CLOSURE_2==1);
+    print_truth_gfa(truth_gfa,CLOSURE_1==1,CLOSURE_2==1,0,supported_records);
     truth_gfa.close();
     ofstream truth_gfa_colors(TRUTH_GFA_COLORS.string());
     print_gfa_colors(truth_gfa_colors);
     truth_gfa_colors.close();
 
-    const unordered_map<string,string> chromosomes = get_chromosomes();
-    const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
-    string command;
-
-    vector<VcfRecord> records;
+    // Loading the VCF and building the graph
     VcfReader reader(INPUT_VCF);
     reader.for_record_in_vcf([&](VcfRecord& record) {
         if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
@@ -697,12 +906,12 @@ int main(int argc, char* argv[]) {
            ) return;
         records.push_back(record);
     });
-    const size_t n_records = records.size();
+    n_records=records.size();
     VariantGraph graph(chromosomes,tandem_track);
     graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH);
+    graph.to_gfa(TEST_GFA);
 
     cerr << "Testing to_gfa(): node sequences...\n";
-    graph.to_gfa(TEST_GFA);
     command.clear();
     command.append("grep ^S " + TRUTH_GFA.string() + " | cut -f 1,3 | sort > tmp1.txt");
     run_command(command);
@@ -728,41 +937,33 @@ int main(int argc, char* argv[]) {
     graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp1.txt");
     graph.load_gfa(TRUTH_GFA);
     graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp2.txt");
-    command.clear();
-    command.append("diff --brief tmp1.txt tmp2.txt");
-    run_command(command);
+    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
 
+    cerr << "Testing edge-record correspondence...\n";
+    for (int32_t i=1; i<=35; i++) {
+        ofstream tmp_gfa("tmp.gfa");
+        print_truth_gfa(tmp_gfa,true,true,i,supported_records);
+        tmp_gfa.close();
+        graph.load_gfa("tmp.gfa");
+        ofstream supported_test_vcf("supported_test.vcf"); ofstream unsupported_test_vcf("unsupported_test.vcf");
+        graph.print_supported_vcf_records(supported_test_vcf,unsupported_test_vcf,false);
+        supported_test_vcf.close(); unsupported_test_vcf.close();
+        ofstream supported_truth_vcf("supported_truth.vcf");
+        for (auto& id: supported_records) {
+            for (int32_t j=0; j<n_records; j++) {
+                if (records.at(j).id==id) {
+                    records.at(j).print(supported_truth_vcf);
+                    supported_truth_vcf << '\n';
+                    break;
+                }
+            }
+        }
+        supported_truth_vcf.close();
+        command.clear(); command.append("sort supported_test.vcf > supported_test_sorted.vcf"); run_command(command);
+        command.clear(); command.append("sort supported_truth.vcf > supported_truth_sorted.vcf"); run_command(command);
+        command.clear(); command.append("diff --brief supported_test_sorted.vcf supported_truth_sorted.vcf"); run_command(command);
+    }
 
-
-
-
-
-//    cerr << "Testing edge-record map (1/2)...\n";
-//    unordered_map<edge_t,vector<size_t>> map1 = graph.get_edge_record_map();
-//    vector<string> node_labels=graph.load_gfa(TRUTH_GFA.string());
-//    vector<pair<edge_t,size_t>> edge_record_map;
-//    get_edge_record_map(graph.graph,node_labels,edge_record_map);
-//    graph.load_edge_record_map(edge_record_map,n_records);
-//    test_vcf_records_with_edges(graph,node_labels);
-//
-//    cerr << "Testing edge-record map (2/2)...\n";
-//    ofstream map1_txt("tmp1.txt");
-//    for (const auto& pair: map1) {
-//        for (const auto& id: pair.second) { map1_txt << to_string(id) << ','; }
-//        map1_txt << '\n';
-//    }
-//    map1_txt.close();
-//    unordered_map<edge_t,vector<size_t>> map2 = graph.get_edge_record_map();
-//    ofstream map2_txt("tmp2.txt");
-//    for (const auto& pair: map2) {
-//        for (const auto& id: pair.second) { map2_txt << to_string(id) << ','; }
-//        map2_txt << '\n';
-//    }
-//    map2_txt.close();
-//    command.clear(); command.append("sort tmp1.txt > tmp1_sorted.txt"); run_command(command);
-//    command.clear(); command.append("sort tmp2.txt > tmp2_sorted.txt"); run_command(command);
-//    command.clear(); command.append("diff --brief tmp1_sorted.txt tmp2_sorted.txt"); run_command(command);
-//
-//    cerr << "Removing temporary files...\n";
-//    command.clear(); command.append("rm -f input*.vcf truth*.gfa test*.gfa tmp*.txt"); run_command(command);
+    cerr << "Removing temporary files...\n";
+    command.clear(); command.append("rm -f tmp*.txt tmp*.gfa supported_*.vcf unsupported_*.vcf"); run_command(command);
 }
