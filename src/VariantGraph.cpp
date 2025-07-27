@@ -712,7 +712,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 /**
  * Closure is applied over multiple iterations, until no new edge is created.
  *
- * Remark: if an edge is relaxed in one iteration of closure, it is not skipped in the following iterations, since it
+ * Remark: if an edge is processed in one iteration of closure, it is not skipped in the following iterations, since it
  * might get connected to new nodes.
  */
 void VariantGraph::build_graph_closure(bool acyclic) {
@@ -857,16 +857,24 @@ void VariantGraph::build_graph_closure_update_vcf_record_to_edge(int32_t vcf_rec
         if (old_edges.at(i)!=null_edge) continue;
         found=false;
         for (j=first; j<i; j++) {
-            if (old_edges.at(i)==old_edge) { found=true; break; }
+            if (old_edges.at(j)==old_edge) { found=true; break; }
         }
         if (found) {
             for (j=first; j<=i; j++) {
-                if (old_edges.at(i)==old_edge) new_edges.emplace_back(new_edge);
-                else new_edges.emplace_back(old_edge);
+                if (old_edges.at(j)==old_edge) new_edges.emplace_back(new_edge);
+                else new_edges.emplace_back(old_edges.at(j));
             }
         }
         first=i+1;
     }
+}
+
+
+void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
+
+
+
+
 }
 
 
@@ -1158,8 +1166,11 @@ path_handle_t VariantGraph::load_gfa_path(const string& path_encoding, const vec
         c=path_encoding.at(i);
         if (c==GFA_PATH_SEPARATOR) continue;
         else if (c!=GFA_FWD_CHAR && c!=GFA_REV_CHAR) { buffer.push_back(c); continue; }
-        const auto iterator = lower_bound(node_ids.begin(),node_ids.end(),buffer);
-        node_id=distance(node_ids.begin(),iterator)+1;  // Node IDs cannot be zero
+        if (node_ids.empty()) node_id=stoi(buffer);
+        else {
+            const auto iterator = lower_bound(node_ids.begin(),node_ids.end(),buffer);
+            node_id=distance(node_ids.begin(),iterator)+1;  // Node IDs cannot be zero
+        }
         graph.append_step(path,graph.get_handle(node_id,c==GFA_REV_CHAR));
         buffer.clear();
     }

@@ -398,7 +398,8 @@ public:
     /**
      * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.
      *
-     * @param node_ids string IDs used in the GFA file;
+     * @param node_ids string IDs used in the GFA file, sorted lexicographically; if empty, the procedure assumes that
+     * `path` encodes the integer node IDs of `graph`;
      * @param buffer temporary space.
      */
     path_handle_t load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
@@ -550,6 +551,19 @@ private:
      * @param old_edge, new_edge in canonical form.
      */
     void build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
+
+    /**
+     * Assume that a VCF record corresponds to a node (reference or non-reference) and to many possible pairs of edges
+     * that traverse it. The procedure ensures that every incoming edge is paired with every outgoing edge in
+     * `vcf_record_to_edge`. This is necessary after graph closure, since otherwise e.g. an INS that occurs in the
+     * middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the path that corresponds to the combination
+     * of the two DELs and the INS (only the two DELs would be supported).
+     *
+     * Remark: in the general case where a VCF record corresponds to an arbitrary path, we should consider the subgraph
+     * induced by all the paths in `vcf_record_to_edge`, and we should add to `vcf_record_to_edge` every path in the
+     * subgraph that is not already in `vcf_record_to_edge`. We skip this general case for simplicity.
+     */
+    void build_graph_closure_close_vcf_record_to_edge();
 
     /**
      * @param node_handle a reference node;
