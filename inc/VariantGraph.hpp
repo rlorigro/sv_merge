@@ -390,6 +390,19 @@ public:
      */
     void vcf_record_to_path_intervals(const vector<pair<string,bool>>& path, const vector<edge_t>& edges_of_the_record, int32_t flank_length, vector<pair<int32_t, int32_t>>& out);
 
+    /**
+     * Destroys all paths in `graph` by iterating over them explicitly.
+     */
+    void destroy_paths();
+
+    /**
+     * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.
+     *
+     * @param node_ids string IDs used in the GFA file;
+     * @param buffer temporary space.
+     */
+    path_handle_t load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
+
 
 
 
@@ -553,14 +566,6 @@ private:
     handle_t get_next_reference_node(const handle_t& node_handle) const;
 
     /**
-     * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.
-     *
-     * @param node_ids string IDs used in the GFA file;
-     * @param buffer temporary space.
-     */
-    path_handle_t load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
-
-    /**
      * Stores `path_encoding` (assumed to be a valid path in GAF format) in `graph`.
      *
      * @param path_encoding node IDs are assumed to come from the set of node IDs in `graph`.
@@ -574,11 +579,6 @@ private:
      * `graph`.
      */
     path_handle_t load_gaf_path(vector<pair<string,bool>>& path, const string& path_name);
-
-    /**
-     * Destroys all paths in `graph` by iterating over them explicitly.
-     */
-    void destroy_paths();
 
     /**
      * Looks up `query` in `edges`, and sets `flags[i]=rank` if the canonized `query` equals `edges[i]`.
