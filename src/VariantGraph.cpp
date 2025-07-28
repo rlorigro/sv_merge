@@ -761,6 +761,7 @@ void VariantGraph::build_graph_closure(bool acyclic) {
         }
         for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.at(i).clear();
     }
+    build_graph_closure_close_vcf_record_to_edge();
 }
 
 
@@ -871,10 +872,64 @@ void VariantGraph::build_graph_closure_update_vcf_record_to_edge(int32_t vcf_rec
 
 
 void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
+    bool found;
+    int32_t i, j, k, h;
+    size_t size, node_id, first, second, first_prime, second_prime;
+    vector<edge_t> in_edges, out_edges, new_pairs;
 
-
-
-
+    for (i=0; i<n_vcf_records; i++) {
+        size=vcf_record_to_edge.at(i).size();
+        if (size<3 || vcf_record_to_edge.at(i).at(2)!=null_edge) continue;
+        // Determining the node that is traversed by the record
+        first=graph.get_id(vcf_record_to_edge.at(i).at(0).first);
+        second=graph.get_id(vcf_record_to_edge.at(i).at(0).second);
+        first_prime=graph.get_id(vcf_record_to_edge.at(i).at(1).first);
+        second_prime=graph.get_id(vcf_record_to_edge.at(i).at(1).second);
+        if (first_prime==first || first_prime==second) node_id=first_prime;
+        else if (second_prime==first || second_prime==second) node_id=second_prime;
+        else throw runtime_error("ERROR: The following VCF record does not traverse a node: "+to_string(i));
+        // Partitioning edges (in canonical form) into in- and out-edges WRT the traversed node.
+        in_edges.clear(); out_edges.clear(); first=0;
+        for (j=0; j<size; j++) {
+            if (vcf_record_to_edge.at(i).at(j)==null_edge) {
+                if (j!=first+2) throw runtime_error("ERROR: The following VCF record has a sequence of "+to_string(j-first)+" edges: "+to_string(i));
+                first=j+1;
+                continue;
+            }
+            handle_t& first_handle = vcf_record_to_edge.at(i).at(j).first;
+            handle_t& second_handle = vcf_record_to_edge.at(i).at(j).second;
+            if (graph.get_id(first_handle)==node_id) {
+                if (!graph.get_is_reverse(first_handle)) out_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+                else in_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+            }
+            else if (graph.get_id(second_handle)==node_id) {
+                if (!graph.get_is_reverse(first_handle)) in_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+                else out_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+            }
+            else throw runtime_error("ERROR: The following VCF record has a sequence of edges that does not traverse its designated node "+to_string(node_id)+": "+to_string(i));
+        }
+        // Adding every new pair of in-edge and out-edge
+        new_pairs.clear();
+        for (j=0; j<in_edges.size(); j++) {
+            edge_t& edge1 = in_edges.at(j);
+            for (k=0; k<out_edges.size(); k++) {
+                edge_t& edge2 = out_edges.at(k);
+                found=false;
+                for (h=0; h<size; h+=3) {
+                    edge_t& edge3 = vcf_record_to_edge.at(i).at(h);
+                    edge_t& edge4 = vcf_record_to_edge.at(i).at(h+1);
+                    if ((edge3==edge1 && edge4==edge2) || (edge3==edge2 && edge4==edge1)) { found=true; break; }
+                }
+                if (!found) { new_pairs.emplace_back(edge1); new_pairs.emplace_back(edge2); }
+            }
+        }
+        size=new_pairs.size();
+        for (j=0; j<size; j+=2) {
+            vcf_record_to_edge.at(i).emplace_back(new_pairs.at(j));
+            vcf_record_to_edge.at(i).emplace_back(new_pairs.at(j+1));
+            vcf_record_to_edge.at(i).emplace_back(null_edge);
+        }
+    }
 }
 
 
