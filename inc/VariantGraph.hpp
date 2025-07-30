@@ -553,6 +553,12 @@ private:
     void build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
 
     /**
+     * Removes duplicates from `vcf_record_to_edge[vcf_record_id]`, which may form because the same new edge might be
+     * created when closing different existing edges.
+     */
+    void build_graph_closure_compact_vcf_record_to_edge(size_t vcf_record_id);
+
+    /**
      * Assume that a VCF record corresponds to a node (reference or non-reference) and to many possible pairs of edges
      * that traverse it. The procedure ensures that every incoming edge is paired with every outgoing edge in
      * `vcf_record_to_edge`. This is necessary after graph closure, since otherwise e.g. an INS that occurs in the

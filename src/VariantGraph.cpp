@@ -716,6 +716,7 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
  * might get connected to new nodes.
  */
 void VariantGraph::build_graph_closure(bool acyclic) {
+    bool found;
     size_t i;
     vector<int32_t> tmp_vector;
     vector<tuple<handle_t,handle_t,edge_t,edge_t>> edge_instructions;
@@ -735,10 +736,13 @@ void VariantGraph::build_graph_closure(bool acyclic) {
         }
         if (edge_instructions.empty()) break;
         for (auto& t: edge_instructions) {
-            // `edge_instructions` is guaranteed to contain edges that are not in `graph`.
-            graph.create_edge(std::get<0>(t),std::get<1>(t));
+            // - `edge_instructions` is guaranteed to contain edges that are not in `graph`.
+            // - `edge_instructions` might contain duplicates, since the same new edge might be created by closing
+            // different existing edges. Such duplicates might be associated with different VCF records.
+            found=graph.has_edge(std::get<0>(t),std::get<1>(t));
+            if (!found) graph.create_edge(std::get<0>(t),std::get<1>(t));
             edge_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
-            new_edges.insert(new_edge);
+            if (!found) new_edges.insert(new_edge);
             edge_t& e1 = std::get<2>(t);
             edge_t& e2 = std::get<3>(t);
             for (auto& record_id: edge_to_vcf_record[e1]) {
@@ -752,14 +756,23 @@ void VariantGraph::build_graph_closure(bool acyclic) {
                 build_graph_closure_update_vcf_record_to_edge(record_id,e2,new_edge,vcf_record_to_edge_next);
             }
         }
+        edge_instructions.clear();
+        // Compacting `edge_to_vcf_record`.
         for (auto& edge: new_edges) {
-            if (edge_to_vcf_record.at(edge).size()>1) sort(edge_to_vcf_record.at(edge).begin(),edge_to_vcf_record.at(edge).end());
+            vector<size_t>& array = edge_to_vcf_record.at(edge);
+            if (array.size()<=1) continue;
+            sort(array.begin(),array.end());
+            const auto iterator = unique(array.begin(),array.end());
+            array.resize(distance(array.begin(),iterator));
         }
-        new_edges.clear(); edge_instructions.clear();
+        new_edges.clear();
+        // Updating and compacting `vcf_record_to_edge`.
         for (i=0; i<n_vcf_records; i++) {
-            if (!vcf_record_to_edge_next.at(i).empty()) vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),make_move_iterator(vcf_record_to_edge_next.at(i).begin()),make_move_iterator(vcf_record_to_edge_next.at(i).end()));
+            if (vcf_record_to_edge_next.at(i).empty()) continue;
+            vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),make_move_iterator(vcf_record_to_edge_next.at(i).begin()),make_move_iterator(vcf_record_to_edge_next.at(i).end()));
+            build_graph_closure_compact_vcf_record_to_edge(i);
+            vcf_record_to_edge_next.at(i).clear();
         }
-        for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.at(i).clear();
     }
     build_graph_closure_close_vcf_record_to_edge();
 }
@@ -868,6 +881,59 @@ void VariantGraph::build_graph_closure_update_vcf_record_to_edge(int32_t vcf_rec
         }
         first=i+1;
     }
+}
+
+
+/**
+ * Duplicates are removed with a simple quadratic scan. Should be made faster.
+ */
+void VariantGraph::build_graph_closure_compact_vcf_record_to_edge(size_t vcf_record_id) {
+    bool found;
+    size_t i, j, k;
+    size_t size, first, first_prime;
+    int32_t last;
+    vector<edge_t>& array = vcf_record_to_edge.at(vcf_record_id);
+
+    size=array.size();
+    if (size==0) return;
+
+    // Marking duplicates
+    first=0;
+    for (i=0; i<size; i++) {
+        if (array.at(i)!=null_edge) continue;
+        first_prime=i+1;
+        for (j=i+1; j<size; j++) {
+            if (array.at(j)!=null_edge) continue;
+            if (j-first_prime==i-first) {
+                found=true;
+                for (k=0; k<i-first; k++) {
+                    if (array.at(j+k)!=array.at(i+k)) {
+                        found=false;
+                        break;
+                    }
+                }
+                if (found) {
+                    for (k=0; k<i-first; k++) array.at(j+k)=null_edge;
+                }
+            }
+            first_prime=j+1;
+        }
+        first=i+1;
+    }
+
+    // Compacting
+    i=0; last=-1;
+    while (i<size) {
+        if (array.at(i)!=null_edge) {
+            array.at(++last)=array.at(i);
+            i++;
+            continue;
+        }
+        array.at(++last)=null_edge;
+        i++;
+        while (i<size && array.at(i)==null_edge) i++;
+    }
+    array.resize(last+1);
 }
 
 
