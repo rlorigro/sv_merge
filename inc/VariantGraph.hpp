@@ -555,6 +555,8 @@ private:
     /**
      * Removes duplicates from `vcf_record_to_edge[vcf_record_id]`, which may form because the same new edge might be
      * created when closing different existing edges.
+     *
+     * Remark: the procedure does not sort `vcf_record_to_edge[vcf_record_id]`.
      */
     void build_graph_closure_compact_vcf_record_to_edge(size_t vcf_record_id);
 

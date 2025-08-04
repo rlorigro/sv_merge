@@ -737,8 +737,9 @@ void VariantGraph::build_graph_closure(bool acyclic) {
         if (edge_instructions.empty()) break;
         for (auto& t: edge_instructions) {
             // - `edge_instructions` is guaranteed to contain edges that are not in `graph`.
-            // - `edge_instructions` might contain duplicates, since the same new edge might be created by closing
-            // different existing edges. Such duplicates might be associated with different VCF records.
+            // - `edge_instructions` might contain duplicated new edges, since the same new edge might be created by
+            // closing different existing edges. Such duplicates might be associated with different VCF records, so they
+            // still need to be processed.
             found=graph.has_edge(std::get<0>(t),std::get<1>(t));
             if (!found) graph.create_edge(std::get<0>(t),std::get<1>(t));
             edge_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
