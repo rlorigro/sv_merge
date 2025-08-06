@@ -908,13 +908,13 @@ void VariantGraph::build_graph_closure_compact_vcf_record_to_edge(size_t vcf_rec
             if (j-first_prime==i-first) {
                 found=true;
                 for (k=0; k<i-first; k++) {
-                    if (array.at(j+k)!=array.at(i+k)) {
+                    if (array.at(first_prime+k)!=array.at(first+k)) {
                         found=false;
                         break;
                     }
                 }
                 if (found) {
-                    for (k=0; k<i-first; k++) array.at(j+k)=null_edge;
+                    for (k=0; k<i-first; k++) array.at(first_prime+k)=null_edge;
                 }
             }
             first_prime=j+1;
@@ -938,9 +938,12 @@ void VariantGraph::build_graph_closure_compact_vcf_record_to_edge(size_t vcf_rec
 }
 
 
+/**
+ * For simplicity, the procedure only considers the original node associated with every VCF record.
+ */
 void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
     bool found;
-    int32_t i, j, k, h;
+    size_t i, j, k, h;
     size_t size, node_id, first, second, first_prime, second_prime;
     vector<edge_t> in_edges, out_edges, new_pairs;
 
@@ -973,7 +976,9 @@ void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
                 if (!graph.get_is_reverse(first_handle)) in_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
                 else out_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
             }
-            else throw runtime_error("ERROR: The following VCF record has a sequence of edges that does not traverse its designated node "+to_string(node_id)+": "+to_string(i));
+            else {
+                // NOP: after closure, a sequence of edges might not traverse the node associated with the record.
+            }
         }
         // Adding every new pair of in-edge and out-edge
         new_pairs.clear();

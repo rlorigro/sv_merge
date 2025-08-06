@@ -512,7 +512,12 @@ private:
      *
      * Remark: the procedure allows taking an INS that precedes a position, after taking a BND to that position.
      *
-     * Remark: two consecutive INV give rise to a DEL. This is an artefact of closure but we don't explicitly forbid it.
+     * Remark: two consecutive INVs give rise to an edge that skips over both INVs (however, to support any such INV, a
+     * path that uses this edge would also need to use another edge). This is an artefact of closure and we don't
+     * explicitly forbid it.
+     *
+     * Remark: after closure, a VCF record might be assigned to a pair of edges that do not traverse a common node (e.g.
+     * when an INS occurs between two adjacent INVs). This is not wrong in general.
      *
      * @param acyclic same as in `build()`.
      */
@@ -561,11 +566,11 @@ private:
     void build_graph_closure_compact_vcf_record_to_edge(size_t vcf_record_id);
 
     /**
-     * Assume that a VCF record corresponds to a node (reference or non-reference) and to many possible pairs of edges
-     * that traverse it. The procedure ensures that every incoming edge is paired with every outgoing edge in
-     * `vcf_record_to_edge`. This is necessary after graph closure, since otherwise e.g. an INS that occurs in the
-     * middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the path that corresponds to the combination
-     * of the two DELs and the INS (only the two DELs would be supported by such a path).
+     * Assume that a VCF record corresponds to a node (reference or non-reference) with multiple pairs of (incoming,
+     * outgoing) edges that traverse it. The procedure ensures that every incoming edge is paired with every outgoing
+     * edge in `vcf_record_to_edge`. This is necessary after graph closure, since otherwise e.g. an INS that occurs in
+     * the middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the path that corresponds to the
+     * combination of the two DELs and the INS (only the two DELs would be supported by such a path).
      *
      * Remark: in the general case where a VCF record corresponds to an arbitrary path, we should consider the subgraph
      * induced by all its paths in `vcf_record_to_edge`, and we should add to its `vcf_record_to_edge` every path in the
