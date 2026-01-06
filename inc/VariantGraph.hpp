@@ -399,7 +399,7 @@ public:
      * Stores `path_encoding` (assumed to be a valid path in GFA format) in `graph`.
      *
      * @param node_ids string IDs used in the GFA file, sorted lexicographically; if empty, the procedure assumes that
-     * `path` encodes the integer node IDs of `graph`;
+     * `path_encoding` uses the integer node IDs of `graph`;
      * @param buffer temporary space.
      */
     path_handle_t load_gfa_path(const string& path_encoding, const vector<string>& node_ids, const string& path_name, string& buffer);
@@ -517,7 +517,8 @@ private:
      * explicitly forbid it.
      *
      * Remark: after closure, a VCF record might be assigned to a pair of edges that do not traverse a common node (e.g.
-     * when an INS occurs between two adjacent INVs). This is not wrong in general.
+     * when an INS occurs between two adjacent INVs). And there might be no walk that traverses such edges. This is not
+     * wrong in general.
      *
      * @param acyclic same as in `build()`.
      */
@@ -568,13 +569,18 @@ private:
     /**
      * Assume that a VCF record corresponds to a node (reference or non-reference) with multiple pairs of (incoming,
      * outgoing) edges that traverse it. The procedure ensures that every incoming edge is paired with every outgoing
-     * edge in `vcf_record_to_edge`. This is necessary after graph closure, since otherwise e.g. an INS that occurs in
-     * the middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the path that corresponds to the
-     * combination of the two DELs and the INS (only the two DELs would be supported by such a path).
+     * edge in `vcf_record_to_edge`. This is necessary after the current implementation of graph closure, since
+     * otherwise e.g. an INS that occurs in the middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the
+     * path that corresponds to the combination of the two DELs and the INS (only the two DELs would be supported by
+     * such a path).
      *
      * Remark: in the general case where a VCF record corresponds to an arbitrary path, we should consider the subgraph
      * induced by all its paths in `vcf_record_to_edge`, and we should add to its `vcf_record_to_edge` every path in the
      * subgraph that is not already in its `vcf_record_to_edge`. We skip this general case for simplicity.
+     *
+     * Remark: this procedure would not be necessary if `build_graph_closure()` were implemented so that every edge
+     * update sees the full state of the graph up to that update (rather than edge updates being organized in phases, as
+     * they are now).
      */
     void build_graph_closure_close_vcf_record_to_edge();
 
