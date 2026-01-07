@@ -943,9 +943,11 @@ void VariantGraph::build_graph_closure_compact_vcf_record_to_edge(size_t vcf_rec
  */
 void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
     bool found;
-    size_t i, j, k, h;
-    size_t size, node_id, first, second, first_prime, second_prime;
-    vector<edge_t> in_edges, out_edges, new_pairs;
+    size_t i, j;
+    size_t size, first, second, first_prime, second_prime;
+    nid_t node_id;
+    vector<edge_t> new_pairs;
+    unordered_set<edge_t> in_edges, out_edges;
 
     for (i=0; i<n_vcf_records; i++) {
         size=vcf_record_to_edge.at(i).size();
@@ -969,27 +971,25 @@ void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
             handle_t& first_handle = vcf_record_to_edge.at(i).at(j).first;
             handle_t& second_handle = vcf_record_to_edge.at(i).at(j).second;
             if (graph.get_id(first_handle)==node_id) {
-                if (!graph.get_is_reverse(first_handle)) out_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
-                else in_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+                if (!graph.get_is_reverse(first_handle)) out_edges.emplace(vcf_record_to_edge.at(i).at(j));
+                else in_edges.emplace(vcf_record_to_edge.at(i).at(j));
             }
             else if (graph.get_id(second_handle)==node_id) {
-                if (!graph.get_is_reverse(first_handle)) in_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
-                else out_edges.emplace_back(vcf_record_to_edge.at(i).at(j));
+                if (!graph.get_is_reverse(second_handle)) in_edges.emplace(vcf_record_to_edge.at(i).at(j));
+                else out_edges.emplace(vcf_record_to_edge.at(i).at(j));
             }
             else {
                 // NOP: after closure, a sequence of edges might not traverse the node associated with the record.
             }
         }
-        // Adding every new pair of in-edge and out-edge
+        // Adding every new distinct pair of in-edge and out-edge
         new_pairs.clear();
-        for (j=0; j<in_edges.size(); j++) {
-            edge_t& edge1 = in_edges.at(j);
-            for (k=0; k<out_edges.size(); k++) {
-                edge_t& edge2 = out_edges.at(k);
+        for (auto& edge1: in_edges) {
+            for (auto& edge2: out_edges) {
                 found=false;
-                for (h=0; h<size; h+=3) {
-                    edge_t& edge3 = vcf_record_to_edge.at(i).at(h);
-                    edge_t& edge4 = vcf_record_to_edge.at(i).at(h+1);
+                for (j=0; j<size; j+=3) {
+                    edge_t& edge3 = vcf_record_to_edge.at(i).at(j);
+                    edge_t& edge4 = vcf_record_to_edge.at(i).at(j+1);
                     if ((edge3==edge1 && edge4==edge2) || (edge3==edge2 && edge4==edge1)) { found=true; break; }
                 }
                 if (!found) { new_pairs.emplace_back(edge1); new_pairs.emplace_back(edge2); }

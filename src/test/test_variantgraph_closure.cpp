@@ -497,7 +497,7 @@ void load_true_path(VariantGraph& graph, size_t path_id, const vector<string>& n
 
     // Block 2
     string left_rep_id = "rep1"; string left_rep_node="3";
-    string right_rep_id = "rep2"; string right_rep_node="7";
+    string right_rep_id = "rep3"; string right_rep_node="7";
     string ins_id = "ins3"; string ins_node="5";
     if (path_id==6) {
         graph.load_gfa_path("24+,"+left_rep_node+"+,26+",node_ids,to_string(path_id),buffer);
@@ -643,6 +643,7 @@ void load_true_path(VariantGraph& graph, size_t path_id, const vector<string>& n
     }
     if (path_id==32) {
         graph.load_gfa_path("46+,48-,46+",node_ids,to_string(path_id),buffer);
+        supported_records.emplace_back("del8");
     }
 
     // REP section
@@ -719,9 +720,6 @@ void load_true_path(VariantGraph& graph, size_t path_id, const vector<string>& n
     }
     if (path_id==46) {
         graph.load_gfa_path("65+,68-,67-,66-,69+",node_ids,to_string(path_id),buffer);
-        supported_records.emplace_back("inv9");
-        supported_records.emplace_back("inv10");
-        supported_records.emplace_back("inv11");
     }
 }
 

@@ -568,11 +568,11 @@ private:
 
     /**
      * Assume that a VCF record corresponds to a node (reference or non-reference) with multiple pairs of (incoming,
-     * outgoing) edges that traverse it. The procedure ensures that every incoming edge is paired with every outgoing
-     * edge in `vcf_record_to_edge`. This is necessary after the current implementation of graph closure, since
-     * otherwise e.g. an INS that occurs in the middle of two adjacent DELs (DEL-INS-DEL) would not be supported by the
-     * path that corresponds to the combination of the two DELs and the INS (only the two DELs would be supported by
-     * such a path).
+     * outgoing) non-reference edges that traverse it. The procedure ensures that every incoming edge is paired with
+     * every outgoing edge in `vcf_record_to_edge`. This is necessary after the current implementation of graph closure,
+     * since otherwise e.g. an INS that occurs in the middle of two adjacent DELs (DEL-INS-DEL) would not be supported
+     * by the path that corresponds to the combination of the two DELs and the INS (only the two DELs would be supported
+     * by such a path).
      *
      * Remark: in the general case where a VCF record corresponds to an arbitrary path, we should consider the subgraph
      * induced by all its paths in `vcf_record_to_edge`, and we should add to its `vcf_record_to_edge` every path in the
@@ -580,7 +580,8 @@ private:
      *
      * Remark: this procedure would not be necessary if `build_graph_closure()` were implemented so that every edge
      * update sees the full state of the graph up to that update (rather than edge updates being organized in phases, as
-     * they are now).
+     * they are now); in the current implementation, edge updates in the same phase cannot see the effect of one
+     * another.
      */
     void build_graph_closure_close_vcf_record_to_edge();
 
