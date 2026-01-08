@@ -526,7 +526,11 @@ private:
 
     /**
      * The closure operation applied to edge `e1` taken in the forward (`orientation=TRUE`) or reverse orientation.
-     * The procedure does not create new edges: it just appends instructions to `new_edges` as tuples `(from,to,e1,e2)`.
+     *
+     * Remark: the procedure does not create new edges: it just appends instructions to `new_edges` as tuples
+     * `(from,to,e1,e2)`.
+     *
+     * Remark: the new edge might already be in the graph (no such check is performed internally).
      *
      * @param e1 in canonical form;
      * @param tmp_pos temporary space.
@@ -537,7 +541,7 @@ private:
      * Decides if closure should be applied to `e1,e2`:
      * - Closure cannot involve two edges that are assigned to the same VCF record.
      * - Closure does not create new edges that connect different INS nodes that occur at the same position, since this
-     *   would give a quadratic number of new edges at that position.
+     *   would allow concatenating different INS and it would create a quadratic number of new edges at that position.
      * - Closure does not create self-loops over the same INS node.
      * - Closure is not applied to the only edge of a DUP, since that edge means that the duplicated interval must
      *   be traversed again, i.e. its meaning is stronger than a new adjacency.
@@ -552,38 +556,19 @@ private:
 
     /**
      * For every sequence of edges of `vcf_record` that contains `old_edge`, the procedure creates a new sequence of
-     * edges that contains `new_edge`.
+     * edges that contains `new_edge` and stores it in `vcf_record_to_edge_next`.
      *
      * @param old_edge, new_edge in canonical form.
      */
     void build_graph_closure_update_vcf_record_to_edge(int32_t vcf_record, const edge_t& old_edge, const edge_t& new_edge, vector<vector<edge_t>>& vcf_record_to_edge_next);
 
     /**
-     * Removes duplicates from `vcf_record_to_edge[vcf_record_id]`, which may form because the same new edge might be
+     * Removes duplicates from `vcf_record_to_edge[vcf_record_id]`, which may arise because the same new edge might be
      * created when closing different existing edges.
      *
      * Remark: the procedure does not sort `vcf_record_to_edge[vcf_record_id]`.
      */
     void build_graph_closure_compact_vcf_record_to_edge(size_t vcf_record_id);
-
-    /**
-     * Assume that a VCF record corresponds to a node (reference or non-reference) with multiple pairs of (incoming,
-     * outgoing) non-reference edges that traverse it. The procedure ensures that every incoming edge is paired with
-     * every outgoing edge in `vcf_record_to_edge`. This is necessary after the current implementation of graph closure,
-     * since otherwise e.g. an INS that occurs in the middle of two adjacent DELs (DEL-INS-DEL) would not be supported
-     * by the path that corresponds to the combination of the two DELs and the INS (only the two DELs would be supported
-     * by such a path).
-     *
-     * Remark: in the general case where a VCF record corresponds to an arbitrary path, we should consider the subgraph
-     * induced by all its paths in `vcf_record_to_edge`, and we should add to its `vcf_record_to_edge` every path in the
-     * subgraph that is not already in its `vcf_record_to_edge`. We skip this general case for simplicity.
-     *
-     * Remark: this procedure would not be necessary if `build_graph_closure()` were implemented so that every edge
-     * update sees the full state of the graph up to that update (rather than edge updates being organized in phases, as
-     * they are now); in the current implementation, edge updates in the same phase cannot see the effect of one
-     * another.
-     */
-    void build_graph_closure_close_vcf_record_to_edge();
 
     /**
      * @param node_handle a reference node;

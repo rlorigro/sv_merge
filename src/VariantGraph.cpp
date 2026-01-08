@@ -710,72 +710,80 @@ void VariantGraph::build(vector<VcfRecord>& records, int32_t flank_length, int32
 
 
 /**
- * Closure is applied over multiple iterations, until no new edge is created.
+ * Closure is applied over multiple iterations, until neither the graph topology nor the mapping (edge, VCF record)
+ * changes.
  *
- * Remark: if an edge is processed in one iteration of closure, it is not skipped in the following iterations, since it
- * might get connected to new nodes.
+ * Remark: the same edge may be processed in multiple iterations of closure, since it might create new edges or change
+ * the mapping (edge, VCF record) in different iterations.
  */
 void VariantGraph::build_graph_closure(bool acyclic) {
-    bool found;
+    bool keep_iterating;
     size_t i;
+    size_t n_edges_before, n_edges_after;
     vector<int32_t> tmp_vector;
     vector<tuple<handle_t,handle_t,edge_t,edge_t>> edge_instructions;
     vector<vector<edge_t>> vcf_record_to_edge_next;
-    unordered_set<edge_t> new_edges;
+    unordered_set<int32_t> records_of_edge;
+    unordered_set<edge_t> nonreference_edges;
 
     for (auto& pair: edge_to_vcf_record) {
         if (pair.second.size()>1) sort(pair.second.begin(),pair.second.end());
     }
     vcf_record_to_edge_next.reserve(n_vcf_records);
     for (i=0; i<n_vcf_records; i++) vcf_record_to_edge_next.emplace_back();
-    while (true) {
-        for (auto& pair: edge_to_vcf_record) {  // Every non-reference edge
-            const edge_t& e1 = pair.first;
+    do {
+        nonreference_edges.clear();
+        for (auto& pair: edge_to_vcf_record) nonreference_edges.insert(pair.first);
+        keep_iterating=false;
+        for (auto& e1: nonreference_edges) {
+            edge_instructions.clear();
             if (is_reference_node(e1.second)) build_graph_closure_impl(e1,true,acyclic,edge_instructions,tmp_vector);
             if (is_reference_node(e1.first)) build_graph_closure_impl(e1,false,acyclic,edge_instructions,tmp_vector);
-        }
-        if (edge_instructions.empty()) break;
-        for (auto& t: edge_instructions) {
-            // - `edge_instructions` is guaranteed to contain edges that are not in `graph`.
-            // - `edge_instructions` might contain duplicated new edges, since the same new edge might be created by
-            // closing different existing edges. Such duplicates might be associated with different VCF records, so they
-            // still need to be processed.
-            found=graph.has_edge(std::get<0>(t),std::get<1>(t));
-            if (!found) graph.create_edge(std::get<0>(t),std::get<1>(t));
-            edge_t new_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
-            if (!found) new_edges.insert(new_edge);
-            edge_t& e1 = std::get<2>(t);
-            edge_t& e2 = std::get<3>(t);
-            for (auto& record_id: edge_to_vcf_record[e1]) {
-                if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={record_id};
-                else edge_to_vcf_record.at(new_edge).emplace_back(record_id);
-                build_graph_closure_update_vcf_record_to_edge(record_id,e1,new_edge,vcf_record_to_edge_next);
+            for (auto& t: edge_instructions) {
+                if (!graph.has_edge(std::get<0>(t),std::get<1>(t))) {
+                    graph.create_edge(std::get<0>(t),std::get<1>(t));
+                    keep_iterating=true;
+                }
+                edge_t created_edge = graph.edge_handle(std::get<0>(t),std::get<1>(t));
+                // An edge in `edge_instructions` might have been created before, by closing other edges, but now it
+                // might be associated with different VCF records and thus it might update `edge_to_vcf_record` and
+                // `vcf_record_to_edge`.
+                records_of_edge.clear();
+                edge_t& e1 = std::get<2>(t);
+                edge_t& e2 = std::get<3>(t);
+                for (auto& record_id: edge_to_vcf_record[e1]) {
+                    records_of_edge.insert(record_id);
+                    if (!edge_to_vcf_record.contains(created_edge)) edge_to_vcf_record[created_edge]={record_id};
+                    else edge_to_vcf_record.at(created_edge).emplace_back(record_id);
+                    build_graph_closure_update_vcf_record_to_edge(record_id,e1,created_edge,vcf_record_to_edge_next);
+                }
+                for (auto& record_id: edge_to_vcf_record[e2]) {
+                    records_of_edge.insert(record_id);
+                    if (!edge_to_vcf_record.contains(created_edge)) edge_to_vcf_record[created_edge]={record_id};
+                    else edge_to_vcf_record.at(created_edge).emplace_back(record_id);
+                    build_graph_closure_update_vcf_record_to_edge(record_id,e2,created_edge,vcf_record_to_edge_next);
+                }
+                // Compacting `edge_to_vcf_record`.
+                vector<size_t>& array = edge_to_vcf_record.at(created_edge);
+                if (array.size()>1) {
+                    sort(array.begin(),array.end());
+                    const auto iterator = unique(array.begin(),array.end());
+                    array.resize(distance(array.begin(),iterator));
+                }
+                // Updating and compacting `vcf_record_to_edge`.
+                for (auto& record_id: records_of_edge) {
+                    if (vcf_record_to_edge_next.at(record_id).empty()) continue;
+                    n_edges_before=vcf_record_to_edge.at(record_id).size();
+                    vcf_record_to_edge.at(record_id).insert(vcf_record_to_edge.at(record_id).end(),make_move_iterator(vcf_record_to_edge_next.at(record_id).begin()),make_move_iterator(vcf_record_to_edge_next.at(record_id).end()));
+                    build_graph_closure_compact_vcf_record_to_edge(record_id);
+                    n_edges_after=vcf_record_to_edge.at(record_id).size();
+                    if (n_edges_after>n_edges_before) keep_iterating=true;
+                    else if (n_edges_after<n_edges_before) throw runtime_error("ERROR: closure reduces the size of vcf_record_to_edge["+to_string(record_id)+"] from "+to_string(n_edges_before)+" to "+to_string(n_edges_after));
+                    vcf_record_to_edge_next.at(record_id).clear();
+                }
             }
-            for (auto& record_id: edge_to_vcf_record[e2]) {
-                if (!edge_to_vcf_record.contains(new_edge)) edge_to_vcf_record[new_edge]={record_id};
-                else edge_to_vcf_record.at(new_edge).emplace_back(record_id);
-                build_graph_closure_update_vcf_record_to_edge(record_id,e2,new_edge,vcf_record_to_edge_next);
-            }
         }
-        edge_instructions.clear();
-        // Compacting `edge_to_vcf_record`.
-        for (auto& edge: new_edges) {
-            vector<size_t>& array = edge_to_vcf_record.at(edge);
-            if (array.size()<=1) continue;
-            sort(array.begin(),array.end());
-            const auto iterator = unique(array.begin(),array.end());
-            array.resize(distance(array.begin(),iterator));
-        }
-        new_edges.clear();
-        // Updating and compacting `vcf_record_to_edge`.
-        for (i=0; i<n_vcf_records; i++) {
-            if (vcf_record_to_edge_next.at(i).empty()) continue;
-            vcf_record_to_edge.at(i).insert(vcf_record_to_edge.at(i).end(),make_move_iterator(vcf_record_to_edge_next.at(i).begin()),make_move_iterator(vcf_record_to_edge_next.at(i).end()));
-            build_graph_closure_compact_vcf_record_to_edge(i);
-            vcf_record_to_edge_next.at(i).clear();
-        }
-    }
-    build_graph_closure_close_vcf_record_to_edge();
+    } while (keep_iterating);
 }
 
 
@@ -788,7 +796,7 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
         if (source!=to) {
             graph.follow_edges(source,false,[&](handle_t new_neighbor) {
                 const edge_t e2 = graph.edge_handle(source,new_neighbor);
-                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
+                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos)) {
                     new_edges.emplace_back(from,new_neighbor,e1,e2);
                     return;
                 }
@@ -800,7 +808,7 @@ void VariantGraph::build_graph_closure_impl(const edge_t& e1, bool orientation, 
         if (source!=to) {
             graph.follow_edges(source,true,[&](handle_t new_neighbor) {
                 const edge_t e2 = graph.edge_handle(graph.flip(source),new_neighbor);
-                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos) && !graph.has_edge(from,new_neighbor)) {
+                if (build_graph_closure_should_create_edge(e1,e2,acyclic,tmp_pos)) {
                     new_edges.emplace_back(from,new_neighbor,e1,e2);
                     return;
                 }
@@ -935,73 +943,6 @@ void VariantGraph::build_graph_closure_compact_vcf_record_to_edge(size_t vcf_rec
         while (i<size && array.at(i)==null_edge) i++;
     }
     array.resize(last+1);
-}
-
-
-/**
- * For simplicity, the procedure only considers the original node associated with every VCF record.
- */
-void VariantGraph::build_graph_closure_close_vcf_record_to_edge() {
-    bool found;
-    size_t i, j;
-    size_t size, first, second, first_prime, second_prime;
-    nid_t node_id;
-    vector<edge_t> new_pairs;
-    unordered_set<edge_t> in_edges, out_edges;
-
-    for (i=0; i<n_vcf_records; i++) {
-        size=vcf_record_to_edge.at(i).size();
-        if (size<3 || vcf_record_to_edge.at(i).at(2)!=null_edge) continue;
-        // Determining the node that is traversed by the record
-        first=graph.get_id(vcf_record_to_edge.at(i).at(0).first);
-        second=graph.get_id(vcf_record_to_edge.at(i).at(0).second);
-        first_prime=graph.get_id(vcf_record_to_edge.at(i).at(1).first);
-        second_prime=graph.get_id(vcf_record_to_edge.at(i).at(1).second);
-        if (first_prime==first || first_prime==second) node_id=first_prime;
-        else if (second_prime==first || second_prime==second) node_id=second_prime;
-        else throw runtime_error("ERROR: The following VCF record does not traverse a node: "+to_string(i));
-        // Partitioning edges (in canonical form) into in- and out-edges WRT the traversed node.
-        in_edges.clear(); out_edges.clear(); first=0;
-        for (j=0; j<size; j++) {
-            if (vcf_record_to_edge.at(i).at(j)==null_edge) {
-                if (j!=first+2) throw runtime_error("ERROR: The following VCF record has a sequence of "+to_string(j-first)+" edges: "+to_string(i));
-                first=j+1;
-                continue;
-            }
-            handle_t& first_handle = vcf_record_to_edge.at(i).at(j).first;
-            handle_t& second_handle = vcf_record_to_edge.at(i).at(j).second;
-            if (graph.get_id(first_handle)==node_id) {
-                if (!graph.get_is_reverse(first_handle)) out_edges.emplace(vcf_record_to_edge.at(i).at(j));
-                else in_edges.emplace(vcf_record_to_edge.at(i).at(j));
-            }
-            else if (graph.get_id(second_handle)==node_id) {
-                if (!graph.get_is_reverse(second_handle)) in_edges.emplace(vcf_record_to_edge.at(i).at(j));
-                else out_edges.emplace(vcf_record_to_edge.at(i).at(j));
-            }
-            else {
-                // NOP: after closure, a sequence of edges might not traverse the node associated with the record.
-            }
-        }
-        // Adding every new distinct pair of in-edge and out-edge
-        new_pairs.clear();
-        for (auto& edge1: in_edges) {
-            for (auto& edge2: out_edges) {
-                found=false;
-                for (j=0; j<size; j+=3) {
-                    edge_t& edge3 = vcf_record_to_edge.at(i).at(j);
-                    edge_t& edge4 = vcf_record_to_edge.at(i).at(j+1);
-                    if ((edge3==edge1 && edge4==edge2) || (edge3==edge2 && edge4==edge1)) { found=true; break; }
-                }
-                if (!found) { new_pairs.emplace_back(edge1); new_pairs.emplace_back(edge2); }
-            }
-        }
-        size=new_pairs.size();
-        for (j=0; j<size; j+=2) {
-            vcf_record_to_edge.at(i).emplace_back(new_pairs.at(j));
-            vcf_record_to_edge.at(i).emplace_back(new_pairs.at(j+1));
-            vcf_record_to_edge.at(i).emplace_back(null_edge);
-        }
-    }
 }
 
 
