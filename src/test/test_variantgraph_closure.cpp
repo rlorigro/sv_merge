@@ -36,7 +36,7 @@ void print_truth_vcf_header(ofstream& out) {
  * Remark: BNDs are not tested; we leave this to the future, since BND handling should be tested more thoroughly in the
  * entire codebase.
  */
-void print_truth_vcf(int32_t dataset, ofstream& out) {
+void print_truth_vcf(size_t dataset, ofstream& out) {
     const string QUAL = "60";  // Arbitrary
     const string FILTER = "PASS";
     const string FORMAT = "GT";
@@ -165,7 +165,7 @@ void print_truth_vcf(int32_t dataset, ofstream& out) {
 }
 
 
-void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure2) {
+void print_truth_gfa(size_t dataset, ofstream& out, bool closure1, bool closure2) {
     if (dataset==0) {
         // INS section
         // Block 1
@@ -515,9 +515,9 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         // Block 1
         out << "S\t1\tCCCCCCCCCCCCCCC\n";
         out << "S\t2\tCCCCC\n";
-        out << "S\t3\tAAAAA\n";
-        out << "S\t4\tAAAAA\n";
-        out << "S\t5\tAAAAAGGGGG\n";
+        out << "S\t3\tCCCCC\n";
+        out << "S\t4\tCCCCC\n";
+        out << "S\t5\tCCCCCCCCCCCCCCCGGGGG\n";
         out << "S\trep1\tAAAAA\n";
         out << "S\trep2\tGGGGG\n";
         out << "S\trep3\tAAAAA\n";
@@ -595,7 +595,7 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         out << "S\tins5\tAAAAA\n";
         out << "S\tins6\tCCCCC\n";
         out << "S\trep7\tAAAAA\n";
-        out << "S\trep8\tAAAAA\n";
+        out << "S\trep8\tCCCCC\n";
         out << "S\tins7\tAAAAA\n";
         out << "S\tins8\tCCCCC\n";
         // Before closure
@@ -634,7 +634,7 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         out << "S\t12\tAAAAA\n";
         out << "S\t13\tAAAAACCCCC\n";
         out << "S\trep9\tCCCCC\n";
-        out << "S\trep10\tCCCCC\n";
+        out << "S\trep10\tGGGGG\n";
         // Before closure
         out << "L\t9\t+\t10\t+\t*\n";
         out << "L\t10\t+\t11\t+\t*\n";
@@ -661,6 +661,10 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         // Block 1
         out << "S\t14\tCCCCC\n";
         out << "S\t15\tCCCCCGGGGG\n";
+        out << "S\tins9\tGGGGG\n";
+        out << "S\tins10\tTTTTT\n";
+        out << "S\tins11\tGGGGG\n";
+        out << "S\tins12\tTTTTT\n";
         // Before closure
         out << "L\t13\t+\t14\t+\t*\n";
         out << "L\t14\t+\t15\t+\t*\n";
@@ -669,7 +673,7 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         out << "L\tins9\t+\t14\t+\t*\n";
         out << "L\tins10\t+\t14\t+\t*\n";
         out << "L\t13\t+\t14\t-\t*\n";
-        out << "L\t14-\t+\t15\t+\t*\n";
+        out << "L\t14\t-\t15\t+\t*\n";
         out << "L\t14\t+\tins11\t+\t*\n";
         out << "L\t14\t+\tins12\t+\t*\n";
         out << "L\tins11\t+\t15\t+\t*\n";
@@ -680,6 +684,10 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
             out << "L\t14\t+\tins10\t-\t*\n";
             out << "L\t14\t-\tins11\t+\t*\n";
             out << "L\t14\t-\tins12\t+\t*\n";
+            out << "L\t15\t-\tins9\t+\t*\n";
+            out << "L\t15\t-\tins10\t+\t*\n";
+            out << "L\tins11\t+\t13\t-\t*\n";
+            out << "L\tins12\t+\t13\t-\t*\n";
             if (closure2) {
                 out << "L\tins9\t+\tins11\t-\t*\n";
                 out << "L\tins9\t+\tins12\t-\t*\n";
@@ -720,6 +728,10 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
         out << "S\t21\tTTTTT\n";
         out << "S\t22\tTTTTT\n";
         out << "S\t23\tTTTTTAAAAA\n";
+        out << "S\trep11\tAAAAA\n";
+        out << "S\trep12\tCCCCC\n";
+        out << "S\trep13\tAAAAA\n";
+        out << "S\trep14\tCCCCC\n";
         // Before closure
         out << "L\t19\t+\t20\t+\t*\n";
         out << "L\t20\t+\t21\t+\t*\n";
@@ -779,10 +791,11 @@ void print_truth_gfa(int32_t dataset, ofstream& out, bool closure1, bool closure
  * @param supported_records the procedure sets this to the IDs of the VCF records supported by `path_id`, in arbitrary
  * order.
  */
-void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const vector<string>& node_ids, vector<string>& supported_records, string& buffer) {
+void load_true_path(size_t dataset, VariantGraph& graph, size_t path_id, const vector<string>& node_ids, vector<string>& supported_records, string& buffer) {
     string ins_id, ins_node, rep_id, rep_node, inv_id, inv_node;
     string left_rep_id, left_rep_node, right_rep_id, right_rep_node;
     string left_inv_id, left_inv_node, right_inv_id, right_inv_node;
+    string left_ins_id, left_ins_node, right_ins_id, right_ins_node;
 
     graph.destroy_paths();
     supported_records.clear();
@@ -796,27 +809,27 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             supported_records.emplace_back("del1");
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==2) {
+        else if (path_id==2) {
             graph.load_gfa_path("22+,"+ins_node+"+,24+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back("del2");
         }
-        if (path_id==3) {
+        else if (path_id==3) {
             graph.load_gfa_path("21+,24+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del1");
             supported_records.emplace_back("del2");
         }
-        if (path_id==4) {
+        else if (path_id==4) {
             graph.load_gfa_path("21+,"+ins_node+"+,24+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del1");
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back("del2");
         }
-        if (path_id==5) {
+        else if (path_id==5) {
             graph.load_gfa_path("21+,"+ins_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del1");
         }
-        if (path_id==6) {
+        else if (path_id==6) {
             graph.load_gfa_path(ins_node+"+,24+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del2");
         }
@@ -829,54 +842,54 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             graph.load_gfa_path("24+,"+left_rep_node+"+,26+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
         }
-        if (path_id==8) {
+        else if (path_id==8) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+ins_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
         }
-        if (path_id==9) {
+        else if (path_id==9) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
         }
-        if (path_id==10) {
+        else if (path_id==10) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+ins_node+"+,26+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==11) {
+        else if (path_id==11) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+ins_node+"+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==12) {
+        else if (path_id==12) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+ins_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==13) {
+        else if (path_id==13) {
             graph.load_gfa_path("24+,"+left_rep_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==14) {
+        else if (path_id==14) {
             graph.load_gfa_path("25+,"+ins_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==15) {
+        else if (path_id==15) {
             graph.load_gfa_path(left_rep_node+"+,"+ins_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==16) {
+        else if (path_id==16) {
             graph.load_gfa_path(ins_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==17) {
+        else if (path_id==17) {
             graph.load_gfa_path(left_rep_node+"+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==18) {
+        else if (path_id==18) {
             graph.load_gfa_path("25+,"+right_rep_node+"+,27+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_rep_id);
         }
@@ -890,93 +903,93 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             graph.load_gfa_path("30+,"+left_inv_node+"-,32+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==20) {
+        else if (path_id==20) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+ins_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==21) {
+        else if (path_id==21) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,32-",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==22) {
+        else if (path_id==22) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+ins_node+"+,32+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==23) {
+        else if (path_id==23) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+ins_node+"+,32-",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==24) {
+        else if (path_id==24) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+ins_node+"+,30-",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==25) {
+        else if (path_id==25) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+ins_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==26) {
+        else if (path_id==26) {
             graph.load_gfa_path("30+,"+left_inv_node+"-,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==27) {
+        else if (path_id==27) {
             graph.load_gfa_path("31+,"+ins_node+"+,32+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==28) {
+        else if (path_id==28) {
             graph.load_gfa_path(left_inv_node+"+,"+ins_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==29) {
+        else if (path_id==29) {
             graph.load_gfa_path(left_inv_node+"-,"+ins_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==30) {
+        else if (path_id==30) {
             graph.load_gfa_path("33-,"+ins_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==31) {
+        else if (path_id==31) {
             graph.load_gfa_path(ins_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==32) {
+        else if (path_id==32) {
             graph.load_gfa_path(left_inv_node+"+,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==33) {
+        else if (path_id==33) {
             graph.load_gfa_path(left_inv_node+"-,"+right_inv_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==34) {
+        else if (path_id==34) {
             graph.load_gfa_path("30+,"+ins_node+"-,"+left_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==35) {
+        else if (path_id==35) {
             graph.load_gfa_path(right_inv_node+"+,"+ins_node+"-,"+left_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==36) {
+        else if (path_id==36) {
             graph.load_gfa_path("30+,"+ins_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==37) {
+        else if (path_id==37) {
             graph.load_gfa_path(right_inv_node+"+,"+ins_node+"-,33+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
             supported_records.emplace_back(ins_id);
         }
-        if (path_id==38) {
+        else if (path_id==38) {
             graph.load_gfa_path(left_inv_node+"-,"+right_inv_node+"-",node_ids,to_string(path_id),buffer);
         }
-        if (path_id==39) {
+        else if (path_id==39) {
             graph.load_gfa_path("30+,33+",node_ids,to_string(path_id),buffer);
         }
 
@@ -987,12 +1000,12 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             supported_records.emplace_back("del3");
             supported_records.emplace_back("del4");
         }
-        if (path_id==41) {
+        else if (path_id==41) {
             graph.load_gfa_path("34+,37+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del4");
             supported_records.emplace_back("del5");
         }
-        if (path_id==42) {
+        else if (path_id==42) {
             graph.load_gfa_path("33+,37+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del3");
             supported_records.emplace_back("del4");
@@ -1005,49 +1018,49 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             graph.load_gfa_path("37+,"+left_rep_node+"+,39+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
         }
-        if (path_id==44) {
+        else if (path_id==44) {
             graph.load_gfa_path("37+,"+left_rep_node+"+,40+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back("del6");
         }
-        if (path_id==45) {
+        else if (path_id==45) {
             graph.load_gfa_path("37+,"+left_rep_node+"+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back("del6");
         }
-        if (path_id==46) {
+        else if (path_id==46) {
             graph.load_gfa_path("37+,"+left_rep_node+"+,"+right_rep_node+"+,41+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_rep_id);
             supported_records.emplace_back("del6");
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==47) {
+        else if (path_id==47) {
             graph.load_gfa_path("38+,40+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
         }
-        if (path_id==48) {
+        else if (path_id==48) {
             graph.load_gfa_path("38+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
         }
-        if (path_id==49) {
+        else if (path_id==49) {
             graph.load_gfa_path(left_rep_node+"+,40+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
         }
-        if (path_id==50) {
+        else if (path_id==50) {
             graph.load_gfa_path(left_rep_node+"+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
         }
-        if (path_id==51) {
+        else if (path_id==51) {
             graph.load_gfa_path("38+,"+right_rep_node+"+,41+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==52) {
+        else if (path_id==52) {
             graph.load_gfa_path(left_rep_node+"+,"+right_rep_node+"+,41+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del6");
             supported_records.emplace_back(right_rep_id);
         }
-        if (path_id==53) {
+        else if (path_id==53) {
             graph.load_gfa_path("39+,"+right_rep_node+"+,41+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_rep_id);
         }
@@ -1061,35 +1074,35 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             graph.load_gfa_path("45+,"+left_inv_node+"-,47+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==55) {
+        else if (path_id==55) {
             graph.load_gfa_path("45+,"+left_inv_node+"-,"+right_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back("del8");
         }
-        if (path_id==56) {
+        else if (path_id==56) {
             graph.load_gfa_path("45+,"+left_inv_node+"-,"+right_inv_node+"-,49+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back("del8");
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==57) {
+        else if (path_id==57) {
             graph.load_gfa_path(left_inv_node+"+,"+right_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del8");
         }
-        if (path_id==58) {
+        else if (path_id==58) {
             graph.load_gfa_path(right_inv_node+"+,"+left_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del8");
         }
-        if (path_id==59) {
+        else if (path_id==59) {
             graph.load_gfa_path(left_inv_node+"+,"+right_inv_node+"-,"+left_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del8");
         }
-        if (path_id==60) {
+        else if (path_id==60) {
             graph.load_gfa_path(left_inv_node+"+,"+right_inv_node+"-,49+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back("del8");
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==61) {
+        else if (path_id==61) {
             graph.load_gfa_path("47+,"+right_inv_node+"-,49+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
@@ -1102,21 +1115,21 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(rep_id);
         }
-        if (path_id==63) {
+        else if (path_id==63) {
             graph.load_gfa_path("49+,"+left_inv_node+"-,"+rep_node+"+,"+right_inv_node+"-,53+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(rep_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==64) {
+        else if (path_id==64) {
             graph.load_gfa_path(left_inv_node+"+,"+rep_node+"+,"+right_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(rep_id);
         }
-        if (path_id==65) {
+        else if (path_id==65) {
             graph.load_gfa_path(left_inv_node+"-,"+rep_node+"+,"+right_inv_node+"-",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(rep_id);
         }
-        if (path_id==66) {
+        else if (path_id==66) {
             graph.load_gfa_path(left_inv_node+"+,"+rep_node+"+,"+right_inv_node+"-,53+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(rep_id);
             supported_records.emplace_back(right_inv_id);
@@ -1139,69 +1152,361 @@ void load_true_path(int32_t dataset, VariantGraph& graph, size_t path_id, const 
             graph.load_gfa_path("65+,"+left_inv_node+"-,"+inv_node+"-",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==68) {
+        else if (path_id==68) {
             graph.load_gfa_path("65+,"+left_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
         }
-        if (path_id==69) {
+        else if (path_id==69) {
             graph.load_gfa_path("65+,"+left_inv_node+"-,"+inv_node+"-,"+right_inv_node+"+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(inv_id);
         }
-        if (path_id==70) {
+        else if (path_id==70) {
             graph.load_gfa_path("65+,"+left_inv_node+"-,"+inv_node+"-,"+right_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(inv_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==71) {
+        else if (path_id==71) {
             graph.load_gfa_path("65+,"+right_inv_node+"+,"+inv_node+"+,"+left_inv_node+"+,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(inv_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==72) {
+        else if (path_id==72) {
             graph.load_gfa_path("65+,"+right_inv_node+"-,"+inv_node+"-,"+left_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(left_inv_id);
             supported_records.emplace_back(inv_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==73) {
+        else if (path_id==73) {
             graph.load_gfa_path(left_inv_node+"+,"+inv_node+"-,"+right_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(inv_id);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==74) {
+        else if (path_id==74) {
             graph.load_gfa_path(inv_node+"-,"+right_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==75) {
+        else if (path_id==75) {
             graph.load_gfa_path("65+,"+right_inv_node+"-,69+",node_ids,to_string(path_id),buffer);
             supported_records.emplace_back(right_inv_id);
         }
-        if (path_id==76) {
+        else if (path_id==76) {
             graph.load_gfa_path("65+,"+right_inv_node+"+",node_ids,to_string(path_id),buffer);
         }
-        if (path_id==77) {
+        else if (path_id==77) {
             graph.load_gfa_path(left_inv_node+"+,69+",node_ids,to_string(path_id),buffer);
         }
-        if (path_id==78) {
+        else if (path_id==78) {
             graph.load_gfa_path(left_inv_node+"+,"+inv_node+"+,"+left_inv_node+"+",node_ids,to_string(path_id),buffer);
         }
-        if (path_id==79) {
+        else if (path_id==79) {
             graph.load_gfa_path(inv_node+"+,"+right_inv_node+"+,"+inv_node+"+",node_ids,to_string(path_id),buffer);
         }
     }
     else if (dataset==1) {
+        // REP section
+        // Block 1
+        left_rep_id="rep1"; left_rep_node="1"; rep_id="rep3"; rep_node="3"; right_rep_id="rep5"; right_rep_node="5";
+        if (path_id==1) {
+            graph.load_gfa_path("27+,"+left_rep_node+"+,"+rep_node+"+,30+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+            supported_records.emplace_back(rep_id);
+        }
+        else if (path_id==2) {
+            graph.load_gfa_path("28+,"+rep_node+"+,"+right_rep_node+"+,31+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back(right_rep_id);
+        }
+        else if (path_id==3) {
+            graph.load_gfa_path("27+,"+left_rep_node+"+,"+rep_node+"+,"+right_rep_node+"+,31+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back(right_rep_id);
+        }
+        else if (path_id==4) {
+            graph.load_gfa_path("27+,"+left_rep_node+"+,"+rep_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+        }
+        else if (path_id==5) {
+            graph.load_gfa_path(left_rep_node+"+,"+rep_node+"+,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(rep_id);
+        }
+        else if (path_id==6) {
+            graph.load_gfa_path(rep_node+"+,"+right_rep_node+"+,31+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_rep_id);
+        }
 
+        // DEL section
+        // Block 1
+        left_ins_id="ins1"; left_ins_node="7"; right_ins_id="ins3"; right_ins_node="9";
+        if (path_id==7) {
+            graph.load_gfa_path("31+,"+left_ins_node+"+,33+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("del1");
+        }
+        else if (path_id==8) {
+            graph.load_gfa_path("31+,"+left_ins_node+"+,"+right_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("del1");
+        }
+        else if (path_id==9) {
+            graph.load_gfa_path("31+,"+right_ins_node+"+,33+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del1");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==10) {
+            graph.load_gfa_path(left_ins_node+"+,"+right_ins_node+"+,33+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del1");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==11) {
+            graph.load_gfa_path("31+,"+left_ins_node+"+,"+right_ins_node+"+,33+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("del1");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==12) {
+            graph.load_gfa_path(left_ins_node+"+,"+right_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del1");
+        }
 
+        // REP section
+        // Block 1
+        left_ins_id="ins5"; left_ins_node="11"; rep_id="rep7"; rep_node="13"; right_ins_id="ins7"; right_ins_node="15";
+        if (path_id==13) {
+            graph.load_gfa_path("33+,"+left_ins_node+"+,"+rep_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+        }
+        else if (path_id==14) {
+            graph.load_gfa_path("33+,"+left_ins_node+"+,"+rep_node+"+,35+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back(rep_id);
+        }
+        else if (path_id==15) {
+            graph.load_gfa_path("33+,"+left_ins_node+"+,"+rep_node+"+,"+right_ins_node+"+,35+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==16) {
+            graph.load_gfa_path(left_ins_node+"+,"+rep_node+"+,"+right_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(rep_id);
+        }
+        else if (path_id==17) {
+            graph.load_gfa_path("33+,"+rep_node+"+,"+right_ins_node+"+,35+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==18) {
+            graph.load_gfa_path(rep_node+"+,"+right_ins_node+"+,35+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_ins_id);
+        }
 
+        // Block 2
+        rep_id="rep9"; rep_node="17";
+        if (path_id==19) {
+            graph.load_gfa_path("35+,"+rep_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del2");
+        }
+        else if (path_id==20) {
+            graph.load_gfa_path("35+,"+rep_node+"+,38+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del2");
+            supported_records.emplace_back(rep_id);
+        }
+        else if (path_id==21) {
+            graph.load_gfa_path("35+,"+rep_node+"+,39+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del2");
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back("del3");
+        }
+        else if (path_id==22) {
+            graph.load_gfa_path("36+,"+rep_node+"+,39+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(rep_id);
+            supported_records.emplace_back("del3");
+        }
+        else if (path_id==23) {
+            graph.load_gfa_path(rep_node+"+,39+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del3");
+        }
 
+        // INV section
+        // Block 1
+        left_ins_id="ins9"; left_ins_node="19"; right_ins_id="ins11"; right_ins_node="21";
+        if (path_id==24) {
+            graph.load_gfa_path("39+,"+left_ins_node+"+,40-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+        }
+        else if (path_id==25) {
+            graph.load_gfa_path("39+,"+left_ins_node+"+,"+right_ins_node+"-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+        }
+        else if (path_id==26) {
+            graph.load_gfa_path(right_ins_node+"-,"+left_ins_node+"+,40+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+        }
+        else if (path_id==27) {
+            graph.load_gfa_path("41-,"+left_ins_node+"+,"+right_ins_node+"-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+        }
+        else if (path_id==28) {
+            graph.load_gfa_path("39+,"+left_ins_node+"+,40-,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+        }
+        else if (path_id==29) {
+            graph.load_gfa_path("40+,"+left_ins_node+"-,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+        }
+        else if (path_id==30) {
+            graph.load_gfa_path(right_ins_node+"-,"+left_ins_node+"+,40-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+        }
+        else if (path_id==31) {
+            graph.load_gfa_path("41-,"+left_ins_node+"+,40-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+        }
+        else if (path_id==32) {
+            graph.load_gfa_path("39+,"+left_ins_node+"+,40-,"+right_ins_node+"+,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==33) {
+            graph.load_gfa_path(left_ins_node+"+,"+right_ins_node+"-,"+left_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==34) {
+            graph.load_gfa_path(left_ins_node+"+,"+right_ins_node+"-,40+,"+left_ins_node+"-,"+right_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==35) {
+            graph.load_gfa_path("39+,"+right_ins_node+"-,40+,"+left_ins_node+"-,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_ins_id);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==36) {
+            graph.load_gfa_path("39+,40-,"+right_ins_node+"+,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==37) {
+            graph.load_gfa_path("40-,"+right_ins_node+"+,39-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==38) {
+            graph.load_gfa_path("40-,"+right_ins_node+"+,"+left_ins_node+"-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==39) {
+            graph.load_gfa_path("39+,"+right_ins_node+"-,40+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==40) {
+            graph.load_gfa_path("39+,"+right_ins_node+"-,"+left_ins_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv12");
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==41) {
+            graph.load_gfa_path("40-,"+right_ins_node+"+,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==42) {
+            graph.load_gfa_path(left_ins_node+"-,"+right_ins_node+"+,41+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_ins_id);
+        }
+        else if (path_id==43) {
+            graph.load_gfa_path("40+,"+right_ins_node+"+,"+left_ins_node+"-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_ins_id);
+        }
+
+        // Block 2
+        else if (path_id==44) {
+            graph.load_gfa_path("41+,43-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del4");
+        }
+        else if (path_id==45) {
+            graph.load_gfa_path("41+,43-,44+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del4");
+            supported_records.emplace_back("inv13");
+        }
+        else if (path_id==46) {
+            graph.load_gfa_path("41+,43-,45+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del4");
+            supported_records.emplace_back("inv13");
+            supported_records.emplace_back("del5");
+        }
+        else if (path_id==47) {
+            graph.load_gfa_path("42+,43-,45+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv13");
+            supported_records.emplace_back("del5");
+        }
+        else if (path_id==48) {
+            graph.load_gfa_path("43-,45+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("del5");
+        }
+
+        // Block 3
+        left_rep_id="rep11"; left_rep_node="23"; right_rep_id="rep13"; right_rep_node="25";
+        if (path_id==49) {
+            graph.load_gfa_path("45+,"+left_rep_node+"+,47-",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+        }
+        else if (path_id==50) {
+            graph.load_gfa_path("45+,"+left_rep_node+"+,47-,48+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+            supported_records.emplace_back("inv14");
+        }
+        else if (path_id==51) {
+            graph.load_gfa_path("45+,"+left_rep_node+"+,47-,"+right_rep_node+"+,49+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(left_rep_id);
+            supported_records.emplace_back("inv14");
+            supported_records.emplace_back(right_rep_id);
+        }
+        else if (path_id==52) {
+            graph.load_gfa_path(left_rep_node+"+,47-,"+right_rep_node+"+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv14");
+        }
+        else if (path_id==53) {
+            graph.load_gfa_path("46+,47-,"+right_rep_node+"+,49+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back("inv14");
+            supported_records.emplace_back(right_rep_id);
+        }
+        else if (path_id==54) {
+            graph.load_gfa_path("47-,"+right_rep_node+"+,49+",node_ids,to_string(path_id),buffer);
+            supported_records.emplace_back(right_rep_id);
+        }
+
+        // Block 4
+        // NOP
     }
 }
 
 
-void print_gfa_colors(ofstream& out) {
+/**
+ * @return X such that path IDs are in [1..X].
+ */
+size_t get_n_true_paths(size_t dataset) {
+    if (dataset==0) return 79;
+    else if (dataset==1) return 54;
+    else return 0;
+}
+
+
+void print_gfa_colors(size_t dataset, ofstream& out) {
     const string COLOR_REF = "gray";
     const string COLOR_INS = "red";
     const string COLOR_REP = "green";
@@ -1209,15 +1514,23 @@ void print_gfa_colors(ofstream& out) {
     int32_t i;
 
     out << "Name,Colour\n";
-    for (i=1; i<=49; i++) out << to_string(i) << "," << COLOR_REF << "\n";
-    for (i=1; i<=8; i++) out << "ins" << to_string(i) << "," << COLOR_INS << "\n";
-    for (i=1; i<=12; i++) out << "rep" << to_string(i) << "," << COLOR_REP << "\n";
+    if (dataset==0) {
+        for (i=1; i<=49; i++) out << to_string(i) << "," << COLOR_REF << "\n";
+        for (i=1; i<=8; i++) out << "ins" << to_string(i) << "," << COLOR_INS << "\n";
+        for (i=1; i<=12; i++) out << "rep" << to_string(i) << "," << COLOR_REP << "\n";
+    }
+    else if (dataset==1) {
+        for (i=1; i<=27; i++) out << to_string(i) << "," << COLOR_REF << "\n";
+        for (i=1; i<=12; i++) out << "ins" << to_string(i) << "," << COLOR_INS << "\n";
+        for (i=1; i<=14; i++) out << "rep" << to_string(i) << "," << COLOR_REP << "\n";
+    }
 }
 
 
-unordered_map<string,string> get_chromosomes() {
+unordered_map<string,string> get_chromosomes(size_t dataset) {
     unordered_map<string,string> out;
-    out.emplace("chr1","AAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
+    if (dataset==0) out.emplace("chr1","AAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
+    else if (dataset==1) out.emplace("chr1","CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAACCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGGGGGTTTTTTTTTTTTTTTTTTTTTTTTTAAAAAAAAAAAAAAAAAAAAAAAAA");
     return out;
 }
 
@@ -1241,93 +1554,99 @@ int main(int argc, char* argv[]) {
     const path TRUTH_GFA_COLORS = ROOT_DIR/"truth.csv";
     const path TEST_GFA = ROOT_DIR/"test.gfa";
     const int32_t SIGNATURE_N_STEPS = 10;
-    const int32_t FLANK_LENGTH = 10;
-    const int32_t INTERIOR_FLANK_LENGTH = 10;
+    const int32_t FLANK_LENGTH = 1000;
+    const int32_t INTERIOR_FLANK_LENGTH = 1000;
 
-    const unordered_map<string,string> chromosomes = get_chromosomes();
     const unordered_map<string,vector<interval_t>> tandem_track = get_tandem_track();
     size_t i, j;
-    size_t n_records;
+    size_t n_records, dataset, n_true_paths;
     string command, buffer;
     vector<string> supported_records, node_ids;
     vector<VcfRecord> records;
+    unordered_map<string,string> chromosomes;
 
-    // Printing truth files
-    ofstream input_vcf(INPUT_VCF.string());
-    print_truth_vcf_header(input_vcf);
-    print_truth_vcf(input_vcf);
-    input_vcf.close();
-    ofstream truth_gfa(TRUTH_GFA.string());
-    print_truth_gfa(truth_gfa,CLOSURE_1==1,CLOSURE_2==1);
-    truth_gfa.close();
-    ofstream truth_gfa_colors(TRUTH_GFA_COLORS.string());
-    print_gfa_colors(truth_gfa_colors);
-    truth_gfa_colors.close();
+    for (dataset=0; dataset<=1; dataset++) {
+        cerr << "Testing dataset " << to_string(dataset) << "...\n";
 
-    // Loading the VCF and building the graph
-    VcfReader reader(INPUT_VCF);
-    reader.for_record_in_vcf([&](VcfRecord& record) {
-        if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
-             ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
-           ) return;
-        records.push_back(record);
-    });
-    n_records=records.size();
-    VariantGraph graph(chromosomes,tandem_track);
-    graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH);
-    graph.to_gfa(TEST_GFA);
+        // Printing truth files
+        chromosomes=get_chromosomes(dataset);
+        ofstream input_vcf(INPUT_VCF.string());
+        print_truth_vcf_header(input_vcf);
+        print_truth_vcf(dataset,input_vcf);
+        input_vcf.close();
+        ofstream truth_gfa(TRUTH_GFA.string());
+        print_truth_gfa(dataset,truth_gfa,CLOSURE_1==1,CLOSURE_2==1);
+        truth_gfa.close();
+        ofstream truth_gfa_colors(TRUTH_GFA_COLORS.string());
+        print_gfa_colors(dataset,truth_gfa_colors);
+        truth_gfa_colors.close();
 
-    cerr << "Testing to_gfa(): node sequences...\n";
-    command.clear();
-    command.append("grep ^S " + TRUTH_GFA.string() + " | cut -f 1,3 | sort > tmp1.txt");
-    run_command(command);
-    command.clear();
-    command.append("grep ^S " + TEST_GFA.string() + " | cut -f 1,3 | sort > tmp2.txt");
-    run_command(command);
-    command.clear();
-    command.append("diff --brief tmp1.txt tmp2.txt");
-    run_command(command);
+        // Loading the VCF and building the graph
+        VcfReader reader(INPUT_VCF);
+        reader.for_record_in_vcf([&](VcfRecord& record) {
+            if ( (record.sv_type==VcfReader::TYPE_INSERTION && record.is_symbolic) ||
+                 ((record.sv_type==VcfReader::TYPE_DELETION || record.sv_type==VcfReader::TYPE_INVERSION || record.sv_type==VcfReader::TYPE_DUPLICATION || record.sv_type==VcfReader::TYPE_REPLACEMENT) && record.sv_length==INT32_MAX)
+               ) return;
+            records.push_back(record);
+        });
+        n_records=records.size();
+        VariantGraph graph(chromosomes,tandem_track);
+        graph.build(records,FLANK_LENGTH,INTERIOR_FLANK_LENGTH);
+        graph.to_gfa(TEST_GFA);
 
-    cerr << "Testing to_gfa(): n. edges...\n";
-    command.clear();
-    command.append("grep ^L " + TRUTH_GFA.string() + " | wc -l > tmp1.txt");
-    run_command(command);
-    command.clear();
-    command.append("grep ^L " + TEST_GFA.string() + " | wc -l > tmp2.txt");
-    run_command(command);
-    command.clear();
-    command.append("diff --brief tmp1.txt tmp2.txt");
-    run_command(command);
+        cerr << "Testing to_gfa(): node sequences...\n";
+        command.clear();
+        command.append("grep ^S " + TRUTH_GFA.string() + " | cut -f 1,3 | sort > tmp1.txt");
+        run_command(command);
+        command.clear();
+        command.append("grep ^S " + TEST_GFA.string() + " | cut -f 1,3 | sort > tmp2.txt");
+        run_command(command);
+        command.clear();
+        command.append("diff --brief tmp1.txt tmp2.txt");
+        run_command(command);
 
-    cerr << "Testing to_gfa(): local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
-    graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp1.txt");
-    graph.load_gfa(TRUTH_GFA);
-    graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp2.txt");
-    command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+        cerr << "Testing to_gfa(): n. edges...\n";
+        command.clear();
+        command.append("grep ^L " + TRUTH_GFA.string() + " | wc -l > tmp1.txt");
+        run_command(command);
+        command.clear();
+        command.append("grep ^L " + TEST_GFA.string() + " | wc -l > tmp2.txt");
+        run_command(command);
+        command.clear();
+        command.append("diff --brief tmp1.txt tmp2.txt");
+        run_command(command);
 
-    cerr << "Testing edge-record correspondence...\n";
-    for (i=1; i<=79; i++) {
-        cerr << "Testing path " << i << ":\n";
-        load_true_path(graph,i,node_ids,supported_records,buffer);
-        ofstream supported_truth_vcf("supported_truth.vcf");
-        for (auto& id: supported_records) {
-            for (j=0; j<n_records; j++) {
-                if (graph.vcf_records.at(j).id==id) {
-                    graph.vcf_records.at(j).print(supported_truth_vcf);
-                    supported_truth_vcf << '\n';
-                    break;
+        cerr << "Testing to_gfa(): local topology (" << SIGNATURE_N_STEPS << " steps)...\n";
+        graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp1.txt");
+        graph.load_gfa(TRUTH_GFA);
+        graph.print_graph_signature(SIGNATURE_N_STEPS, "tmp2.txt");
+        command.clear(); command.append("diff --brief tmp1.txt tmp2.txt"); run_command(command);
+
+        cerr << "Testing edge-record correspondence...\n";
+        n_true_paths=get_n_true_paths(dataset);
+        for (i=1; i<=n_true_paths; i++) {
+            cerr << "Testing path " << i << ":\n";
+            load_true_path(dataset,graph,i,node_ids,supported_records,buffer);
+            ofstream supported_truth_vcf("supported_truth.vcf");
+            for (auto& id: supported_records) {
+                for (j=0; j<n_records; j++) {
+                    if (graph.vcf_records.at(j).id==id) {
+                        graph.vcf_records.at(j).print(supported_truth_vcf);
+                        supported_truth_vcf << '\n';
+                        break;
+                    }
                 }
             }
+            supported_truth_vcf.close();
+            ofstream supported_test_vcf("supported_test.vcf"); ofstream unsupported_test_vcf("unsupported_test.vcf");
+            graph.print_supported_vcf_records(supported_test_vcf,unsupported_test_vcf,false);
+            supported_test_vcf.close(); unsupported_test_vcf.close();
+            command.clear(); command.append("sort supported_test.vcf > supported_test_sorted.vcf"); run_command(command);
+            command.clear(); command.append("sort supported_truth.vcf > supported_truth_sorted.vcf"); run_command(command);
+            command.clear(); command.append("diff --brief supported_test_sorted.vcf supported_truth_sorted.vcf"); run_command(command);
         }
-        supported_truth_vcf.close();
-        ofstream supported_test_vcf("supported_test.vcf"); ofstream unsupported_test_vcf("unsupported_test.vcf");
-        graph.print_supported_vcf_records(supported_test_vcf,unsupported_test_vcf,false);
-        supported_test_vcf.close(); unsupported_test_vcf.close();
-        command.clear(); command.append("sort supported_test.vcf > supported_test_sorted.vcf"); run_command(command);
-        command.clear(); command.append("sort supported_truth.vcf > supported_truth_sorted.vcf"); run_command(command);
-        command.clear(); command.append("diff --brief supported_test_sorted.vcf supported_truth_sorted.vcf"); run_command(command);
-    }
 
-    cerr << "Removing temporary files...\n";
-    command.clear(); command.append("rm -f tmp*.txt supported_*.vcf unsupported_*.vcf"); run_command(command);
+        cerr << "Removing temporary files...\n";
+        command.clear(); command.append("rm -f tmp*.txt supported_*.vcf unsupported_*.vcf"); run_command(command);
+    }
 }
