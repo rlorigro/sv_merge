@@ -35,6 +35,9 @@ void print_truth_vcf_header(ofstream& out) {
 /**
  * Remark: BNDs are not tested; we leave this to the future, since BND handling should be tested more thoroughly in the
  * entire codebase.
+ *
+ * @param dataset tests are organized in two datasets (0 and 1) just for historical reasons and ease of adding new
+ * tests; the procedure should be called with each dataset.
  */
 void print_truth_vcf(size_t dataset, ofstream& out) {
     const string QUAL = "60";  // Arbitrary
