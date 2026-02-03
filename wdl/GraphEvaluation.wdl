@@ -102,8 +102,11 @@ task EvaluateChromosome {
         Boolean force_unique_reads
         String docker
         File? force_windows_bed
-        Int n_cpu
-        Int ram_size_gb
+        
+        Int n_cpu = 16
+        Int ram_size_gb = 16
+        Int disk_size_gb = 128
+        Int preemptible_number = 0
     }
     parameter_meta {
     }
@@ -268,7 +271,7 @@ task EvaluateChromosome {
         docker: docker
         cpu: n_cpu
         memory: ram_size_gb + "GB"
-        disks: "local-disk 128 HDD"
-        preemptible: 0
+        disks: "local-disk " + disk_size_gb + " HDD"
+        preemptible: preemptible_number
     }
 }
