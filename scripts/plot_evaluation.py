@@ -384,16 +384,18 @@ def sample_order(x):
         y = numeric if "d" in token else 1.0/numeric
 
     else:
-        if "dipcall" in x:
+        if "dipcall_all" in x:
             y = 0
         elif "reference" in x:
             y = 100
-        elif "bcftools" in x:
+        elif "bcftools_SV_DV" in x:
             y = 101
-        elif "truvari" in x:
+        elif "hapestry_SV_04d_07_rescale_10bp_prune_without_closure" in x:
             y = 102
-        elif "pbsv" in x:
+        elif "hapestry_SV_DV_04d_2cov_id70_rescale_10bp_prune_with_closure" in x:
             y = 103
+        elif "hapestry_SV_DV_04d_2cov_id70_rescale_10bp_prune_without_closure" in x:
+            y = 104
         else:
             y = hash(x)
 
@@ -447,11 +449,10 @@ def plot_radar(data, data_ranges, title, colors, output_dir=None):
         if "reference" in sample:
             c = "gray"
             width = 3
-        elif "dipcall" in sample:
-            c = "#262626"
-            style = '--'
-            width = 1
-        elif "bcftools" in sample:
+        elif "dipcall_all" in sample:
+            c = "gray"
+            width = 3
+        elif "bcftools_SV_DV" in sample:
             c = "black"
             style = '--'
             width = 1
@@ -510,9 +511,9 @@ def plot_parallel_coordinate(data, data_ranges, title, colors, output_dir=None):
 
         if "ref" in sample:
             c = "#262626"
-        elif "dipcall" in sample:
+        elif "dipcall_all" in sample:
             c = "gray"
-        elif "bcftools" in sample:
+        elif "bcftools_SV_DV" in sample:
             c = "black"
         else:
             color_index = (float(s_color) + 1) /float(s_max + 2)
@@ -603,29 +604,27 @@ def evaluate_subdirs(subdirs: list[str], parent_dir: str, plot_type: str, save_f
 
     # c6,c3,c1,c8,c9,c0,c4,
     colors = {
-        'bcftools': "C0",
-        'dipcall': "#262626",
-        'dipcall_10': "#262626",
-        'dipcall_50': "#262626",
-        'hapestry': "red",
-        'hapestry_fix_fetch': "blue",
-        'hapestry_02n_rescale_50bp_prune': "red",
+        'bcftools_SV_DV': "C0",
+        'dipcall_all': "#262626",
+        'hapestry_SV_04d_07_rescale_10bp_prune_without_closure': "green",
+        'hapestry_SV_DV_04d_2cov_id70_rescale_10bp_prune_with_closure': "red",
+        'hapestry_SV_DV_04d_2cov_id70_rescale_10bp_prune_without_closure': "blue",
         'reference': "gray",
-        'pbsv_joint': "C1",
-        'sniffles_joint': "C4",
-        'truvari': "C9",
-        'truvari_kanpig': "C8",
-        'truvari_mode1': "C9",
-        'truvari_mode2': "C8",
-        'svmerger': "C2",
-        'jasmine': "C1",
-        'svimmer': "C3",
-        'merged_hap': "gray",
-        'merged': "purple",
-        'merged_pruned': "blue",
-        'merged_compressed': "green",
-        'merged_compressed_pruned': "orange",
-        'null': "gray",
+        # 'pbsv_joint': "C1",
+        # 'sniffles_joint': "C4",
+        # 'truvari': "C9",
+        # 'truvari_kanpig': "C8",
+        # 'truvari_mode1': "C9",
+        # 'truvari_mode2': "C8",
+        # 'svmerger': "C2",
+        # 'jasmine': "C1",
+        # 'svimmer': "C3",
+        # 'merged_hap': "gray",
+        # 'merged': "purple",
+        # 'merged_pruned': "blue",
+        # 'merged_compressed': "green",
+        # 'merged_compressed_pruned': "orange",
+        # 'null': "gray",
     }
 
     # data = defaultdict(lambda: defaultdict(list))

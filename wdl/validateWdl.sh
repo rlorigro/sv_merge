@@ -3,4 +3,6 @@
 set -x
 WOMTOOL_PATH="/Users/fcunial/apps/cromwell/womtool-84.jar"
 
+java -jar ${WOMTOOL_PATH} validate -l PlotHweImpl.wdl
+java -jar ${WOMTOOL_PATH} validate -l PlotHwe.wdl
 java -jar ${WOMTOOL_PATH} validate -l GraphEvaluation.wdl
