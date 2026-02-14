@@ -179,6 +179,7 @@ task EvaluateChromosome {
 
         # Evaluating all VCFs
         export HTF_CURL_HTTP_VERSION=1.1
+        export CURL_HTTP_VERSION=CURL_HTTP_VERSION_1_1
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
