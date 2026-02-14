@@ -178,7 +178,7 @@ task EvaluateChromosome {
         MONITOR_JOB=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
 
         # Evaluating all VCFs
-	export HTF_CURL_HTTP_VERSION=1.1
+        export HTF_CURL_HTTP_VERSION=1.1
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
