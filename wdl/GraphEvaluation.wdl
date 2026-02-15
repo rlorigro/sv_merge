@@ -275,5 +275,6 @@ task EvaluateChromosome {
         memory: ram_size_gb + "GB"
         disks: "local-disk " + disk_size_gb + " HDD"
         preemptible: preemptible_number
+        zones: "us-central1-c"
     }
 }
