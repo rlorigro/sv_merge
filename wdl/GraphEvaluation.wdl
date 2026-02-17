@@ -184,7 +184,7 @@ function debug_save_bed() {
     while true; do
         ls -laht ~{work_dir}/${EVALUATION_NAME}/*.bed 1>&2 && echo 0 || echo 1
         if [ -s ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed -o -s ~{work_dir}/${EVALUATION_NAME}/windows.bed ]; then
-            gcloud storage cp ~{work_dir}/${EVALUATION_NAME}/'*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
+            gsutil -m cp ~{work_dir}/${EVALUATION_NAME}/'*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
         fi
         sleep 60
     done
@@ -196,7 +196,7 @@ function debug_save_bed() {
         export HTF_CURL_HTTP_VERSION=1.1
         export CURL_HTTP_VERSION=CURL_HTTP_VERSION_1_1
         EVALUATION_NAME="~{chromosome}_evaluation"
-        rm -rf ./${EVALUATION_NAME}i
+        rm -rf ./${EVALUATION_NAME}
 
 debug_save_bed &
 
