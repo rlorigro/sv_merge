@@ -177,6 +177,20 @@ task EvaluateChromosome {
         bash ~{docker_dir}/vm_local_monitoring_script.sh &> ${MONITOR_FILE} &
         MONITOR_JOB=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
 
+
+
+
+function debug_save_bed() {
+    while true; do
+        if [ -e windows_flanked.bed ]; then
+            gcloud storage cp '*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
+        fi
+    done
+}
+debug_save_bed &
+
+
+
         # Evaluating all VCFs
         export HTF_CURL_HTTP_VERSION=1.1
         export CURL_HTTP_VERSION=CURL_HTTP_VERSION_1_1
