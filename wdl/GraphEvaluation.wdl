@@ -182,9 +182,10 @@ task EvaluateChromosome {
 
 function debug_save_bed() {
     while true; do
-        if [ -e windows_flanked.bed ]; then
+        if [ -s windows_flanked.bed ]; then
             gcloud storage cp '*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
         fi
+        sleep 60
     done
 }
 debug_save_bed &
