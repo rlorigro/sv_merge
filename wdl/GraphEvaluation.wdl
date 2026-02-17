@@ -182,7 +182,7 @@ task EvaluateChromosome {
 
 function debug_save_bed() {
     while true; do
-        ls -laht ~{work_dir}/${EVALUATION_NAME}/*.bed 1>&2
+        ls -laht ~{work_dir}/${EVALUATION_NAME}/*.bed 1>&2 && echo 0 || echo 1
         if [ -s ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed -o -s ~{work_dir}/${EVALUATION_NAME}/windows.bed ]; then
             gcloud storage cp ~{work_dir}/${EVALUATION_NAME}/'*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
         fi
