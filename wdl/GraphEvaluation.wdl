@@ -201,7 +201,8 @@ function debug_save_bed() {
 debug_save_bed &
 
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
-        --n_threads ${N_THREADS} \
+        --n_threads 1 \
+#       --n_threads ${N_THREADS} \
         --output_dir ~{work_dir}/${EVALUATION_NAME} \
         --bam_csv ~{haps_vs_chm13_csv} \
         --vcfs ${VCFS} \
