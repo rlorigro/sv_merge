@@ -189,7 +189,6 @@ function debug_save_bed() {
         sleep 60
     done
 }
-debug_save_bed &
 
 
 
@@ -197,7 +196,10 @@ debug_save_bed &
         export HTF_CURL_HTTP_VERSION=1.1
         export CURL_HTTP_VERSION=CURL_HTTP_VERSION_1_1
         EVALUATION_NAME="~{chromosome}_evaluation"
-        rm -rf ./${EVALUATION_NAME}
+        rm -rf ./${EVALUATION_NAME}i
+
+debug_save_bed &
+
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
         --n_threads ${N_THREADS} \
         --output_dir ~{work_dir}/${EVALUATION_NAME} \
