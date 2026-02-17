@@ -102,6 +102,8 @@ task EvaluateChromosome {
         Boolean force_unique_reads
         String docker
         File? force_windows_bed
+
+        Int n_threads
         
         Int n_cpu = 16
         Int ram_size_gb = 16
@@ -198,11 +200,11 @@ function debug_save_bed() {
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
 
-debug_save_bed &
+#debug_save_bed &
 
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
         --n_threads 1 \
-#       --n_threads ${N_THREADS} \
+        --n_threads ~{n_threads} \
         --output_dir ~{work_dir}/${EVALUATION_NAME} \
         --bam_csv ~{haps_vs_chm13_csv} \
         --vcfs ${VCFS} \
