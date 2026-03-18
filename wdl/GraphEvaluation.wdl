@@ -24,6 +24,7 @@ workflow GraphEvaluation {
         Int min_sv_length = 10
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
         File? force_windows_bed
+        Int fetch_regions_quantum
         String docker
         Int n_cpu
         Int ram_size_gb
@@ -66,6 +67,7 @@ workflow GraphEvaluation {
                 force_unique_reads = force_unique_reads,
                 docker = docker,
                 force_windows_bed = force_windows_bed,
+                fetch_regions_quantum = fetch_regions_quantum
                 n_cpu = n_cpu,
                 ram_size_gb = ram_size_gb
         }
@@ -102,6 +104,7 @@ task EvaluateChromosome {
         Boolean force_unique_reads
         String docker
         File? force_windows_bed
+        Int fetch_regions_quantum
 
         Int n_threads
         
@@ -215,6 +218,7 @@ function debug_save_bed() {
         --graphaligner_timeout ~{graphaligner_timeout} \
         ~{if force_unique_reads then "--force_unique_reads" else ""} \
         --min_sv_length ~{min_sv_length} \
+        --fetch_regions_quantum ~{fetch_regions_quantum} \
         ${FORCE_WINDOWS_FLAG}
 
         # Ensure write buffers are flushed to disk
