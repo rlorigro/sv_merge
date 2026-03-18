@@ -67,7 +67,7 @@ workflow GraphEvaluation {
                 force_unique_reads = force_unique_reads,
                 docker = docker,
                 force_windows_bed = force_windows_bed,
-                fetch_regions_quantum = fetch_regions_quantum
+                fetch_regions_quantum = fetch_regions_quantum,
                 n_cpu = n_cpu,
                 ram_size_gb = ram_size_gb
         }
