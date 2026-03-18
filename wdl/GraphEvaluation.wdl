@@ -282,8 +282,12 @@ function debug_save_bed() {
         # Outputting
         export GZIP=-1
         ${TIME_COMMAND} tar -czf ${EVALUATION_NAME}.tar.gz --exclude='*.fasta' --exclude='*.fa' ./${EVALUATION_NAME} &
-        ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_SMALL}.tar.gz ./${ANALYSIS_NAME_SMALL} &
-        ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_LARGE}.tar.gz ./${ANALYSIS_NAME_LARGE} &
+        if ~{defined(evaluation_bed_small_overlap)} ; then
+            ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_SMALL}.tar.gz ./${ANALYSIS_NAME_SMALL} &
+        fi
+        if ~{defined(evaluation_bed_large_overlap)} ; then
+            ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_LARGE}.tar.gz ./${ANALYSIS_NAME_LARGE} &
+        fi
         wait
     >>>
 
