@@ -207,6 +207,8 @@ task EvaluateChromosome {
                 REMOTE_URI=$(echo ${ROW} | cut -d , -f 2)
                 ${TIME_COMMAND} gcloud storage cp ${REMOTE_URI} ${SAMPLE_ID}.bam
                 ${TIME_COMMAND} gcloud storage cp ${REMOTE_URI}.bai ${SAMPLE_ID}.bam.bai
+                
+                samtools view -H ${REMOTE_URI} && echo "Header reading SUCCESSFUL" || echo "Header reading UNSUCCESSFUL"
                 #${TIME_COMMAND} samtools view --threads ${N_THREADS} --with-header --bam --fast ${REMOTE_URI} ~{chromosome} --output ${SAMPLE_ID}.bam
                 #${TIME_COMMAND} samtools index --threads ${N_THREADS} ${SAMPLE_ID}.bam
                 echo "${SAMPLE_ID},${SAMPLE_ID}.bam" >> local.csv
