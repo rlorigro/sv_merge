@@ -199,6 +199,8 @@ task EvaluateChromosome {
         function LocalizeAllBams() {
             local BAMS_CSV=$1
             
+            export HTS_ALLOW_GCS=1
+            export GCS_OAUTH_TOKEN=$(gcloud auth print-access-token)
             rm -f local.csv
             while read ROW; do
                 SAMPLE_ID=$(echo ${ROW} | cut -d , -f 1)
