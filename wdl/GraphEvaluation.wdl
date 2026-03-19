@@ -185,15 +185,31 @@ task EvaluateChromosome {
 
 
 
-function debug_save_bed() {
-    while true; do
-        ls -laht ~{work_dir}/${EVALUATION_NAME}/*.bed 1>&2 && echo 0 || echo 1
-        if [ -s ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed -o -s ~{work_dir}/${EVALUATION_NAME}/windows.bed ]; then
-            gsutil -m cp ~{work_dir}/${EVALUATION_NAME}/'*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
-        fi
-        sleep 60
-    done
-}
+        function debug_save_bed() {
+            while true; do
+                ls -laht ~{work_dir}/${EVALUATION_NAME}/*.bed 1>&2 && echo 0 || echo 1
+                if [ -s ~{work_dir}/${EVALUATION_NAME}/windows_flanked.bed -o -s ~{work_dir}/${EVALUATION_NAME}/windows.bed ]; then
+                    gsutil -m cp ~{work_dir}/${EVALUATION_NAME}/'*.bed' gs://fc-a90ab401-9c4b-43d1-b891-f0410c667ff2/tmp/
+                fi
+                sleep 60
+            done
+        }
+        
+        
+        function LocalizeAllBams() {
+            local BAMS_CSV=$1
+            
+            rm -f local.csv
+            while read ROW; do
+                SAMPLE_ID=$(echo ${ROW} | cut -d , -f 1)
+                REMOTE_URI=$(echo ${ROW} | cut -d , -f 2)
+                ${TIME_COMMAND} samtools view --threads ${N_THREADS} --with-header --bam --fast ${REMOTE_URI} ~{chromosome} --output ${SAMPLE_ID}.bam
+                ${TIME_COMMAND} samtools index --threads ${N_THREADS} ${SAMPLE_ID}.bam
+                echo "${SAMPLE_ID},${SAMPLE_ID}.bam" >> local.csv
+            done < ${BAMS_CSV}
+        }
+        
+        
 
 
 
@@ -203,12 +219,13 @@ function debug_save_bed() {
         EVALUATION_NAME="~{chromosome}_evaluation"
         rm -rf ./${EVALUATION_NAME}
 
-#debug_save_bed &
+        #debug_save_bed &
+        LocalizeAllBams ~{haps_vs_chm13_csv}
 
         ${TIME_COMMAND} ~{docker_dir}/sv_merge/build/evaluate \
         --n_threads ~{n_threads} \
         --output_dir ~{work_dir}/${EVALUATION_NAME} \
-        --bam_csv ~{haps_vs_chm13_csv} \
+        --bam_csv local.csv \
         --vcfs ${VCFS} \
         --cluster_by ${CLUSTER_BY} \
         --tandems ~{tandems_bed} \
