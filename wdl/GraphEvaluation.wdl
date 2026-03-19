@@ -249,9 +249,6 @@ function debug_save_bed() {
                 --beds ${EVALUATION_BEDS_SMALL} \
                 --min_bed_coverage ~{small_overlap} \
                 ${TRUTH_ID_FLAG} &
-        else
-            # Make a placeholder so cromwell doesn't whine
-            touch ~{work_dir}/${ANALYSIS_NAME_SMALL}.tar.gz
         fi
         if ~{defined(evaluation_bed_large_overlap)} ; then
             EVALUATION_BEDS_LARGE=~{sep=',' evaluation_bed_large_overlap}
@@ -264,9 +261,6 @@ function debug_save_bed() {
                 --beds ${EVALUATION_BEDS_LARGE} \
                 --min_bed_coverage ~{large_overlap} \
                 ${TRUTH_ID_FLAG} &
-        else
-            # Make a placeholder so cromwell doesn't whine
-            touch ~{work_dir}/${ANALYSIS_NAME_LARGE}.tar.gz
         fi
         if ! ~{defined(evaluation_bed_small_overlap)} && ! ~{defined(evaluation_bed_large_overlap)} ; then
             rm -rf ./${ANALYSIS_NAME_LARGE}
@@ -276,7 +270,6 @@ function debug_save_bed() {
                 --tools ${TOOLS} \
                 ${TRUTH_ID_FLAG} &
         fi
-
         wait
 
         # Outputting
@@ -284,8 +277,15 @@ function debug_save_bed() {
         ${TIME_COMMAND} tar -czf ${EVALUATION_NAME}.tar.gz --exclude='*.fasta' --exclude='*.fa' ./${EVALUATION_NAME} &
         if ~{defined(evaluation_bed_small_overlap)} ; then
             ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_SMALL}.tar.gz ./${ANALYSIS_NAME_SMALL} &
+        else
+            touch ~{work_dir}/${ANALYSIS_NAME_SMALL}.tar.gz
         fi
         if ~{defined(evaluation_bed_large_overlap)} ; then
+            ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_LARGE}.tar.gz ./${ANALYSIS_NAME_LARGE} &
+        else
+            touch ~{work_dir}/${ANALYSIS_NAME_LARGE}.tar.gz
+        fi
+        if ! ~{defined(evaluation_bed_small_overlap)} && ! ~{defined(evaluation_bed_large_overlap)} ; then
             ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_LARGE}.tar.gz ./${ANALYSIS_NAME_LARGE} &
         fi
         wait
