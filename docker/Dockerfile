@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 MAINTAINER Fabio Cunial
 ARG work_dir=/hapestry
 WORKDIR ${work_dir}
@@ -63,21 +63,32 @@ RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
     && yes | ./google-cloud-sdk/install.sh
 ENV PATH=${work_dir}/google-cloud-sdk/bin:${PATH}
 
-# HTSLIB
-ARG htslib_version=1.19.1
-RUN wget https://github.com/samtools/htslib/releases/download/${htslib_version}/htslib-${htslib_version}.tar.bz2 \
-    && tar xjf htslib-${htslib_version}.tar.bz2 \
-    && rm htslib-${htslib_version}.tar.bz2 \
-    && cd htslib-${htslib_version} \
-    && ./configure \
+# HTSLIB with retry/resilience patch for libcurl HTTP backend:
+# https://github.com/samtools/htslib/pull/1987
+ARG htslib_version=1.23
+RUN mkdir /tmp/src \
+    && cd /tmp/src \
+    && git clone --recurse-submodules https://github.com/samtools/htslib.git --branch ${htslib_version} \
+    && cd htslib \
+    && curl -L https://github.com/samtools/htslib/pull/1987.diff | git apply \
+    && autoreconf --install \
+    && ./configure --enable-gcs --enable-libcurl --enable-plugins \
     && make -j 16 \
-    && make install \
-    && cd ${work_dir} \
-    && rm -rf htslib-${htslib_version} \
-    && bgzip --help
+    && make install    
+
+# RUN wget https://github.com/samtools/htslib/releases/download/${htslib_version}/htslib-${htslib_version}.tar.bz2 \
+#     && tar xjf htslib-${htslib_version}.tar.bz2 \
+#     && rm htslib-${htslib_version}.tar.bz2 \
+#     && cd htslib-${htslib_version} \
+#     && ./configure \
+#     && make -j 16 \
+#     && make install \
+#     && cd ${work_dir} \
+#     && rm -rf htslib-${htslib_version} \
+#     && bgzip --help
 
 # SAMTOOLS
-ARG samtools_version=1.19.2
+ARG samtools_version=1.23
 RUN wget https://github.com/samtools/samtools/releases/download/${samtools_version}/samtools-${samtools_version}.tar.bz2 \
     && tar xjf samtools-${samtools_version}.tar.bz2 \
     && rm samtools-${samtools_version}.tar.bz2 \
@@ -89,18 +100,28 @@ RUN wget https://github.com/samtools/samtools/releases/download/${samtools_versi
     && rm -rf samtools-${samtools_version} \
     && samtools --help
 
-# BCFTOOLS
-ARG bcftools_version=1.19
-RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_version}/bcftools-${bcftools_version}.tar.bz2 \
-    && tar xjf bcftools-${bcftools_version}.tar.bz2 \
-    && rm bcftools-${bcftools_version}.tar.bz2 \
-    && cd bcftools-${bcftools_version} \
-    && ./configure --without-curses \
+# BCFTOOLS with silent truncation fix for synced reader I/O errors:
+# https://github.com/samtools/bcftools/pull/2503
+ARG bcftools_version=1.23
+RUN cd /tmp/src \
+    && git clone https://github.com/samtools/bcftools.git --branch ${bcftools_version} \
+    && cd bcftools \
+    && curl -L https://github.com/samtools/bcftools/pull/2503.diff | git apply \
+    && autoreconf --install \
+    && ./configure --enable-gcs --enable-configure-htslib \
     && make -j 16 \
-    && make install \
-    && cd ${work_dir} \
-    && rm -rf bcftools-${bcftools_version} \
-    && bcftools --help
+    && make install
+
+# RUN wget https://github.com/samtools/bcftools/releases/download/${bcftools_version}/bcftools-${bcftools_version}.tar.bz2 \
+#     && tar xjf bcftools-${bcftools_version}.tar.bz2 \
+#     && rm bcftools-${bcftools_version}.tar.bz2 \
+#     && cd bcftools-${bcftools_version} \
+#     && ./configure --without-curses \
+#     && make -j 16 \
+#     && make install \
+#     && cd ${work_dir} \
+#     && rm -rf bcftools-${bcftools_version} \
+#     && bcftools --help
 
 # TRYING TO SET OPEN FILE LIMITS. NOT SURE IT IS WORKING.
 #
@@ -139,36 +160,52 @@ RUN mkdir /opt/gurobi
 
 # HAPESTRY
 RUN apt remove cmake -y
-RUN pip3 install cmake==3.31.6
-RUN pip3 install matplotlib
-RUN pip3 install networkx
-RUN pip3 install numpy
-RUN pip3 install pandas
-RUN pip3 install pysam
-RUN pip3 install scikit_learn
-RUN pip3 install scipy
+RUN apt install cmake -y
+# RUN pip3 install cmake==3.31.6
+# RUN pip3 install matplotlib
+# RUN pip3 install networkx
+# RUN pip3 install numpy
+# RUN pip3 install pandas
+# RUN pip3 install pysam
+# RUN pip3 install scikit_learn
+# RUN pip3 install scipy
 
 # NO GPU SUPPORT!
-RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-RUN pip3 install vcfpy
+# RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# RUN pip3 install vcfpy
 
 # HAPESTRY
 RUN git clone https://github.com/rlorigro/sv_merge.git
-
 WORKDIR /hapestry/sv_merge
-
-ARG HAPESTRY_COMMIT=d7cbe6793c8925e2eb6412cb9d9bc0550b83a19b
+ARG HAPESTRY_COMMIT=dev
 RUN git fetch
 RUN git checkout ${HAPESTRY_COMMIT}
+
+# <begin> Fix: allow 100 retries to avoid libcurl error, and use
+# HTSLIB with retry/resilience patch for libcurl HTTP backend:
+# https://github.com/samtools/htslib/pull/1987
+COPY CMakeLists.txt /hapestry/sv_merge/
+COPY fetch.cpp /hapestry/sv_merge/src/
+# Fix: R9 BAM bug: ERROR: cannot extract substr greater than size of BinarySequence: start: 62909 n: 848 length: 63512
+COPY BinarySequence.hpp /hapestry/sv_merge/inc/
+COPY evaluate.cpp /hapestry/sv_merge/src/executable/
+# Fixes: (for R9 reads, likely applies to CCS too, but we might choose to leave it
+# out for uniformity with all previous experiments?)
+# - A path and its reverse-complement should be collapsed when 
+#   processing the GAF from GraphAligner.
+# - Double-counted contribution is reads_deduplicated.
+# - Allocating the WFA aligner object only once per thread.
+# - Using the ultralow-mem aligner if reads are too long.
+# - Returning max error rate if a CIGAR is empty (this is
+#   probably a bug of the ultralow-mem aligner).
+COPY hapestry.cpp /hapestry/sv_merge/src/executable/
+# <end>
+
 RUN mkdir build
-
 WORKDIR /hapestry/sv_merge/build
-
 RUN cmake ..
 RUN make -j 16
-
 WORKDIR /hapestry
-
 RUN git --no-pager --git-dir /hapestry/sv_merge/.git log --decorate=short --pretty=oneline | head -n 1 || echo 0
 
 # MONITORING SCRIPT
