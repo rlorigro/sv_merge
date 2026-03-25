@@ -25,6 +25,7 @@ workflow GraphEvaluation {
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
         File? force_windows_bed
         Int fetch_regions_quantum
+        Int compress_evaluation = 0
         String docker
         Int n_cpu
         Int ram_size_gb
@@ -65,6 +66,7 @@ workflow GraphEvaluation {
                 min_sv_length = min_sv_length,
                 chromosome = chromosome,
                 force_unique_reads = force_unique_reads,
+                compress_evaluation = compress_evaluation,
                 docker = docker,
                 force_windows_bed = force_windows_bed,
                 fetch_regions_quantum = fetch_regions_quantum,
@@ -107,6 +109,7 @@ task EvaluateChromosome {
         Int fetch_regions_quantum
 
         Int n_threads
+        Int compress_evaluation
         
         Int n_cpu = 16
         Int ram_size_gb = 16
@@ -297,7 +300,11 @@ task EvaluateChromosome {
 
         # Outputting
         export GZIP=-1
-        ${TIME_COMMAND} tar -czf ${EVALUATION_NAME}.tar.gz --exclude='*.fasta' --exclude='*.fa' ./${EVALUATION_NAME} &
+        if [ ~{compress_evaluation} -eq 1 ]; then
+            ${TIME_COMMAND} tar -czf ${EVALUATION_NAME}.tar.gz --exclude='*.fasta' --exclude='*.fa' ./${EVALUATION_NAME} &
+        else
+            touch ~{work_dir}/${EVALUATION_NAME}.tar.gz
+        fi
         if ~{defined(evaluation_bed_small_overlap)} ; then
             ${TIME_COMMAND} tar -czf ${ANALYSIS_NAME_SMALL}.tar.gz ./${ANALYSIS_NAME_SMALL} &
         else
